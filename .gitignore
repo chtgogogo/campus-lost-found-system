@@ -1,0 +1,33 @@
+# Python / venv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDE
+.idea/
+
+# Databases (local dev / test artifacts)
+*.db
+*.sqlite3
+
+# Local logs / scratch
+*.log
+nul
+_tmp_media/
+_fill*.py
+_backup_*.docx
+_thesis_*.docx
+_cleanup.py
+_refdump.py
+_mapslots.py
+_inspect.py
+_gen_pil.py
+_inject_ui.py
+_shots.mjs
+_verify.py
+_fix_ch1.py
+_check2.db
+
+# WorkBuddy session
+.workbuddy/
