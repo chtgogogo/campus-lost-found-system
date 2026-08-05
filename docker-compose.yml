@@ -1,0 +1,55 @@
+# 校园失物招领系统 — 编排（mysql / redis / backend / frontend）
+# 用法（在装有 docker 的机器/服务器）：
+#   docker compose up -d --build
+# 本机若无 docker 命令，本文件仅作为交付物，请在目标环境运行。
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: lf
+      MYSQL_DATABASE: lostfound
+      MYSQL_USER: lf
+      MYSQL_PASSWORD: lf
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-plf"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    environment:
+      DATABASE_URL: mysql+pymysql://lf:lf@mysql:3306/lostfound
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+      YOLO_DEVICE: cpu
+      YOLO_MODEL_DIR: /app/models/weights
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models/weights:/app/models/weights
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./web
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  mysql_data:

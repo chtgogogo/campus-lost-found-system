@@ -1,0 +1,121 @@
+%% flow-v3 增量类图（仅画本次受影响的类与协作关系；未列出的类一律保持 flow-v2 现状）
+%% 图例：<<修改>> 本次改动 / <<不变>> 明确确认不改 / <<新增>> 新增成员
+classDiagram
+    direction LR
+
+    class Settings {
+        <<修改>>
+        +float MATCH_W_PHOTO
+        +float MATCH_W_CAT
+        +float MATCH_W_TEXT
+        +float MATCH_W_LOC
+        +float MATCH_W_TIME
+        +float MATCH_THRESHOLD
+        +float MATCH_LOW_SCORE
+        +int MATCH_TOP_N
+    }
+    note for Settings "MATCH_THRESHOLD=80.0 语义不变：仅驱动后端 suspected 与解释体 threshold\nMATCH_LOW_SCORE=60.0 新增：纯视觉阈值，后端不引用，仅供前端对齐口径"
+
+    class PublishService {
+        <<修改>>
+        -Session db
+        -MatchService _matcher
+        +publish_lost(publisher, dto, ip, ua) tuple
+        +publish_found(finder, dto, ip, ua) tuple
+        -_recall_lost_candidates(lost) List~FoundItem~
+        -_recall_found_candidates(found) List~LostItem~
+        -_reverse_match_lost(lost) List~MatchRecord~
+        -_reverse_match_found(found) List~MatchRecord~
+        +refresh_lost_candidates(lost) List~MatchRecord~
+        -_exists_match(lost_id, found_id) bool
+        -_apply_keep1_completion(match, lost, found, ip, ua) MatchRecord
+        +complete_keep1_claim(match, ip, ua) MatchRecord
+        +revoke_keep1_claim(match, ip, ua) MatchRecord
+    }
+    note for PublishService "_recall_lost_candidates：删除 keep_status==KEEPING 过滤 → keep1 可被失主召回（正向放开）\n_reverse_match_found：保留 NOT_KEEPING 早退 → keep1 发布不为拾得者生成候选（反向不放开）\ncomplete_keep1_claim / revoke_keep1_claim / _apply_keep1_completion / _exists_match：本轮零改动"
+
+    class MatchRouter {
+        <<修改>>
+        +list_my_matches(status, page, page_size) Page
+        +list_matches_for_lost(item_id) List~MatchOut~
+        +refresh_matches_for_lost(item_id) dict
+        +claim_match(match_id, body) MatchOut
+        +confirm_return(match_id) MatchOut
+        +reject_match(match_id, body) MatchOut
+        +create_manual_match(body) MatchOut
+        +claim_complete_keep1(match_id) MatchOut
+        +revoke_keep1_claim(match_id) MatchOut
+        -_counterpart_hidden(db, m) bool
+    }
+    note for MatchRouter "claim：已有 keep1 → 422 守卫（不动）\nconfirm_return：新增 keep1 → 422 守卫（P0 必做，非可选）\nreject_match：新增 keep1 → 422 守卫（本设计新发现，PRD 未覆盖）\ncreate_manual_match：keep1 一步完成分流不动"
+
+    class MatchRecord {
+        <<不变>>
+        +int id
+        +int lost_id
+        +int found_id
+        +float match_score
+        +int status
+        +int flow_type
+        +datetime completed_at
+        +str claim_reason
+    }
+
+    class FoundItem {
+        <<不变>>
+        +int id
+        +int finder_id
+        +int keep_status
+        +int status
+        +int contact_allowed
+        +datetime deleted_at
+    }
+
+    class MatchService {
+        <<不变>>
+        +score(lost, found) float
+        +score_detail(lost, found) dict
+        +text_match_rate(lost, found) float
+    }
+
+    class FE_Constants {
+        <<修改>>
+        +number MATCH_THRESHOLD
+        +number MATCH_LOW_SCORE
+        +number MATCH_TOP_N
+        +object MATCH_WEIGHTS
+    }
+    note for FE_Constants "web/src/api/constants.ts\n新增 MATCH_LOW_SCORE=60；修正 MATCH_THRESHOLD 注释（删除『前端低分判定口径 <80』误导描述）"
+
+    class FE_MatchesView {
+        <<修改>>
+        +isLowScore(m) bool
+        +myRole(m) string
+        +isKeep1Candidate(m) bool
+        +applyButtonText(m) string
+        +onApplyMatch(m) void
+        +canRevoke(m) bool
+        +onConfirmReturn(m) void
+        +onReject(m) void
+        +scoreColor(score) string
+    }
+    note for FE_MatchesView "isLowScore 切 MATCH_LOW_SCORE(60)；删除拾得者侧低分不打扰分支；\n新增 isKeep1Candidate → 失主侧按钮文案『我要领走』/ 拾得者侧只读；\nscoreColor 内的 80/90 属进度环配色，非低分口径，禁止误改"
+
+    class FE_MockAdapter {
+        <<修改>>
+        +genCandidatesForLost(lost, status, maxCount) MatchOut[]
+        +genCandidatesForFound(found, status, maxCount) MatchOut[]
+        +publishFound(ctx) AxiosResponse
+    }
+    note for FE_MockAdapter "genCandidatesForLost：删除 f.keep_status===0 过滤（对齐后端正向放开）\npublishFound 的 isKeep1 早退：保留（对齐后端反向不放开）\nsuspected: score>=MATCH_THRESHOLD：不变"
+
+    PublishService --> Settings : 读取 MATCH_TOP_N
+    PublishService --> MatchService : 打分
+    PublishService --> MatchRecord : 生成候选
+    PublishService --> FoundItem : 召回（不再按 keep_status 过滤）
+    MatchRouter --> PublishService : 编排 keep1 完成/撤回/刷新
+    MatchRouter --> FoundItem : keep1 守卫判定
+    MatchRouter --> MatchRecord : 状态流转
+    FE_MatchesView --> FE_Constants : 引用 MATCH_LOW_SCORE / MATCH_TOP_N
+    FE_MatchesView ..> MatchRouter : HTTP 调用 claim-complete / confirm-return / reject
+    FE_MockAdapter ..> FE_Constants : 引用 MATCH_THRESHOLD（suspected 语义）

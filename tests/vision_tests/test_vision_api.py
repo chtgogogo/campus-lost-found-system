@@ -30,7 +30,12 @@ def test_vision_predict_requires_auth(client):
     assert r.status_code == 401
 
 
-def test_vision_predict_returns_schema_and_degrades_gracefully(client, db):
+def test_vision_predict_returns_schema_and_degrades_gracefully(client, db, monkeypatch):
+    # 确定性降级：禁用 ultralytics/torch 并重置单例，强制视觉模型不可用 →
+    # 必走 fallback（confidence=0.0）。避免依赖测试 PNG 被 12 类 best.pt 弱检出（如@0.21）。
+    monkeypatch.setitem(sys.modules, "ultralytics", None)
+    monkeypatch.setitem(sys.modules, "torch", None)
+    vs_mod._vision_instance = None
     token, _, _, _, _ = register_and_login(client, "va")
     r = client.post(
         f"{API}/vision/predict",
@@ -42,7 +47,7 @@ def test_vision_predict_returns_schema_and_degrades_gracefully(client, db):
     assert isinstance(body["category_id"], int)
     assert isinstance(body["label"], str) and body["label"]
     assert isinstance(body["confidence"], (int, float))
-    # 测试环境无真权重 → 降级 confidence=0.0
+    # 确定性降级 → confidence=0.0
     assert body["confidence"] == 0.0
     assert body["category_id"] in {
         c.id for c in db.query(Category).filter(Category.is_active == 1).all()
@@ -50,6 +55,7 @@ def test_vision_predict_returns_schema_and_degrades_gracefully(client, db):
     # categories 下拉可用
     assert isinstance(body["categories"], list) and body["categories"]
     assert {"id", "name"} <= set(body["categories"][0].keys())
+    vs_mod._vision_instance = None
 
 
 def test_vision_predict_empty_image_400(client):

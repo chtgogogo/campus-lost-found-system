@@ -1,0 +1,74 @@
+classDiagram
+    class MatchStatus {
+        <<enum IntEnum>>
+        PENDING_CLAIM = 0
+        CLAIMING = 1
+        COMPLETED = 2
+        REJECTED = 3
+        MANUAL_PENDING = 4
+        GIVEN_UP = 5
+        REVOKED = 6  %% 2026-08-05 新增：keep1 撤回终态（Q7）
+    }
+
+    class MatchService {
+        +score(lost, found, exact_category) float  %% 变更：15p+20c+50text+10loc+5time
+        +score_detail(lost, found) dict  %% 变更：text/text_match_rate/shared_text 新键
+        +text_match_rate(lost, found) float  %% 新增：文字词覆盖率（containment，分母失物侧）
+        +shared_text_tokens(lost, found) list[str]  %% 新增：被命中词（可解释）
+        +tag_match_rate(lost, found) float  %% 变更：同口径词集（description 纳入）
+        -_text_token_set(item, is_lost) set[str]  %% 新增：分词+停用词+名词/颜色/地点/数量词过滤
+        -location_factor(lost, found) float  %% 变更：空值 0.0→0.5
+        -time_decay_factor(lost_time, found_time) float  %% 变更：空值→0.5
+        -_token_hit(token, candidate_tokens) bool  %% 复用：精确+WordNet+中文近义词
+    }
+
+    class PublishService {
+        +publish_lost(publisher, dto, ip, ua) tuple[LostItem, list[MatchRecord]]
+        +publish_found(finder, dto, ip, ua) tuple[FoundItem, list[MatchRecord]]
+        +refresh_lost_candidates(lost) list[MatchRecord]
+        +complete_keep1_claim(match, ip, ua) MatchRecord  %% 新增 P0-3：申请即完成
+        +revoke_keep1_claim(match, ip, ua) MatchRecord  %% 新增 P0-4：撤回
+        -_recall_lost_candidates(lost) list[FoundItem]  %% 变更：keep_status==0 过滤
+        -_recall_found_candidates(found) list[LostItem]
+        -_reverse_match_lost(lost) list[MatchRecord]
+        -_reverse_match_found(found) list[MatchRecord]  %% 变更：keep1 早退 return []
+        -_exists_match(lost_id, found_id) bool  %% 变更：排除终态 {2,3,6}
+        -_lost_has_active_match(lost_id, exclude_match_id) bool  %% 新增
+    }
+
+    class MatchRecord {
+        +id
+        +lost_id
+        +found_id
+        +match_score
+        +status  %% 0-5 现状 + 6 已撤回
+        +flow_type: int  %% 新增：0=双向交接 / 1=keep1 单边
+        +completed_at
+    }
+
+    class MatchOut {
+        +suspected: bool
+        +match_score: float
+        +status: int
+        +flow_type: int  %% 新增
+        +text: float | None  %% 新增：文字维度贡献（0-50）
+        +text_match_rate: float | None  %% 新增
+        +shared_text: list[str]  %% 新增
+        +appearance / feature  %% deprecated 占位
+    }
+
+    class MatchRouter {
+        +list_my_matches()  %% done tab 含 status=6
+        +claim_match()  %% 变更：keep1 守卫
+        +create_manual_match()  %% 变更：keep1 分流一步完成
+        +claim_complete_match()  %% 新增 P0-3
+        +revoke_match()  %% 新增 P0-4
+        +self_complete_match()  %% 变更：keep1 补 flow_type=1
+    }
+
+    MatchService --> MatchRecord : score_detail 供 build_match_outs
+    PublishService --> MatchService : 打分
+    PublishService --> MatchRecord : 生成/完成/撤回
+    MatchRouter --> PublishService : claim-complete / revoke / manual 分流
+    MatchRouter --> MatchOut : build_match_outs
+    MatchOut --> MatchRecord : from_model（flow_type/text/shared_text）

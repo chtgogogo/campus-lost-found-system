@@ -1,0 +1,84 @@
+# ============================================================================
+# label_map.yaml  —  11 类统一标签映射（单一事实来源 / single source of truth）
+#
+# 本文件被以下脚本读取，禁止在其它脚本里硬编码映射：
+#   convert_coco.py / convert_leftincar.py / convert_homeobjects.py
+#   merge_and_split.py / extract_metrics.py
+#
+# 所有输出路径均位于 E 盘（C 盘零写入）。
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 1) 统一 11 类目标词汇表（索引固定，严禁修改顺序！）
+#    索引即 YOLO 训练 / 推理时的 class_id。
+# ---------------------------------------------------------------------------
+target_classes:
+  0: phone          # 手机
+  1: wallet         # 钱包
+  2: keys           # 钥匙
+  3: backpack       # 背包（含手提包 handbag）
+  4: suitcase       # 行李箱
+  5: laptop         # 笔记本电脑
+  6: campus_card    # 校园卡
+  7: glasses        # 眼镜
+  8: notebook       # 笔记本（书本）
+  9: umbrella       # 雨伞
+  10: bottle        # 水瓶
+
+# ---------------------------------------------------------------------------
+# 2) 各数据源 -> 目标索引映射
+# ---------------------------------------------------------------------------
+sources:
+
+  # ---- COCO 2017（标准 80 类）----
+  # 键 = COCO category 名称；值 = 目标索引。
+  # 未列出的 72 个 COCO 类全部丢弃。
+  coco:
+    name_to_target:
+      cell phone: 0      # -> phone
+      backpack: 3        # -> backpack
+      handbag: 3         # -> backpack（合并）
+      suitcase: 4        # -> suitcase
+      laptop: 5          # -> laptop
+      book: 8            # -> notebook
+      umbrella: 9        # -> umbrella
+      bottle: 10         # -> bottle
+    # 说明：COCO 中无 wallet / keys / campus_card / glasses 对应类，
+    #       因此这些目标类在 COCO 源没有样本（由 leftincar / YOLO-World 补充）。
+
+  # ---- leftincar-data（YOLO 格式，10 类）----
+  # 源 data.yaml 顺序:
+  #   0 smartphone, 1 laptop, 2 card, 3 suitcase, 4 wallet,
+  #   5 backpack, 6 clothing, 7 keys, 8 glasses, 9 handbag
+  # 键 = leftincar 源 class index；值 = 目标索引；null = 丢弃。
+  leftincar:
+    index_to_target:
+      0: 0        # smartphone   -> phone
+      1: 5        # laptop      -> laptop
+      2: 6        # card        -> campus_card
+      3: 4        # suitcase    -> suitcase
+      4: 1        # wallet      -> wallet
+      5: 3        # backpack    -> backpack
+      6: null     # clothing    -> 丢弃（DROP）
+      7: 2        # keys        -> keys
+      8: 7        # glasses     -> glasses
+      9: 3        # handbag     -> backpack（合并）
+
+  # ---- homeobjects-3K（YOLO 格式，12 类家居）----
+  # 源 HomeObjects-3K.yaml 顺序:
+  #   0 bed, 1 sofa, 2 chair, 3 table, 4 lamp, 5 tv,
+  #   6 laptop, 7 wardrobe, 8 window, 9 door, 10 potted plant, 11 photo frame
+  # 只取 laptop (index 6) -> 目标 5；其余 11 类全部丢弃。
+  homeobjects:
+    index_to_target:
+      6: 5        # laptop -> laptop
+    # 其余 11 类（bed/sofa/chair/table/lamp/tv/wardrobe/window/door/
+    #   potted plant/photo frame）全部丢弃。
+
+# ---------------------------------------------------------------------------
+# 3) 备注
+#    - 玩偶(doll) 已移除：三源均无样本、毛绒材质难以稳定识别，不再作为训练类目；
+#      识别时低置信（< YOLO_CONF_THRESHOLD）统一由视觉降级归为“其他”类。
+#    - 输出统一为 YOLO 格式（class_id cx cy w h，坐标归一化 0~1）。
+#    - leftincar 源图片为 bmp（约 18GB），转换时转成 jpg 以省空间。
+# ---------------------------------------------------------------------------

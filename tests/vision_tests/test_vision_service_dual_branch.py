@@ -117,36 +117,33 @@ def _cat_by_name(db, name):
 
 
 def test_coco_branch_maps_yolo_class_id(db, dual_branch):
-    # COCO：书包 yolo_class_id=24，高置信度；YOLO-World 仅返回低置信度噪声
+    # COCO（best.pt）：书包 按新 seed 的 yolo_class_id（best.pt 索引 3）映射回 db；
+    # YOLO-World 分支在新 seed 下为空（全 mode=0），仅返回低置信度噪声。
+    bag = _cat_by_name(db, "书包")
     _COCO_BOXES.conf = _FakeTensor([0.92])
-    _COCO_BOXES.cls = _FakeTensor([24])
+    _COCO_BOXES.cls = _FakeTensor([bag.yolo_class_id])
     _WORLD_BOXES.conf = _FakeTensor([0.30])
     _WORLD_BOXES.cls = _FakeTensor([0])
     res = dual_branch.predict(PNG)
-    bag = _cat_by_yolo_class(db, 24)
     assert res["category_id"] == bag.id
     assert res["label"] == bag.name == "书包"
     assert res["confidence"] == pytest.approx(0.92)
 
 
-def test_world_branch_calls_set_classes_and_maps(db, dual_branch):
-    # 验证 YOLO-World 分支确实调用 set_classes(yolo_prompt)
-    prompts = dual_branch._world_prompts
-    assert set(prompts) == {
-        "campus card, student ID",
-        "keychain with keys",
-        "plush doll toy",
-    }
-    assert FakeYOLO.last_set_classes == prompts
+def test_all_mode0_disables_world_branch_and_coco_maps(db, dual_branch):
+    # 新设计：全部 category 为 recognition_mode=0（真模型检测），不再依赖 YOLO-World
+    # 零样本。因此 _world_prompts 为空、_world_model 不加载；COCO 分支按 best.pt
+    # 索引（0-10）映射回 db category_id。
+    assert dual_branch._world_prompts == []
+    assert dual_branch._world_model is None
 
-    # 钥匙 = world 提示词列表中 "keychain with keys" 的索引（顺序无关，动态查询）
-    key_idx = prompts.index("keychain with keys")
-    _WORLD_BOXES.conf = _FakeTensor([0.95])
-    _WORLD_BOXES.cls = _FakeTensor([key_idx])
-    _COCO_BOXES.conf = _FakeTensor([0.30])
-    _COCO_BOXES.cls = _FakeTensor([24])
-    res = dual_branch.predict(PNG)
+    # 钥匙（best.pt 索引 2）应被 COCO 分支正确映射
     key = _cat_by_name(db, "钥匙")
+    _COCO_BOXES.conf = _FakeTensor([0.95])
+    _COCO_BOXES.cls = _FakeTensor([key.yolo_class_id])
+    _WORLD_BOXES.conf = _FakeTensor([0.0])
+    _WORLD_BOXES.cls = _FakeTensor([0])
+    res = dual_branch.predict(PNG)
     assert res["category_id"] == key.id
     assert res["label"] == "钥匙"
     assert res["confidence"] == pytest.approx(0.95)
@@ -167,12 +164,12 @@ def test_conf_threshold_filters_below_threshold(db, dual_branch):
 
 def test_conf_threshold_at_boundary_included(db, dual_branch):
     # 恰好等于阈值 0.25 应被保留（score >= conf_threshold）
+    bag = _cat_by_name(db, "书包")
     _COCO_BOXES.conf = _FakeTensor([0.25])
-    _COCO_BOXES.cls = _FakeTensor([24])
+    _COCO_BOXES.cls = _FakeTensor([bag.yolo_class_id])
     _WORLD_BOXES.conf = _FakeTensor([0.10])
     _WORLD_BOXES.cls = _FakeTensor([0])
     res = dual_branch.predict(PNG)
-    bag = _cat_by_yolo_class(db, 24)
     assert res["category_id"] == bag.id
     assert res["confidence"] == pytest.approx(0.25)
 

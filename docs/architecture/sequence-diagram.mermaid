@@ -1,0 +1,37 @@
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端 PublishView
+    participant API as items/vision 路由
+    participant PS as PublishService
+    participant VS as VisionService(单例)
+    participant DB as MySQL(category/item/match)
+    participant MS as MatchService
+
+    rect rgb(235,245,255)
+    note over U,MS: ① 发布前预识别（AI 识别结果卡片）
+    U->>FE: 上传照片(拾物)
+    FE->>API: POST /vision/predict(图片)
+    API->>VS: predict(image_bytes)
+    VS->>DB: 读 category 映射(yolo_class_id/yolo_prompt)
+    VS-->>API: {category_id,label,confidence}
+    API-->>FE: 渲染识别结果卡片
+    end
+
+    rect rgb(240,255,240)
+    note over U,MS: ② 发布 → 真推理打标 → 入库 → 反向匹配
+    U->>FE: 确认/手动改类 → 提交发布
+    FE->>API: POST /found-items(图片, 可选category_id)
+    API->>PS: publish_found(dto)
+    alt 未显式指定 category_id
+        PS->>VS: predict(首图 bytes)
+        VS-->>PS: {category_id,label,confidence}
+    end
+    PS->>DB: 写入 found_item(category_id)
+    PS->>MS: score(lost, found) 候选集
+    MS-->>PS: match_score (W1=40+W2=25+W3=20+W4=15, 阈值80, τ=3天)
+    PS->>DB: 写入 match_record(若 score≥80)
+    PS-->>API: {item, suspected_matches}
+    API-->>FE: 发布成功 + 疑似匹配
+    end
+
+    note over U,MS: ③ 端到端（P0-05）：认领→确认归还→交接码双端验证→审计黑匣子（smoke.py 覆盖）

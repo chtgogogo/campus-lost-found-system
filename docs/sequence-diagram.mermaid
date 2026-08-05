@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant U as 失主(前端)
+    participant API as items 路由
+    participant PS as PublishService
+    participant TG as TaggingService
+    participant VS as VisionService
+    participant DB as LostItem/FoundItem/Category
+    participant MS as MatchService
+
+    U->>API: POST /lost-items (title="银色钥匙", category_name="钥匙", 无图)
+    API->>PS: publish_lost(dto)
+    PS->>VS: predict(b"") → 降级 fallback
+    PS->>TG: extract(title, description, label, category_name="钥匙")
+    TG-->>PS: tags=["钥匙","银色"]  %% 名词优先, 含颜色
+    PS->>PS: _resolve_category_id("钥匙", vision, nouns=["钥匙"])
+    PS->>DB: Category 按 name/名词回退 → id=11(钥匙)
+    PS->>DB: LostItem(tags, category_id=11, image_hash=null)
+    PS->>DB: 候选召回: FoundItem WHERE (category_id=11 AND status=0) OR (tags 含"钥匙")
+    loop 每个候选(found)
+        PS->>MS: score(lost, found)
+        MS->>MS: tag_containment=|lost∩found|/|lost|  %% C vs A=1.0
+        MS->>MS: color_conflict? C{银色} vs A{黑色} → 冲突→0
+        MS->>MS: 20·photo + 40·containment + 25·cat + 15·time
+        MS-->>PS: score (AC1: A=80,B=80; AC2: B=80,A=0)
+    end
+    PS->>DB: 阈值≥80 → 建 MatchRecord (A,B)
+    PS-->>API: (item, matches)

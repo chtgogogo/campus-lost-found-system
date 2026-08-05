@@ -1,0 +1,40 @@
+classDiagram
+    class PublishService {
+        +publish_lost(publisher, dto, ip, ua) tuple[LostItem, list[MatchRecord]]
+        +publish_found(finder, dto, ip, ua) tuple[FoundItem, list[MatchRecord]]
+        +refresh_lost_candidates(lost) list[MatchRecord]  %% P2-1 新增
+        -_recall_lost_candidates(lost) list[FoundItem]
+        -_recall_found_candidates(found) list[LostItem]
+        -_reverse_match_lost(lost) list[MatchRecord]  %% 变更：全量打分 top10 落库
+        -_reverse_match_found(found) list[MatchRecord]  %% 变更：对称 top10
+        -_exists_match(lost_id, found_id) bool
+    }
+    class MatchService {
+        +score(lost, found, exact_category) float
+        +is_suspected(score) bool  %% 不变：score >= MATCH_THRESHOLD
+        +score_detail(lost, found) dict
+    }
+    class MatchRecord {
+        +id
+        +lost_id
+        +found_id
+        +match_score
+        +status  %% 0 待认领/1 认领中/2 已完成/3 已拒绝/4 待自取/5 已放弃
+    }
+    class MatchOut {
+        +suspected: bool  %% 不变：score >= 阈值
+        +match_score: float
+        +status: int
+        +lost_item / found_item
+    }
+    class MatchRouter {
+        +list_my_matches()  %% 变更：对端过滤(P1-2)、page_size le=200(P1-4)
+        +list_matches_for_lost()  %% 变更：放开阈值
+        +refresh_matches_for_lost()  %% P2-1 新增
+        +claim_match()  %% 复用
+    }
+    PublishService --> MatchService : 打分
+    PublishService --> MatchRecord : 生成 status=0（≤10/件）
+    MatchRouter --> PublishService : refresh_lost_candidates
+    MatchRouter --> MatchOut : build_match_outs
+    MatchOut --> MatchRecord : from_model

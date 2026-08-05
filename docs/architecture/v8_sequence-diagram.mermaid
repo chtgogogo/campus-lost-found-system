@@ -1,0 +1,52 @@
+sequenceDiagram
+    participant U as 用户
+    participant FE as PublishView
+    participant API as itemsApi
+    participant IT as items.py(表单)
+    participant PS as PublishService
+    participant VS as VisionService
+    participant TS as TaggingService
+    participant DB as LostItem/FoundItem/Category
+    participant MS as MatchService
+    participant MR as MatchRecord
+    participant MO as MatchOut(build_match_outs)
+
+    Note over U,MO: === 发布链路：字段采集 + 其他类判定 + 镜像 tags ===
+    U->>FE: 填写 类目/颜色/外观/特征/地点/描述/照片
+    FE->>API: createLost(createFound) FormData(含 appearance/features/location)
+    API->>IT: POST /lost-items (/found-items)
+    IT->>PS: LostItemPublishDTO(含 appearance/features/location)
+    PS->>VS: predict(首图字节)
+    VS-->>PS: {category_id, label, confidence}
+    alt confidence < OTHER_CONF_THRESHOLD 或 无检测
+        PS->>DB: 取 "其他" category_id
+        Note right of PS: category_name="其他"；不注入 vision label 到 tags（不污染）
+    else 正常识别
+        PS->>DB: 解析真实 category_id（名词优先）
+    end
+    PS->>TS: extract(title, desc, vision_label?, cat_name)
+    TS-->>PS: tags(含 颜色词+地点词+名词；并追加 appearance/features/location 镜像 token)
+    PS->>DB: 写 LostItem/FoundItem(appearance, features, location, tags, image_hash)
+    Note over PS,DB: appearance/features/location 同时镜像进 tags（供 recall + 其他类 tag_match_rate）
+
+    Note over PS,MO: === 反向主动匹配：候选召回 + 六维打分 ===
+    PS->>PS: _recall_lost_candidates(lost)
+    Note right of PS: 召回规则：同类目 ∪ 共享名词 tag；<br/>若任一方为"其他"类 → 跳过类目相等，仅按名词 tag 召回
+    loop 每个候选 found
+        PS->>MS: score(lost, found)
+        alt 任一方 category_id == 其他
+            MS->>MS: tag_match_rate = |lost.tags∩found.tags|/|lost.tags|
+            MS-->>PS: 20·photo + 80·tag_match_rate
+        else 普通类目
+            MS->>MS: photo_sim / category_hit / appearance_factor<br/>/ feature_factor / time_decay / location_hit
+            Note right of MS: 各维 raw = 命中率(基于失物声明属性)；<br/>失物未声明该维→raw=1.0(中性，给满分)；<br/>颜色双方不相交→仅 appearance 维 0(软化，不再整条0)
+            MS-->>PS: 20·photo+30·cat+20·app+15·feat+10·time+5·loc
+        end
+        PS->>MR: is_suspected(score) → 创建 MatchRecord(若 ≥80)
+    end
+    PS->>MO: build_match_outs(db, matches)
+    MO->>MS: score_breakdown(lost, found)
+    MS-->>MO: 六维明细 dict
+    MO-->>API: MatchOut[](含 score_breakdown, suspected, 按总分降序)
+    API-->>FE: {code,data:{item, suspected_matches}}
+    FE->>U: 展示连续总分 + 六维贡献条（其他类标注"标签驱动匹配"）

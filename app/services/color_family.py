@@ -81,6 +81,14 @@ for _family, _words in COLOR_FAMILY.items():
     for _w in _words:
         # 同一个词若被两张表同时收录，取并集（当前表无此情况，防御性写法）
         _WORD_TO_FAMILIES[_w] = _WORD_TO_FAMILIES.get(_w, frozenset()) | frozenset({_family})
+        # ⚠️ 自动补「+色」变体（如 银灰 → 银灰色、深蓝 → 深蓝色）。
+        # 必须有：否则 `银灰色` 会被同长度、字典序更靠前的 `灰色` 先切走，残留的 `银`
+        # 再被单字规则命中，结果虽仍落在「灰银系」但抽词结果错误；换成 `军绿色`
+        # （`绿色` 先命中）等组合时更会污染 keyword 残余集合。
+        # 逐词枚举 3 字形态易漏，故在此由 2 字词统一派生，保证长词优先铁律真正生效。
+        if not _w.endswith("色"):
+            _plus = _w + "色"
+            _WORD_TO_FAMILIES[_plus] = _WORD_TO_FAMILIES.get(_plus, frozenset()) | frozenset({_family})
 for _w, _fams in MULTI_FAMILY_WORDS.items():
     _WORD_TO_FAMILIES[_w] = _WORD_TO_FAMILIES.get(_w, frozenset()) | _fams
 

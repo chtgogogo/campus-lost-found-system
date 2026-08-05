@@ -1,0 +1,148 @@
+classDiagram
+    class User {
+        <<复用>>
+        +BigInteger id
+        +str student_no
+        +str real_name
+    }
+    class LostItem {
+        <<复用>>
+        +BigInteger id
+        +int publisher_id
+        +str category_name
+        +str title
+        +SmallInt status  %% 0待匹配/1匹配中/2待认领/3已解决
+    }
+    class FoundItem {
+        <<复用>>
+        +BigInteger id
+        +int finder_id
+        +str category_name
+        +Text description
+        +SmallInt keep_status
+        +SmallInt contact_allowed
+        +SmallInt status  %% 0待认领/1已解决
+    }
+    class MatchRecord {
+        <<变更·枚举>>
+        +BigInteger id
+        +int lost_id
+        +int found_id
+        +Numeric match_score
+        +SmallInt status  %% 0待认领/1认领中/2已完成/3已拒绝/4待自取/5已放弃(GIVEN_UP)
+    }
+    class MatchStatus {
+        <<变更·枚举>>
+        +PENDING_CLAIM = 0
+        +CLAIMING = 1
+        +COMPLETED = 2
+        +REJECTED = 3
+        +MANUAL_PENDING = 4
+        +GIVEN_UP = 5  %% v5 新增(已放弃/退回匹配池)
+    }
+    class IMSession {
+        <<复用·零迁移>>
+        +BigInteger id
+        +int match_id  %% FK→match_record(RESTRICT) 可空
+        +int found_id  %% FK→found_item(RESTRICT) 可空
+        +int lost_user_id
+        +int finder_user_id
+        +SmallInt status  %% 0开启/1关闭(软删复用1)
+        +DateTime last_message_at
+        +DateTime expires_at
+    }
+    class IMMessage {
+        <<复用>>
+        +BigInteger id
+        +int session_id
+        +int sender_id
+        +SmallInt sender_role
+        +str content
+        +DateTime sent_at
+    }
+    class IMSessionListItem {
+        <<新增·schema>>
+        +int id
+        +int match_id
+        +int found_id
+        +PeerUser peer_user
+        +str title  %% 后端拼"联系对方 · {category_name}"
+        +DateTime last_message_at
+        +str last_message_preview
+        +bool unread  %% 粗粒度
+        +int status
+    }
+    class PeerUser {
+        <<新增·schema>>
+        +int id
+        +str nickname  %% real_name 或 用户{id}
+        +str student_no
+    }
+    class IMRouter {
+        <<变更>>
+        +POST /im/sessions  %% 复用
+        +GET /im/sessions  %% v5 新增(列表)
+        +DELETE /im/sessions/{id}  %% v5 软删
+        +POST /im/sessions/{id}/success  %% v5 软删+归档
+        +GET /im/sessions/{id}/messages  %% 复用
+        +POST /im/sessions/{id}/messages  %% 复用
+    }
+    class MatchRouter {
+        <<变更>>
+        +POST /matches/manual  %% 复用
+        +POST /matches/{id}/self-complete  %% 复用
+        +POST /matches/{id}/giveup  %% v5 新增(未能找回)
+    }
+    class ImService {
+        <<变更>>
+        +list_sessions_for_user(db, user_id) list  %% v5 富化列表
+        +soft_delete_session(session, user)  %% v5 status=1
+        +success_session_archive(db, session, user)  %% v5 软删+归档match
+    }
+    class MessagesView {
+        <<新增·前端>>
+        +sessionList
+        +selectedSession
+        +openConversation(id)
+        +onDeleteSession(id)
+        +onSuccess(id)
+    }
+    class useImSession {
+        <<新增·前端>>
+        +messages
+        +draft
+        +poll()
+        +startPoll()
+        +stopPoll()
+        +send(content)
+    }
+    class ImApi {
+        <<变更·前端>>
+        +listSessions()
+        +deleteSession(id)
+        +successSession(id)
+        +createSession()
+        +getMessages()
+        +sendMessage()
+    }
+    class MatchApi {
+        <<变更·前端>>
+        +giveup(matchId)
+    }
+
+    LostItem "1" --> "0..*" MatchRecord : lost_id
+    FoundItem "1" --> "0..*" MatchRecord : found_id
+    MatchRecord ..> MatchStatus : status=5
+    IMSession "0..1" --> "1" MatchRecord : match_id(RESTRICT)
+    IMSession "0..1" --> "1" FoundItem : found_id(RESTRICT)
+    IMSession "1" --> "2" User : lost/finder
+    IMSession "1" --> "0..*" IMMessage : session_id
+    IMRouter ..> IMSession
+    IMRouter ..> ImService
+    MatchRouter ..> MatchRecord
+    MatchRouter ..> LostItem
+    IMSessionListItem *-- PeerUser
+    MessagesView ..> ImApi
+    MessagesView ..> useImSession
+    useImSession ..> ImApi
+    MatchesView ..> MatchApi

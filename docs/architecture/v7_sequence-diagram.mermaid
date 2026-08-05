@@ -1,0 +1,63 @@
+%% ① 管理员选匹配 → 导出 CSV（需求 A / Q1·Q4·Q5）
+sequenceDiagram
+    participant A as 管理员
+    participant AV as AdminView
+    participant API as adminApi
+    participant AD as admin.py(require_admin)
+    participant DB as MatchRecord/LostItem/FoundItem/User/IMMessage
+    A->>AV: 进入「未失效匹配记录」区块
+    AV->>API: listAdminMatches({status?,page,page_size})
+    API->>AD: GET /admin/matches
+    AD->>DB: SELECT 匹配 WHERE lost/found expires_at+270d>now
+    DB-->>AD: Page[MatchOut](含 completed_at/lost_item/found_item)
+    AD-->>API: {code,data}
+    API-->>AV: 渲染 el-table（勾选列）
+    A->>AV: 勾选 N 条 → 点「一键导出」
+    AV->>API: exportMatches(ids, 'csv')
+    API->>AD: POST /admin/export {ids, format}
+    AD->>DB: 逐匹配取 失主/拾主 User(明文student_no/phone) + IM对话文本
+    DB-->>AD: 聚合行
+    AD-->>API: FileResponse(text/csv, 下载头)
+    API-->>A: 浏览器下载 forensic_matches_{date}.csv
+
+%% ② 用户删发布 → 软删（需求 B / Q6）
+sequenceDiagram
+    participant U as 用户
+    participant MV as MyPublishView
+    participant IC as ItemCard
+    participant API as itemsApi
+    participant IT as items.py(软删)
+    participant DB as LostItem/FoundItem
+    U->>MV: 我的发布页
+    MV->>IC: 渲染(showDelete=true)
+    U->>IC: 点「删除」
+    IC->>MV: emit('delete', item)
+    MV->>U: ElMessageBox.confirm("删除后仅你不可见，管理员留存1年")
+    U->>MV: 确认
+    MV->>API: deleteLost(id) / deleteFound(id)
+    API->>IT: DELETE /lost-items/{id}
+    IT->>DB: item.deleted_at = now; 拒绝进行中匹配
+    DB-->>IT: LostItemOut(deleted_at 非空)
+    IT-->>API: {code,data}
+    API-->>MV: 成功
+    MV->>MV: 乐观移除本地该项（列表不再含 deleted_at）
+    Note over DB: 用户侧列表过滤 deleted_at IS NULL → 该项消失；管理员后台仍可见至1年
+
+%% ③ 卡片渲染倒计时（需求 C / Q2）
+sequenceDiagram
+    participant BV as BoardView/MyPublishView
+    participant API as itemsApi
+    participant IT as items.py(过滤)
+    participant DB as LostItem/FoundItem
+    participant IC as ItemCard
+    participant U as 用户
+    BV->>API: listLost/listFound/myPublished
+    API->>IT: GET /lost-items (过滤 deleted_at IS NULL AND expires_at>now)
+    IT->>DB: SELECT ... WHERE deleted_at IS NULL AND expires_at > now
+    DB-->>IT: LostItemOut[](含 expires_at)
+    IT-->>API: Page[...]
+    API-->>BV: items
+    BV->>IC: 渲染(item.data.expires_at)
+    IC->>IC: N = ceil((expires_at - Date.now())/86400000)
+    IC-->>U: 红色小字「失效时间：N天」(N>0)；N<=0 不渲染（已被后端过滤隐藏）
+    Note over IC: 每日自然递减；归零后用户侧消失
