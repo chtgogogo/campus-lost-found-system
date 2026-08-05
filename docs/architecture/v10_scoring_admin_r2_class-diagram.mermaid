@@ -1,0 +1,204 @@
+classDiagram
+    %% ===== v10 R2 评分引擎 v2 + 归一化 =====
+    class ItemFeatures {
+        +set~tuple~ qty
+        +set~str~ colors
+        +set~str~ states
+        +dict~str,set~ place
+        +set~str~ keywords
+        +bool has_qty
+        +bool has_color
+        +bool has_state
+        +bool has_place
+        +bool has_keyword
+    }
+
+    class MatchService {
+        -dict _feature_cache
+        +extract_features(item, is_lost) ItemFeatures
+        +photo_category_score(lost, found, exact) float
+        +qty_score(lf, ff) float
+        +color_score(lf, ff) tuple~float,bool~
+        +state_score(lf, ff) tuple~float,bool~
+        +place_score(lf, ff) float
+        +keyword_score(lf, ff) float
+        +time_score(lost_time, found_time) float
+        -_provided_weight(lost_feat, lost) float
+        -_normalize_factor(lost_feat, lost) float
+        +score(lost, found, exact_category) float
+        +score_detail(lost, found, exact_category) dict
+        +is_suspected(score) bool
+        +text_match_rate(lost, found) float
+        +shared_text_tokens(lost, found) list
+    }
+
+    class ColorFamily {
+        <<module app/services/color_family.py>>
+        +dict COLOR_FAMILY
+        +dict ADJACENT_FAMILIES
+        +list COLOR_WORDS_V2
+        +color_families_of(text) set
+        +family_score(lost_fams, found_fams) tuple
+    }
+
+    class ScoringRefs {
+        <<module app/services/scoring_refs.py>>
+        +dict QTY_CLASSIFIERS
+        +dict CN_NUM_MAP
+        +dict STATE_WORD_PAIRS
+        +set STATE_WORDS
+        +Pattern ROOM_RE
+        +Pattern CAMPUS_RE
+        +dict LOCATION_LEVELS
+        +set STOPWORDS_V2
+    }
+
+    class Settings {
+        +float MATCH_W2_PHOTO_CAT
+        +float MATCH_W2_QTY
+        +float MATCH_W2_COLOR
+        +float MATCH_W2_STATE
+        +float MATCH_W2_PLACE
+        +float MATCH_W2_KEYWORD
+        +float MATCH_W2_TIME
+        +float MATCH_TIME_TAU_DAYS
+        +bool MATCH_NORMALIZE
+        +float MATCH_NORM_MIN_WEIGHT
+        +int MATCH_SUSPECT_MAX
+        +int MATCH_TOP_N
+        +float MATCH_THRESHOLD
+        +float MATCH_LOW_SCORE
+        +str ADMIN_APPLY_CODE
+        +int ADMIN_RETENTION_DAYS
+    }
+
+    class PublishService {
+        -MatchService _matcher
+        +_recall_lost_candidates(lost) list
+        +_recall_found_candidates(found) list
+        +_reverse_match_lost(lost) list
+        +_reverse_match_found(found) list
+        +refresh_lost_candidates(lost) list
+        +_exists_match(lost_id, found_id) bool
+    }
+
+    class CutWithSuspects {
+        <<function publish_service>>
+        +_cut_with_suspects(scored, base_n) list
+    }
+
+    class MatchOut {
+        +float match_score
+        +float photo_category
+        +float qty
+        +float color
+        +float state
+        +float place
+        +float keyword
+        +list~str~ signals
+        +float raw_total
+        +float norm_factor
+        +float photo
+        +float category
+        +float text
+        +float text_match_rate
+        +float location
+        +float time
+        +float total
+        +from_model(...) MatchOut
+    }
+
+    %% ===== 管理员注册 C =====
+    class UserCreate {
+        +str student_no
+        +str phone
+        +str sms_code
+        +str password
+        +str real_name
+        +str admin_code
+    }
+
+    class AuthService {
+        +register(data) tuple
+        +login(student_no, password) tuple
+    }
+
+    %% ===== 管理员后台 D =====
+    class AdminUserOut {
+        +int id
+        +str student_no
+        +str phone
+        +str real_name
+        +int role
+        +int status
+        +int credit_score
+        +datetime created_at
+        +from_model(user) AdminUserOut
+    }
+
+    class AdminConversationItem {
+        +datetime sent_at
+        +int sender_role
+        +str role_label
+        +str content
+    }
+
+    class AdminMatchDetailOut {
+        +MatchOut match
+        +AdminUserOut lost_user
+        +AdminUserOut found_user
+        +list~AdminConversationItem~ conversation
+    }
+
+    class AdminExportRequest {
+        +list~int~ ids
+        +str scope
+        +str format
+    }
+
+    class AdminExportService {
+        <<module app/services/admin_export_service.py>>
+        +build_conversation(db, match_id) str
+        +build_conversation_rows(db, match_id) list
+        +build_forensic_row(db, match) dict
+        +build_profile_row(db, match) dict
+        +render_csv(rows, scope) tuple
+        +render_xlsx(rows, scope) tuple
+        +render_md(rows, scope) tuple
+    }
+
+    class AdminRouter {
+        <<router app/routers/admin.py>>
+        +list_admin_users(keyword, role, status, page)
+        +list_admin_matches(status, all_time, page)
+        +get_match_detail(match_id)
+        +export_matches(payload)
+        +export_audit_logs(format)
+        +trigger_cleanup()
+    }
+
+    class CleanupService {
+        +int ADMIN_RETENTION_DAYS
+        +run_once(limit) dict
+    }
+
+    %% ===== 关系 =====
+    MatchService ..> ItemFeatures : 产出并缓存
+    MatchService ..> ColorFamily : 颜色合类唯一来源
+    MatchService ..> ScoringRefs : 量词/状态/地点/停用词
+    MatchService ..> Settings : 读权重/τ/归一化配置
+    MatchService ..> MatchOut : build_match_outs 透传明细
+    PublishService --> MatchService : 复用同一实例(特征缓存)
+    PublishService ..> CutWithSuspects : 5 处切片改造
+    PublishService ..> Settings : MATCH_TOP_N/THRESHOLD/SUSPECT_MAX
+    AuthService ..> UserCreate : 读 admin_code
+    AuthService ..> Settings : 比对 ADMIN_APPLY_CODE
+    AdminRouter ..> AdminExportService : 取证/渲染
+    AdminRouter ..> AdminUserOut
+    AdminRouter ..> AdminMatchDetailOut
+    AdminRouter ..> AdminExportRequest
+    AdminRouter ..> CleanupService
+    AdminMatchDetailOut *-- AdminUserOut
+    AdminMatchDetailOut *-- AdminConversationItem
+    AdminMatchDetailOut *-- MatchOut
+    CleanupService ..> Settings : ADMIN_RETENTION_DAYS
