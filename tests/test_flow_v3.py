@@ -293,12 +293,20 @@ def test_f3_08_keep1_candidate_visible_to_finder(client):
     assert any(m["id"] == match_id for m in r.json()["data"]["items"]), "已完成记录应在拾得者侧保留可见"
 
 
-# ==================== 上限 / 回填 / 常量 / 明细 / 软删（F3-9 ~ F3-13） ====================
-def test_f3_09_top10_cap_not_broken_by_keep1(client):
-    """F3-9 top10 不破（回归点 §9-3 / §2.7 R-3）：12 件 keep1 拾物 + 1 件失物 → 恰好 10 条候选。
+# ============ 保底条数 / 回填 / 常量 / 明细 / 软删（F3-9 ~ F3-13） ============
+def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
+    """F3-9 保底条数不被 keep1 击穿（回归点 §9-3 / §2.7 R-3）：12 件 keep1 拾物 + 1 件失物。
 
-    keep1 候选只能经失主侧动作创建，天然受 `scored[:MATCH_TOP_N]` 约束；
-    再 `refresh-matches` 应幂等返回 created=0。
+    ⚠️ v10 变更 B 语义订正（原用例名 `..._top10_cap_not_broken_by_keep1`）：
+    `MATCH_TOP_N` 已由「候选硬上限」改为「**普通候选保底条数**」，切片逻辑由
+    `scored[:MATCH_TOP_N]` 换成 `_cut_with_suspects(scored, MATCH_TOP_N)` ——
+    **前 10 条之后的「疑似」(score ≥ MATCH_THRESHOLD) 允许追加为第 11 条及以后**。
+    因此「恰好 10 条」只在**本场景全部候选均非疑似**时才成立，它是本用例的**前置条件**
+    而非普适不变量，故先断言前置条件再断言条数，避免评分口径微调时给出误导性红。
+
+    本用例的 flow-v3 关注点始终是：keep1 拾物即使大量进入**失主侧**匹配池，也只走正常
+    切片配额、不产生越权或重复候选。疑似溢出分支由 `test_v10_suspect_all.py::test_b9`
+    专项覆盖，此处不重复。
     """
     token_finder, _, _, _, _ = register_and_login(client, "f309f")
     token_owner, _, _, _, _ = register_and_login(client, "f309o")
@@ -308,15 +316,25 @@ def test_f3_09_top10_cap_not_broken_by_keep1(client):
     lost = _publish_lost(client, token_owner, "书包", "黑色书包", "图书馆丢失黑色书包")
     lost_id = lost["item"]["id"]
     matches = lost["suspected_matches"]
-    assert len(matches) == settings.MATCH_TOP_N, f"应严格取前 10 条候选，实际 {len(matches)}"
+
+    # 前置条件：本场景应全部为非疑似（实测约 76.92 分）。若评分口径上移越过 80，
+    # 则 v10 语义下追加疑似是**正确行为**，届时应调整本场景语料而非把它当回归。
+    top = max((m["match_score"] for m in matches), default=0.0)
+    assert top < settings.MATCH_THRESHOLD, (
+        f"前置条件失效：本场景最高分 {top} 已达疑似阈值 {settings.MATCH_THRESHOLD}，"
+        "v10 变更 B 下疑似可超出保底条数，『恰好 10 条』不再适用；请调整本用例语料。"
+    )
+    assert len(matches) == settings.MATCH_TOP_N, (
+        f"全部非疑似时应取保底 {settings.MATCH_TOP_N} 条，实际 {len(matches)}"
+    )
     found_ids = [m["found_id"] for m in matches]
     assert len(found_ids) == len(set(found_ids)), "候选不得重复"
 
     r = client.post(f"{API}/lost-items/{lost_id}/refresh-matches", headers=auth_header(token_owner))
     assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert data["created"] == 0, f"候选已满时刷新应幂等 created=0，实际 {data['created']}"
-    assert len(data["matches"]) == settings.MATCH_TOP_N, "候选总量仍应为 10"
+    assert data["created"] == 0, f"候选已满且无疑似时刷新应幂等 created=0，实际 {data['created']}"
+    assert len(data["matches"]) == settings.MATCH_TOP_N, "候选总量仍应为保底 10 条"
 
 
 def test_f3_10_legacy_keep1_self_backfill_via_refresh(client):
@@ -355,7 +373,8 @@ def test_f3_11_low_score_and_threshold_constants_decoupled():
     assert settings.MATCH_LOW_SCORE == 60.0, f"低分视觉阈值应为 60.0，实际 {settings.MATCH_LOW_SCORE}"
     assert settings.MATCH_THRESHOLD == 80.0, f"suspected 阈值应保持 80.0，实际 {settings.MATCH_THRESHOLD}"
     assert settings.MATCH_LOW_SCORE < settings.MATCH_THRESHOLD, "低分阈值须严格低于疑似阈值"
-    assert settings.MATCH_TOP_N == 10, "候选上限不变"
+    # v10 变更 B：MATCH_TOP_N 语义由「候选硬上限」改为「普通候选保底条数」，取值仍为 10。
+    assert settings.MATCH_TOP_N == 10, "普通候选保底条数不变"
 
 
 def test_f3_11b_suspected_semantics_not_drifted_by_low_score(client, db):
