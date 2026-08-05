@@ -189,8 +189,21 @@ def test_b9_suspects_may_exceed_top_n(client):
         assert all(m["suspected"] for m in suspects)
 
 
-def test_b10_refresh_no_longer_early_returns_when_full(client):
-    """AC-B6：候选已满时 refresh 不再直接返回空 —— 新来的疑似仍要补进来。"""
+def test_b10_refresh_no_longer_early_returns_when_full(client, db):
+    """AC-B6：候选已满时 refresh 不再直接返回空 —— 新来的疑似仍要补进来。
+
+    ⚠️ 构造要点（否则会误判为「早退未删」）：拾物发布时 `_reverse_match_found`
+    **本身就会**为 ≥80 的疑似建记录 —— G-4 守卫只跳过「已满 **且** <80」的低分对，
+    疑似是特意放行的。所以不能直接断言 refresh 返回的 `created >= 1`：
+    那条疑似在 refresh 之前就已存在，`created=0` 恰恰是幂等性的正确表现。
+
+    因此这里先把发布阶段自动建立的那条疑似**删掉**，让失物回到「已满 10 条低分」
+    的状态，再调 refresh —— 此时 `existing >= MATCH_TOP_N` → `quota=0`，
+    只有「B-4 早退确已删除 + `_cut_with_suspects` 在 quota=0 下仍补疑似」
+    两个条件同时成立，refresh 才可能把这条疑似重新补进来。
+    """
+    from app.models.match import MatchRecord
+
     token_owner, _, _, _, _ = register_and_login(client, "v10b3o")
     token_finder, _, _, _, _ = register_and_login(client, "v10b3f")
 
@@ -203,15 +216,37 @@ def test_b10_refresh_no_longer_early_returns_when_full(client):
     lost_id = data["item"]["id"]
 
     # 再发一件与失物高度一致的拾物（应为疑似）
-    _publish_found(client, token_finder, "钥匙", "一串黑色钥匙，教学楼四楼402")
+    found_id = _publish_found(client, token_finder, "钥匙", "一串黑色钥匙，教学楼四楼402")
+
+    # 发布阶段若已自动建立该疑似，先删除，把候选池还原成「已满 10 条低分」
+    auto = (
+        db.query(MatchRecord)
+        .filter(MatchRecord.lost_id == lost_id, MatchRecord.found_id == found_id)
+        .one_or_none()
+    )
+    was_auto_created = auto is not None
+    if was_auto_created:
+        assert float(auto.match_score) >= THRESHOLD, (
+            "发布阶段自动建立的这条应当是疑似；若为低分说明 G-4 守卫失效"
+        )
+        db.delete(auto)
+        db.commit()
+
+    existing = db.query(MatchRecord).filter(MatchRecord.lost_id == lost_id).count()
+    assert existing >= TOP_N, f"前置条件：候选应已满 {TOP_N} 条，实际 {existing}"
 
     r = client.post(f"{API}/lost-items/{lost_id}/refresh-matches", headers=auth_header(token_owner))
     assert r.status_code == 200, r.text
     payload = r.json()["data"]
     high = [m for m in payload["matches"] if float(m["match_score"]) >= THRESHOLD]
-    if high:
+    if was_auto_created:
+        # 候选已满（quota=0）仍必须把这条疑似补回来 —— 这才是 B-4 早退已删除的证据
         assert payload["created"] >= 1, "已满时新疑似仍必须补入（B-4 早退已删除）"
+        assert any(int(m["found_id"]) == found_id for m in payload["matches"]), (
+            "被删掉的疑似应被 refresh 重新补入候选"
+        )
         assert len(payload["matches"]) > TOP_N, "疑似追加后总量可以超过保底 10 条"
+        assert high, "补入的应当是 ≥80 的疑似"
 
 
 def test_b11_refresh_is_still_idempotent(client):
