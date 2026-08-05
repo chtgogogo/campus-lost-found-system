@@ -1,0 +1,44 @@
+# 后端依赖（Python 3.12 / FastAPI）
+# 适配 MVP：SQLite 开发兜底 + 可选 MySQL + 可选 Redis
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+SQLAlchemy>=2.0,<3.0
+PyMySQL>=1.1,<2.0
+PyJWT>=2.8,<3.0
+passlib[bcrypt]>=1.7,<2.0
+bcrypt>=4.0,<5.0
+python-multipart>=0.0.9
+python-dotenv>=1.0,<2.0
+redis>=5.0,<6.0
+pydantic>=2.6,<3.0
+pydantic-settings>=2.1,<3.0
+httpx>=0.27,<1.0
+Pillow>=10.0,<11.0
+# v10：管理后台 xlsx 取证导出（惰性导入，缺失时接口返回 400 而非 500）。不引 pandas —— 体积大且其
+# Excel 后端本身就是 openpyxl。
+openpyxl>=3.1,<4.0
+
+# ---- 视觉推理（P0-01 / P0-02，进程内 YOLOv8n + YOLO-World） ----
+# torch 使用 CPU 索引，避免拉取 CUDA 体积（约 +600MB）：
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2,<3.0
+torchvision>=0.17,<1.0
+ultralytics>=8.1,<9.0      # 自动依赖 numpy / pyyaml（opencv 用下方单独指定的 opencv-python）
+opencv-python>=4.8,<5.0     # 不混用 -headless，避免与 ultralytics 的 opencv-python 依赖争抢 cv2 导致安装失败
+numpy>=1.26,<2.0
+
+# ---- 语义匹配 / 跨模态（P0-② ③） ----
+# nltk：WordNet 同义召回；缺失时 match_service 自动回退纯精确匹配，不影响既有行为。
+nltk>=3.8,<4.0
+# CLIP 跨模态（P0-③，OpenAI 官方，权重见 weights/clip/）。官方包不在 PyPI，需 git 安装；
+# 缺失时 match_service 自动回退感知哈希，不影响运行。
+git+https://github.com/openai/CLIP.git
+
+# ---- 数据迁移（Alembic，强制为迁移唯一入口） ----
+# 重建/升级开发库：PYTHONUTF8=1 alembic -c migrations/alembic.ini upgrade head
+# 注：alembic.ini 仅含 ASCII 注释，避免 gbk 区域下 configparser 解码失败
+alembic>=1.13,<2.0
+
+# 测试
+pytest>=8.0
+requests>=2.31

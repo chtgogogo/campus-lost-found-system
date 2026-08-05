@@ -1,0 +1,97 @@
+sequenceDiagram
+    %% ============================================================
+    %% v10 R2 时序图：覆盖 4 个变更的关键调用链
+    %% 类 / 函数名均来自 v10_scoring_admin_incremental_design_r2.md
+    %% ============================================================
+
+    box rgb(235,245,255) 变更 A · 评分引擎 v2 + Q10 归一化（黄金用例）
+        participant Lost as LostItem(失物)
+        participant Found as FoundItem(候选)
+        participant MS as MatchService
+        participant CF as ColorFamily
+        participant SR as ScoringRefs
+        participant SET as Settings
+        participant MO as MatchOut
+    end
+
+    Note over Lost,MO: 失物 "一串黑色钥匙，教学楼四楼402掉落" → W_provided=80, k=1.25
+    Lost->>MS: extract_features(lost, is_lost=True)
+    MS->>SR: ROOM_RE / LOCATION_LEVELS / STATE_WORDS / STOPWORDS_V2
+    SR-->>MS: place={楼:教学楼,层:四楼,房:402}, qty={(1,串)}, colors={黑系}, states=∅, keywords=∅
+    MS->>MS: _feature_cache[(lost,id)] = ItemFeatures
+    Lost->>MS: score_detail(lost, found, exact_category)
+    MS->>MS: photo_category_score() → 20
+    MS->>MS: qty_score() → 15 / 5 / ...
+    MS->>CF: color_families_of(lost.features) / color_families_of(found.features)
+    CF-->>MS: family_score() → 20 / 10 / 0
+    MS->>MS: state_score() / place_score() / keyword_score()
+    MS->>SET: MATCH_W2_TIME / MATCH_TIME_TAU_DAYS
+    MS->>MS: time_score() = 10·exp(-Δd/15)
+    MS->>MS: _provided_weight(lost) → 80
+    MS->>SET: MATCH_NORM_MIN_WEIGHT (=50.0)
+    MS->>MS: k = 100 / max(80, 50) = 1.25   %% 铁律：k 只由失主侧决定
+    MS->>MS: total = clamp(raw_total * 1.25, 0, 100)
+    MS-->>Found: score_detail = {photo_category,qty,color,state,place,keyword,signals,raw_total,norm_factor=1.25,provided_dims,text,location,time,total}
+    MS->>MO: build_match_outs(...) 透传全部新字段
+    Note right of MS: 候选 A: raw=45 → total=56.25 (<60 落入弱化区)<br/>候选 B: raw=69 → 86.25 (疑似)<br/>候选 C: raw=78 → 97.5 (疑似)
+    end
+
+    box rgb(255,245,235) 变更 B · 候选排序修正（疑似全列）
+        participant PS as PublishService
+        participant Scored as scored[(-score,id)]
+    end
+
+    Lost->>PS: _reverse_match_lost(lost)
+    PS->>MS: score(lost, f, exact) 对每条召回候选
+    MS-->>PS: (total, found) 已排序
+    PS->>PS: _cut_with_suspects(scored, MATCH_TOP_N)
+    Note over PS: n=10; while scored[n]>=MATCH_THRESHOLD(80): n++<br/>cap = max(MATCH_TOP_N, MATCH_SUSPECT_MAX=50)<br/>return scored[:min(n,cap)]
+    PS-->>Lost: 前 10 保底 + 其后所有 ≥80（黄金用例含 B、C）
+
+    Note over PS: _reverse_match_found 改造 B-2：先 score 再判<br/>if existing>=TOP_N and s<80: continue (不打扰)<br/>keep1 早退(L368-369) 与 _recall 无 keep_status 过滤 不得动(G-1)
+
+    box rgb(235,255,235) 变更 C · 管理员注册（邀请码）
+        participant LV as LoginView.vue
+        participant API as /auth/register
+        participant AUTH as AuthService
+        participant CS as compare_digest
+        participant DB as DB(User)
+        participant AUD as write_audit
+    end
+
+    LV->>API: register(UserCreate{..., admin_code?})
+    API->>AUTH: register(data)
+    AUTH->>SET: ADMIN_APPLY_CODE
+    AUTH->>CS: compare_digest(supplied, expected) & bool(expected)
+    CS-->>AUTH: is_admin
+    AUTH->>DB: role = 1 if is_admin else 0
+    AUTH->>AUD: write_audit(action="register_admin")  %% commit 前，同事务
+    AUTH->>DB: commit()
+    AUTH-->>API: (user, token)  token 已透传 role
+    Note right of AUTH: 错码/不填 → role=0，响应体完全一致(AC-C9)<br/>ADMIN_APPLY_CODE 空串 → bool(expected)=False 防越权
+
+    box rgb(245,235,255) 变更 D · 后台详情 + 多格式导出 + all_time
+        participant ADM as AdminRouter
+        participant EXP as AdminExportService
+        participant CLN as CleanupService
+        participant RES as Response(blob)
+    end
+
+    ADM->>ADM: GET /admin/matches?all_time=true
+    Note over ADM: all_time=True → 跳过 expires_at>now-270d 两个 filter
+    ADM->>ADM: GET /admin/matches/{id}/detail
+    ADM->>EXP: build_conversation_rows(db, match_id)
+    EXP-->>ADM: [AdminConversationItem]  → AdminMatchDetailOut
+    ADM->>EXP: POST /admin/export {ids, scope, format}
+    alt format = xlsx
+        EXP->>EXP: 惰性 import openpyxl (失败→400 code 9001)
+        EXP->>EXP: Workbook 双 Sheet + 首行加粗 + freeze_panes
+        EXP-->>RES: application/vnd...sheet
+    else format = md
+        EXP->>EXP: 纯 f-string 拼装（转义 | 与换行）
+        EXP-->>RES: text/markdown; charset=utf-8
+    else format = csv
+        EXP-->>RES: text/csv（兼容 v7 行为）
+    end
+    ADM->>CLN: ADMIN_RETENTION_DAYS = settings.ADMIN_RETENTION_DAYS (默认 270)
+    Note over CLN: 类属性形态不变；从不清理 audit_log（天然长期留存）
