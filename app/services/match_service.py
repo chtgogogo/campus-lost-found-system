@@ -115,6 +115,7 @@ except Exception:  # nltk 未安装 / 离线 / 导入失败 → 关闭语义扩�
     _nltk = None
 
 _wordnet_ready = False   # 运行期语料是否就绪（懒加载成功后置 True，作为语义路径缓存）
+_wordnet_failed = False  # 本进程内已尝试激活且失败（负缓存，见 _ensure_wordnet 说明）
 _wn = None                # 懒加载成功后由 _ensure_wordnet() 写入 wordnet 模块对象
 
 
@@ -126,14 +127,21 @@ def _ensure_wordnet() -> bool:
     由调用方回退为纯精确 containment。下载成功后再导入 corpus 模块并写入模块级 ``_wn``，
     置 ``_wordnet_ready=True``，后续调用直接命中缓存，不再重复下载/导入。
 
+    ⚠️ **负缓存 ``_wordnet_failed``（v10 修复）**：原实现失败后不记忆，导致每个 token 的
+    每次语义命中判定都会重新发起两次 ``nltk.download`` 网络请求 —— 离线环境下打一次分
+    可产生上百次网络超时，是严重的线上延迟隐患（离线 CI 里整套用例慢数倍）。
+    失败一次后本进程不再重试；行为（返回 False → 回退纯精确匹配）完全不变。
+
     Returns:
         True 表示 wordnet 已就绪可用；False 表示不可用（已静默失败）。
     """
-    global _wordnet_ready
+    global _wordnet_ready, _wordnet_failed
     if not USE_WORDNET or _nltk is None:
         return False
     if _wordnet_ready:
         return True
+    if _wordnet_failed:
+        return False
     try:  # pragma: no cover - 依赖网络/语料，CI/离线环境静默失败
         _nltk.download("wordnet", quiet=True)
         _nltk.download("omw-1.4", quiet=True)
@@ -143,6 +151,7 @@ def _ensure_wordnet() -> bool:
         _wordnet_ready = True
         return True
     except Exception:
+        _wordnet_failed = True
         return False
 
 
@@ -435,10 +444,21 @@ class MatchService:
         排除项（缺一不可，否则黄金用例分母从 80 变 90）：
 
         1. ``NOUN_SET``（物品名词，判别力已由 photo_category 20 分表达）；
-        2. ``category_name`` 本身及其字符（类目名同理）；
+        2. ``category_name`` 本身及其片段（类目名同理，见下方「⚠️ 单向包含」）；
         3. ``STOPWORDS_V2``（无判别力动词/模糊限定语）；
         4. 颜色/地点/状态词残留（防御性兜底，正常流程已被消费）；
         5. 纯标点、纯数字、长度 <2 的碎片（无判别力且噪声大）。
+
+        ⚠️ **单向包含（设计 R2 §2.3 铁律，勿改回双向）**：类目排除只允许
+        ``tok == cat``（相等）与 ``tok in cat``（token 是类目名的片段）两个方向，
+        **绝不能加 ``cat in tok``**。反向包含会让「类目名恰好是某 token 子串」的
+        一侧凭空丢掉该 token，而另一侧保留 → 抽取结果**左右不对称**，
+        ``_score_keyword`` 因「任一侧为空即 0」而永久失效。
+
+        典型踩坑（v10 回归实测）：双方都带融合标签 ``融合:钥匙``，
+        失主类目 ``银色钥匙``（无包含关系→保留）、拾获方类目 ``钥匙``
+        （``cat in tok`` 成立→被丢弃）→ ``keyword`` 维度恒为 0，
+        同色钥匙分数被压在阈值下，破坏 v8 AC1「同色钥匙应达疑似」。
 
         Args:
             rest: 已扣除四类结构化信息的剩余文本。
@@ -454,7 +474,8 @@ class MatchService:
                 continue
             if tok in STOPWORDS_V2 or tok in NOUN_SET:
                 continue
-            if cat and (tok == cat or tok in cat or cat in tok):
+            # 只做单向包含：相等 / token 是类目名片段。禁止 `cat in tok`（见 docstring）
+            if cat and (tok == cat or tok in cat):
                 continue
             if tok in _COLOR_SET or tok in _LOCATION_SET or tok in STATE_WORDS:
                 continue

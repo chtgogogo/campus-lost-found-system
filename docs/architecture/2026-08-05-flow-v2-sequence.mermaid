@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    participant F as 拾得者(前端)
+    participant L as 失主(前端 MatchesView/BoardView)
+    participant API as items.py / match.py
+    participant PS as PublishService
+    participant MS as MatchService
+    participant DB as MatchRecord
+
+    Note over F, DB: ① 发布 keep1 拾物：退出自动双向匹配（P0-2）
+    F->>API: POST /found-items（keep_status=1）
+    API->>PS: publish_found()
+    PS->>PS: _reverse_match_found() 开头 keep1 → return []
+    API-->>F: {item, suspected_matches: []}
+
+    Note over L, DB: ② 失主发布失物：候选召回排除 keep1（P0-2）
+    L->>API: POST /lost-items
+    PS->>PS: _recall_lost_candidates() 仅 keep_status=0 拾物
+    API-->>L: {item, suspected_matches(不含 keep1)}
+
+    Note over L, DB: ③ 申请即完成（P0-3，不填理由）
+    L->>API: POST /matches/{id}/claim-complete（或 /matches/manual 分流）
+    API->>PS: complete_keep1_claim(match)
+    PS->>DB: status 0→2(COMPLETED)、flow_type=1、completed_at=now
+    PS->>DB: lost.status=3(RESOLVED)、found.status=1(RESOLVED)、expires_at+90d
+    PS->>DB: 审计 keep1_claim_complete
+    API-->>L: MatchOut(status=2, flow_type=1)
+
+    Note over L, DB: ④ 撤回（P0-4，不限时限）
+    L->>API: POST /matches/{id}/revoke
+    API->>PS: revoke_keep1_claim(match)
+    PS->>PS: lost.status = 有其他进行中?MATCHING(1) : PENDING_MATCH(0)
+    PS->>DB: match.status→6(REVOKED)、found.status→0(PENDING)、expires_at+90d、completed_at保留
+    PS->>DB: 审计 keep1_claim_revoke
+    API-->>L: MatchOut(status=6, flow_type=1)（灰显"已撤回"）
+
+    Note over L, DB: ⑤ 拾物恢复可申请（_exists_match 排除 6）
+    L->>API: POST /matches/manual（同一 (lost,found) 或其他失主）
+    PS->>PS: _exists_match 排除 status∈{2,3,6} → 不拦截
+    API->>PS: keep1 分流 → 再次一步完成
+    API-->>L: MatchOut(status=2, flow_type=1)

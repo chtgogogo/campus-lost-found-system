@@ -31,3 +31,47 @@ _check2.db
 
 # WorkBuddy session
 .workbuddy/
+
+# 训练数据集 / 增广 / 训练产物（大文件，不入库；由 merge_and_retrain.py 本地生成）
+dataset/
+aug_data/
+runs/
+training_artifacts/
+
+# 模型权重（大文件，不入库）
+# ⚠️ 必须用 `/` 锚定到仓库根：无锚定的 `models/` 会连 app/models/ 源码一起忽略
+/weights/
+/models/
+*.pt
+*.onnx
+
+# 用户上传件（运行期产物）
+/uploads/
+/qa_fake_out/
+
+# 前端构建产物 / 依赖
+web/node_modules/
+web/dist/
+web/dist_flowv3/
+web/vite.config.ts.timestamp-*.mjs
+
+# 本地临时探针 / 一次性脚本（仅仓库根的下划线前缀文件；
+# 必须用 `/` 锚定，否则 `_*.py` 会连 app/__init__.py 一起忽略）
+/_*.txt
+/_*.py
+/_*.db
+/_*.mjs
+/_*.csv
+/_aug_test/
+/_ccache_backup/
+/_figs/
+/_tmp_vis/
+/.tmp/
+/.chk*.txt
+/.probe*.txt
+/.ls_*.txt
+/.git_*.txt
+/.op.txt
+/.recent.txt
+/.smoke.txt
+tests/_tmp_migrate_*.db-journal

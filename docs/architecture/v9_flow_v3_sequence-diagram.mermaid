@@ -1,0 +1,99 @@
+%% flow-v3 增量时序图：keep1 单向匹配池（只服务失主侧）+ 低分 60 视觉口径
+sequenceDiagram
+    autonumber
+    actor Finder as 拾得者（keep1 发布者）
+    actor Owner as 失主
+    participant FE as MatchesView.vue
+    participant API as MatchRouter (FastAPI)
+    participant PS as PublishService
+    participant MS as MatchService
+    participant DB as SQLite/MySQL
+
+    rect rgb(240, 247, 255)
+    Note over Finder,DB: 流程 1 —— keep1 拾物发布：反向不放开（拾得者不获得任何候选）
+    Finder->>API: POST /found-items (keep_status=1)
+    API->>PS: publish_found(finder, dto)
+    PS->>DB: INSERT found_item(keep_status=1, status=PENDING)
+    Note right of PS: keep_status=1 不加信誉分（仅 keep0 +1，不变）
+    PS->>PS: _reverse_match_found(found)
+    Note right of PS: 保留早退：keep_status==NOT_KEEPING → return []
+    PS-->>API: (found, matches=[])
+    API-->>Finder: 200 { item, suspected_matches: [] }
+    end
+
+    rect rgb(240, 255, 244)
+    Note over Owner,DB: 流程 2 —— 失主发布失物：正向放开，keep1 进匹配池
+    Owner->>API: POST /lost-items
+    API->>PS: publish_lost(publisher, dto)
+    PS->>DB: INSERT lost_item(status=PENDING_MATCH)
+    PS->>PS: _reverse_match_lost(lost)
+    PS->>DB: SELECT found_item WHERE status=PENDING AND deleted_at IS NULL
+    Note right of DB: 本次删除 keep_status==KEEPING 过滤<br/>keep0 与 keep1 同池召回
+    DB-->>PS: candidates(keep0 + keep1)
+    loop 每个候选（已过 _exists_match 去重）
+        PS->>MS: score(lost, found)
+        MS-->>PS: 五维加权分（15/20/50/10/5）
+    end
+    PS->>PS: sort(-score, found_id)[:MATCH_TOP_N=10]
+    PS->>DB: INSERT match_record(status=0 PENDING_CLAIM) × N
+    PS->>DB: UPDATE lost.status = MATCHING
+    PS-->>API: (lost, created)
+    API-->>Owner: 200 { item, suspected_matches }
+    end
+
+    rect rgb(255, 251, 240)
+    Note over Owner,DB: 流程 3 —— 失主侧「我的匹配」渲染（低分 60 视觉口径）
+    Owner->>FE: 打开 /matches
+    FE->>API: GET /matches?page_size=200
+    API->>DB: as_lost ∪ as_found，去重 + _counterpart_hidden 过滤
+    DB-->>API: MatchOut[]（含 found_item.keep_status / match_score / suspected）
+    API-->>FE: 200 Page<MatchOut>
+    FE->>FE: isLowScore(m) = match_score < MATCH_LOW_SCORE(60)
+    Note right of FE: <60 → 弱化标签 +『match-card--low』虚线卡片<br/>60~79 → 常规展示（本次变更点）<br/>>=80 → suspected 徽标（后端语义不变）
+    FE->>FE: applyButtonText = keep_status===1 ? '我要领走' : '申请匹配'
+    end
+
+    rect rgb(248, 240, 255)
+    Note over Owner,DB: 流程 4 —— 失主点「我要领走」：一步完成（无交接码、无拾得者确认）
+    Owner->>FE: 点击「我要领走」
+    FE->>Owner: ElMessageBox 二次确认（keep1 分支优先，早退，不叠加低分弹窗）
+    Owner-->>FE: 确认
+    FE->>API: POST /matches/{id}/claim-complete
+    API->>API: 校验 lost.publisher_id == user.id（否则 403）
+    API->>PS: complete_keep1_claim(match)
+    PS->>PS: 校验 found.keep_status==1 / match.status==0 / found.status==0
+    PS->>DB: match.status=2, flow_type=1, completed_at=now
+    PS->>DB: lost.status=RESOLVED(3), found.status=RESOLVED(1), expires_at +90d
+    PS->>DB: INSERT audit(keep1_claim_complete)
+    API-->>FE: 200 MatchOut(status=2, flow_type=1)
+    FE->>FE: 已完成 tab 显示「交接已完成」+「撤回」按钮（canRevoke）
+    end
+
+    rect rgb(255, 240, 240)
+    Note over Finder,DB: 流程 5 —— keep1 单向性守卫（关键：候选对拾得者仍可见，必须挡住写操作）
+    Finder->>FE: 打开 /matches（as_found 分支命中同一条候选）
+    FE->>FE: isKeep1Candidate(m) → 渲染只读「留在原地·等待失主自取」，不渲染确认归还/拒绝
+    Note over Finder,API: 防御纵深：即使绕过前端直调接口
+    Finder->>API: POST /matches/{id}/confirm-return
+    API->>API: found.keep_status==1 → ParamError 422
+    API-->>Finder: 422「该物品留在原地未挪动，无需你确认归还」
+    Finder->>API: POST /matches/{id}/reject
+    API->>API: found.keep_status==1 → ParamError 422
+    API-->>Finder: 422「该物品留在原地未挪动，是否被领走由失主决定」
+    Note over API: handover/generate 要求 status==CLAIMING(1)，<br/>keep1 候选被 claim 的 422 挡在 status=0，路径不可达 → 无需守卫
+    end
+
+    rect rgb(245, 245, 245)
+    Note over Owner,DB: 流程 6 —— 撤回与老数据自助回填
+    Owner->>API: POST /matches/{id}/revoke
+    API->>PS: revoke_keep1_claim(match)
+    PS->>DB: match.status=6, lost/found 状态回退, audit(keep1_claim_revoke)
+    Note right of PS: _exists_match 排除 {2,3,6} → 同 (lost,found) 可再次生成候选/再次申请
+    Owner->>FE: 点击「刷新候选」
+    FE->>API: POST /lost-items/{id}/refresh-matches
+    API->>PS: refresh_lost_candidates(lost)
+    PS->>PS: 复用 _recall_lost_candidates（已放开）
+    Note right of PS: 存量 keep1 拾物（status=PENDING 且未软删）由此自助补入<br/>→ 变更 C 不写回填脚本的成本为 0
+    PS-->>API: created ≤ MATCH_TOP_N - existing
+    API-->>Owner: 200 { created, matches }
+    end

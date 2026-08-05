@@ -1,0 +1,46 @@
+erDiagram
+    USER ||--o{ LOST_ITEM : "RESTRICT"
+    USER ||--o{ FOUND_ITEM : "RESTRICT"
+    CATEGORY ||--o{ LOST_ITEM : "RESTRICT"
+    CATEGORY ||--o{ FOUND_ITEM : "RESTRICT"
+    LOST_ITEM ||--o{ MATCH_RECORD : "RESTRICT"
+    FOUND_ITEM ||--o{ MATCH_RECORD : "RESTRICT"
+    MATCH_RECORD ||--o{ HANDOVER_CODE : "RESTRICT"
+    MATCH_RECORD ||--o{ IM_SESSION : "RESTRICT"
+    USER ||--o{ IM_SESSION : "RESTRICT"
+    USER ||--o{ IM_MESSAGE : "RESTRICT"
+    IM_SESSION ||--o{ IM_MESSAGE : "RESTRICT"
+    USER ||--o{ TRUST_SCORE_LOG : "RESTRICT"
+    USER ||--o{ AUDIT_LOG : "RESTRICT"
+    LOST_ITEM {
+        bigint id PK
+        bigint publisher_id FK "=> user.id"
+        int category_id FK "=> category.id"
+        json tags "结构化标签"
+        string image_hash "感知哈希"
+        string appearance "v8:颜色/材质/形状"
+        string features "v8:品牌/数量/标记"
+        string location "v8:楼栋/区域"
+        datetime expires_at "v7失效"
+        datetime deleted_at "v7软删"
+    }
+    FOUND_ITEM {
+        bigint id PK
+        bigint finder_id FK "=> user.id"
+        int category_id FK "=> category.id"
+        json tags
+        string image_hash
+        string appearance
+        string features
+        string location
+        datetime expires_at
+        datetime deleted_at
+    }
+    MATCH_RECORD {
+        bigint id PK
+        bigint lost_id FK "=> lost_item.id"
+        bigint found_id FK "=> found_item.id"
+        decimal match_score
+        int status
+        datetime completed_at "v7"
+    }

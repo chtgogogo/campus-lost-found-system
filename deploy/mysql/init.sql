@@ -1,0 +1,235 @@
+-- ============================================================
+-- 失物招领系统 · MySQL 8.0 初始化 DDL（生产环境）
+-- 字符集：utf8mb4 / utf8mb4_0900_ai_ci
+-- 审计表按月 RANGE COLUMNS 分区（分区键须入主键）
+-- 说明：MVP 开发期用 SQLite + create_all；本文件供 MySQL 部署执行。
+-- ============================================================
+
+CREATE DATABASE IF NOT EXISTS lostfound
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE lostfound;
+
+-- ---------- user ----------
+CREATE TABLE IF NOT EXISTS `user` (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_no    VARCHAR(32)  NOT NULL,
+  phone         VARCHAR(20)  NOT NULL,
+  real_name     VARCHAR(50)  DEFAULT NULL,
+  password_hash VARCHAR(100) NOT NULL,
+  role          TINYINT      NOT NULL DEFAULT 0,
+  credit_score  INT          NOT NULL DEFAULT 100,
+  status        TINYINT      NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_student (student_no),
+  UNIQUE KEY uq_user_phone (phone),
+  KEY idx_user_role (role),
+  KEY idx_user_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- category ----------
+CREATE TABLE IF NOT EXISTS `category` (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name            VARCHAR(50)  NOT NULL,
+  yolo_class_id   INT          DEFAULT NULL,
+  recognition_mode TINYINT     NOT NULL DEFAULT 0,
+  yolo_prompt     VARCHAR(120) DEFAULT NULL,
+  parent_id       BIGINT UNSIGNED DEFAULT NULL,
+  is_active       TINYINT      NOT NULL DEFAULT 1,
+  PRIMARY KEY (id),
+  KEY idx_category_name (name),
+  KEY idx_category_parent (parent_id),
+  KEY idx_category_active (is_active),
+  KEY idx_category_mode (recognition_mode)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- lost_item (v8: 删除 lost_location；新增 tags/image_hash/appearance/features/location/expires_at/deleted_at) ----------
+CREATE TABLE IF NOT EXISTS `lost_item` (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  publisher_id  BIGINT UNSIGNED NOT NULL,
+  category_id   BIGINT UNSIGNED DEFAULT NULL,
+  category_name VARCHAR(100)  NOT NULL,
+  title         VARCHAR(100) NOT NULL,
+  description   TEXT          NOT NULL,
+  images        JSON          DEFAULT NULL,
+  color         VARCHAR(30)   DEFAULT NULL,
+  tags          JSON          DEFAULT NULL,
+  image_hash    VARCHAR(16)   DEFAULT NULL,
+  appearance    VARCHAR(255)  DEFAULT NULL,
+  features      VARCHAR(255)  DEFAULT NULL,
+  location      VARCHAR(128)  DEFAULT NULL,
+  lost_time     DATETIME      NOT NULL,
+  status        TINYINT       NOT NULL DEFAULT 0,
+  expires_at    DATETIME      DEFAULT NULL,
+  deleted_at    DATETIME      DEFAULT NULL,
+  created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_lost_cat_status (category_id, status),
+  KEY idx_lost_expires (expires_at),
+  KEY idx_lost_deleted (deleted_at),
+  CONSTRAINT fk_lost_publisher FOREIGN KEY (publisher_id) REFERENCES `user`(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_lost_category  FOREIGN KEY (category_id)  REFERENCES `category`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- found_item (v8: 删除 found_location；新增 tags/image_hash/appearance/features/location/expires_at/deleted_at) ----------
+CREATE TABLE IF NOT EXISTS `found_item` (
+  id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  finder_id      BIGINT UNSIGNED NOT NULL,
+  category_id    BIGINT UNSIGNED DEFAULT NULL,
+  category_name  VARCHAR(100)  NOT NULL,
+  description    TEXT          DEFAULT NULL,
+  images         JSON          NOT NULL,
+  tags           JSON          DEFAULT NULL,
+  image_hash     VARCHAR(16)   DEFAULT NULL,
+  appearance     VARCHAR(255)  DEFAULT NULL,
+  features       VARCHAR(255)  DEFAULT NULL,
+  location       VARCHAR(128)  DEFAULT NULL,
+  found_time     DATETIME      DEFAULT NULL,
+  keep_status    TINYINT       NOT NULL,
+  contact_allowed TINYINT      NOT NULL DEFAULT 1,
+  status         TINYINT       NOT NULL DEFAULT 0,
+  expires_at     DATETIME      DEFAULT NULL,
+  deleted_at     DATETIME      DEFAULT NULL,
+  created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_found_cat_status (category_id, status),
+  KEY idx_found_expires (expires_at),
+  KEY idx_found_deleted (deleted_at),
+  CONSTRAINT fk_found_finder   FOREIGN KEY (finder_id)   REFERENCES `user`(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_found_category FOREIGN KEY (category_id) REFERENCES `category`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- match_record (v8: 新增 completed_at 及索引 idx_match_completed) ----------
+CREATE TABLE IF NOT EXISTS `match_record` (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  lost_id      BIGINT UNSIGNED NOT NULL,
+  found_id     BIGINT UNSIGNED NOT NULL,
+  match_score  DECIMAL(5,2)    NOT NULL,
+  status       TINYINT         NOT NULL DEFAULT 0,
+  claim_reason TEXT            DEFAULT NULL,
+  code         VARCHAR(12)     DEFAULT NULL,
+  code_expire  DATETIME        DEFAULT NULL,
+  completed_at DATETIME        DEFAULT NULL,
+  created_at   TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_match_lost (lost_id),
+  KEY idx_match_found (found_id),
+  KEY idx_match_status (status),
+  KEY idx_match_completed (completed_at),
+  CONSTRAINT fk_match_lost  FOREIGN KEY (lost_id)  REFERENCES `lost_item`(id)  ON DELETE RESTRICT,
+  CONSTRAINT fk_match_found FOREIGN KEY (found_id) REFERENCES `found_item`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- handover_code ----------
+CREATE TABLE IF NOT EXISTS `handover_code` (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  match_id      BIGINT UNSIGNED NOT NULL,
+  seq           SMALLINT        NOT NULL DEFAULT 1,
+  code          VARCHAR(12)     NOT NULL,
+  qr_token      VARCHAR(64)     NOT NULL,
+  status        TINYINT         NOT NULL DEFAULT 0,
+  verified_by_lost  TINYINT     NOT NULL DEFAULT 0,
+  verified_by_finder TINYINT    NOT NULL DEFAULT 0,
+  gps_lost      VARCHAR(50)     DEFAULT NULL,
+  gps_finder    VARCHAR(50)     DEFAULT NULL,
+  generated_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expire_at     DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_handover_match_seq (match_id, seq),
+  KEY idx_handover_code (code),
+  KEY idx_handover_status (status),
+  KEY idx_handover_expire (expire_at),
+  CONSTRAINT fk_handover_match FOREIGN KEY (match_id) REFERENCES `match_record`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- im_session ----------
+CREATE TABLE IF NOT EXISTS `im_session` (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  match_id        BIGINT UNSIGNED DEFAULT NULL,
+  lost_user_id    BIGINT UNSIGNED NOT NULL,
+  finder_user_id  BIGINT UNSIGNED NOT NULL,
+  status          TINYINT         NOT NULL DEFAULT 0,
+  created_at      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_message_at DATETIME        DEFAULT NULL,
+  expires_at      DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_im_match (match_id),
+  KEY idx_im_lost (lost_user_id),
+  KEY idx_im_finder (finder_user_id),
+  KEY idx_im_status (status),
+  KEY idx_im_expires (expires_at),
+  CONSTRAINT fk_im_match  FOREIGN KEY (match_id)       REFERENCES `match_record`(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_im_lost   FOREIGN KEY (lost_user_id)  REFERENCES `user`(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_im_finder FOREIGN KEY (finder_user_id) REFERENCES `user`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- im_message ----------
+CREATE TABLE IF NOT EXISTS `im_message` (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  session_id   BIGINT UNSIGNED NOT NULL,
+  sender_id    BIGINT UNSIGNED NOT NULL,
+  sender_role  TINYINT         NOT NULL,
+  content_type TINYINT         NOT NULL DEFAULT 0,
+  content      VARCHAR(500)    NOT NULL,
+  sent_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_im_msg_session_sent (session_id, sent_at),
+  CONSTRAINT fk_msg_session FOREIGN KEY (session_id) REFERENCES `im_session`(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_msg_sender  FOREIGN KEY (sender_id)  REFERENCES `user`(id)       ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- trust_score_log ----------
+CREATE TABLE IF NOT EXISTS `trust_score_log` (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT UNSIGNED NOT NULL,
+  delta      INT             NOT NULL,
+  reason     VARCHAR(50)     NOT NULL,
+  ref_type   VARCHAR(20)     DEFAULT NULL,
+  ref_id     BIGINT UNSIGNED DEFAULT NULL,
+  created_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_trust_user_created (user_id, created_at),
+  CONSTRAINT fk_trust_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------- audit_log（按月 RANGE COLUMNS 分区） ----------
+CREATE TABLE IF NOT EXISTS `audit_log` (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT UNSIGNED DEFAULT NULL,
+  action     VARCHAR(50)     NOT NULL,
+  target_type VARCHAR(20)    DEFAULT NULL,
+  target_id  BIGINT UNSIGNED DEFAULT NULL,
+  ip         VARCHAR(45)     DEFAULT NULL,
+  ua         VARCHAR(255)    DEFAULT NULL,
+  session_id VARCHAR(64)     DEFAULT NULL,
+  gps        VARCHAR(50)     DEFAULT NULL,
+  detail     TEXT            DEFAULT NULL,
+  created_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id, created_at),
+  KEY idx_audit_target (target_type, target_id),
+  KEY idx_audit_user_created (user_id, created_at),
+  CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+PARTITION BY RANGE COLUMNS (created_at) (
+  PARTITION p202601 VALUES LESS THAN ('2026-02-01'),
+  PARTITION p202602 VALUES LESS THAN ('2026-03-01'),
+  PARTITION p202603 VALUES LESS THAN ('2026-04-01'),
+  PARTITION p202604 VALUES LESS THAN ('2026-05-01'),
+  PARTITION p202605 VALUES LESS THAN ('2026-06-01'),
+  PARTITION p202606 VALUES LESS THAN ('2026-07-01'),
+  PARTITION p202607 VALUES LESS THAN ('2026-08-01'),
+  PARTITION p202608 VALUES LESS THAN ('2026-09-01'),
+  PARTITION p202609 VALUES LESS THAN ('2026-10-01'),
+  PARTITION p202610 VALUES LESS THAN ('2026-11-01'),
+  PARTITION p202611 VALUES LESS THAN ('2026-12-01'),
+  PARTITION p202612 VALUES LESS THAN ('2027-01-01'),
+  PARTITION pmax VALUES LESS THAN (MAXVALUE)
+);
+
+-- ---------- 分类与地点说明（v8） ----------
+-- category_name：纯自由文本分类（必填），category_id 仅作内部匹配键（可空）。
+-- 地点匹配（W3）改对结构化 location 文本相似度（楼栋/区域），不再使用 region_code；
+--   lost_location / found_location 已删除，统一以 v8 的 location 列承载。
+-- v8 新增：lost_item / found_item 增加 tags(JSON)/image_hash/appearance/features/location/expires_at/deleted_at；
+--   match_record 增加 completed_at（及索引 idx_match_completed）。软删与失效时间由 deleted_at / expires_at 体现。

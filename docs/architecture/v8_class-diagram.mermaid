@@ -1,0 +1,148 @@
+classDiagram
+    class LostItem {
+        <<变更>>
+        +BigInteger id
+        +int category_id
+        +String category_name
+        +String color  %% 复用，并入 appearance 维
+        +JSON tags
+        +String image_hash
+        +JSON appearance  %% [新增] {material,shape}
+        +JSON features    %% [新增] {brand,count,mark}
+        +String location  %% [新增] 楼栋/区域
+        +DateTime lost_time
+    }
+    class FoundItem {
+        <<变更>>
+        +BigInteger id
+        +int category_id
+        +JSON tags
+        +String image_hash
+        +JSON appearance  %% [新增] {material,shape}
+        +JSON features    %% [新增] {brand,count,mark}
+        +String location  %% [新增] 楼栋/区域
+        +DateTime found_time
+    }
+    class Category {
+        <<变更>>
+        +int id
+        +String name
+        +int recognition_mode
+        +int yolo_class_id
+        +int is_active
+        %% seed 追加第12类 "其他"(id 待定)
+    }
+    class MatchRecord {
+        <<复用>>
+        +BigInteger id
+        +int lost_id
+        +int found_id
+        +float match_score
+        +SmallInt status
+    }
+    class MatchService {
+        <<变更>>
+        +score(lost, found) float
+        +score_breakdown(lost, found) dict
+        +photo_sim_factor(h_a, h_b) float
+        +category_hit(exact) float
+        +appearance_factor(lost, found) float
+        +feature_factor(lost, found) float
+        +time_decay_factor(t_l, t_f) float
+        +location_hit_factor(loc_l, loc_f) float
+        +tag_match_rate(t_l, t_f) float
+        +color_conflict(lost, found) bool
+    }
+    class PublishService {
+        <<变更>>
+        +publish_lost(publisher, dto) tuple
+        +publish_found(finder, dto) tuple
+        +_resolve_category_id(name, vis, tags) int
+        +_recall_lost_candidates(lost) list
+        +_recall_found_candidates(found) list
+    }
+    class VisionService {
+        <<变更>>
+        +predict(bytes) dict
+        +_fallback() dict  %% 低置信→"其他"
+    }
+    class TaggingService {
+        <<复用>>
+        +extract(title, desc, vision_label, cat) list
+    }
+    class MatchOut {
+        <<变更>>
+        +float match_score
+        +dict score_breakdown  %% [新增] 六维明细
+        +bool suspected
+        +LostItemOut lost_item
+        +FoundItemOut found_item
+    }
+    class LostItemOut {
+        <<变更>>
+        +JSON appearance?
+        +JSON features?
+        +String location?
+    }
+    class FoundItemOut {
+        <<变更>>
+        +JSON appearance?
+        +JSON features?
+        +String location?
+    }
+    class LostItemPublishDTO {
+        <<变更>>
+        +JSON appearance?
+        +JSON features?
+        +String location?
+        +String color?
+    }
+    class FoundItemPublishDTO {
+        <<变更>>
+        +JSON appearance?
+        +JSON features?
+        +String location?
+    }
+    class Settings {
+        <<变更>>
+        +MATCH_W_PHOTO 20
+        +MATCH_W_CATEGORY 30
+        +MATCH_W_APPEARANCE 20
+        +MATCH_W_FEATURE 15
+        +MATCH_W_TIME 10
+        +MATCH_W_LOCATION 5
+        +MATCH_W_OTHER_TAG 80
+        +MATCH_THRESHOLD 80
+        +MATCH_OTHER_CATEGORY_ID int
+        +OTHER_CONF_THRESHOLD 0.25
+        +TIME_DECAY_TAU_DAYS 3
+    }
+    class ItemsRouter {
+        <<变更>>
+        +POST /lost-items  %% +appearance/features/location 表单
+        +POST /found-items %% +appearance/features/location 表单
+    }
+    class MatchRouter {
+        <<复用>>
+        +GET /matches
+    }
+
+    LostItem "1" --> "0..*" MatchRecord : lost_id(RESTRICT)
+    FoundItem "1" --> "0..*" MatchRecord : found_id(RESTRICT)
+    MatchRecord ..> MatchOut
+    LostItem ..> LostItemOut
+    FoundItem ..> FoundItemOut
+    LostItemPublishDTO ..> LostItem
+    FoundItemPublishDTO ..> FoundItem
+    PublishService ..> LostItem
+    PublishService ..> FoundItem
+    PublishService ..> Category
+    PublishService ..> VisionService
+    PublishService ..> TaggingService
+    MatchService ..> Settings : settings
+    MatchService ..> LostItem : score
+    MatchService ..> FoundItem : score
+    ItemsRouter ..> PublishService
+    MatchRouter ..> MatchRecord
+    ItemsRouter ..> LostItemPublishDTO
+    ItemsRouter ..> FoundItemPublishDTO

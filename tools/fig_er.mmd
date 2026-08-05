@@ -1,0 +1,92 @@
+erDiagram
+    USER ||--o{ LOST_ITEM : "发布"
+    USER ||--o{ FOUND_ITEM : "拾得"
+    CATEGORY ||--o{ LOST_ITEM : "标注"
+    CATEGORY ||--o{ FOUND_ITEM : "标注"
+    LOST_ITEM ||--o{ MATCH_RECORD : "构成"
+    FOUND_ITEM ||--o{ MATCH_RECORD : "构成"
+    MATCH_RECORD ||--o{ HANDOVER_CODE : "生成"
+    MATCH_RECORD ||--o{ IM_SESSION : "开启"
+    IM_SESSION ||--o{ IM_MESSAGE : "含"
+    USER ||--o{ IM_SESSION : "参与"
+    USER ||--o{ TRUST_SCORE_LOG : "产生"
+    USER ||--o{ AUDIT_LOG : "留痕"
+    USER {
+        bigint id PK
+        string student_no UK "学号"
+        string phone UK "手机号"
+        int role "0普通/1管理员"
+        int credit_score "默认100"
+    }
+    CATEGORY {
+        int id PK
+        string name "11常规+其他"
+        int yolo_class_id "其他类=NULL"
+        int recognition_mode "0=COCO/1=YOLO-World"
+        string yolo_prompt "可选"
+        int parent_id "父级"
+        int is_active
+    }
+    LOST_ITEM {
+        bigint id PK
+        bigint publisher_id FK
+        int category_id FK
+        json tags
+        string image_hash
+        string appearance "v8新增"
+        string features "v8新增"
+        string location "v8新增"
+        datetime expires_at
+        datetime deleted_at
+    }
+    FOUND_ITEM {
+        bigint id PK
+        bigint finder_id FK
+        int category_id FK
+        json tags
+        string image_hash
+        string appearance "v8新增"
+        string features "v8新增"
+        string location "v8新增"
+        datetime expires_at
+        datetime deleted_at
+    }
+    MATCH_RECORD {
+        bigint id PK
+        bigint lost_id FK
+        bigint found_id FK
+        decimal match_score
+        int status
+        datetime completed_at
+    }
+    HANDOVER_CODE {
+        bigint id PK
+        bigint match_id FK
+        string code
+        int verified_by_lost
+        int verified_by_finder
+    }
+    IM_SESSION {
+        bigint id PK
+        bigint match_id FK
+        bigint lost_user_id FK
+        bigint finder_user_id FK
+        datetime expires_at
+    }
+    IM_MESSAGE {
+        bigint id PK
+        bigint session_id FK
+        bigint sender_id FK
+        string content
+    }
+    TRUST_SCORE_LOG {
+        bigint id PK
+        bigint user_id FK
+        int delta
+    }
+    AUDIT_LOG {
+        bigint id PK
+        bigint user_id FK
+        string action
+        text detail
+    }

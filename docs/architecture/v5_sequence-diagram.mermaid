@@ -1,0 +1,75 @@
+%% 4.1 我的消息·会话列表（GET /im/sessions）
+sequenceDiagram
+    participant U as 用户(前端)
+    participant API as im 路由
+    participant DB as im_session/im_message/match/found/user
+    U->>API: GET /im/sessions
+    API->>DB: 查 IMSession WHERE (lost_user_id=me OR finder_user_id=me) AND status=0
+    loop 每个会话
+        API->>DB: 取对方用户(peer=另一方) + found_item(或 match→found_item)
+        API->>DB: 取最后一条消息(算 unread / preview / 拼 title)
+        API-->>U: IMSessionListItem{title="联系对方 · {category_name}", peer_user, unread, last_message_at}
+    end
+    API-->>U: success(data=[...])  按 last_message_at 倒序
+
+%% 4.2 招领成功（POST /im/sessions/{id}/success，软删 + 归档）
+sequenceDiagram
+    participant U as 用户(前端)
+    participant API as im 路由
+    participant DB as im_session/match_record/lost_item/found_item
+    participant AL as audit_log
+    U->>API: POST /im/sessions/{id}/success
+    API->>DB: 校验参与者 = 当前用户
+    API->>DB: IMSession.status = 1 (软删)
+    alt session.match_id 存在 且 match.status ∈ {0,1,4}
+        API->>DB: MatchRecord.status=2 / LostItem.status=3 / FoundItem.status=1
+        API->>AL: write_audit("im_success_archive")
+    else 无 match_id / match 已终态(2/3/5)
+        Note over API: 仅软删，不动 match
+    end
+    API-->>U: success(data={id, status:1, match_archived:bool})
+
+%% 4.3 删除此对话（DELETE /im/sessions/{id}，软删）
+sequenceDiagram
+    participant U as 用户(前端)
+    participant API as im 路由
+    participant DB as im_session
+    U->>API: DELETE /im/sessions/{id}
+    API->>DB: 校验参与者
+    API->>DB: IMSession.status = 1 (软删，保留至 IM_RETENTION_DAYS)
+    API-->>U: success(data={id, status:1})
+
+%% 4.4 未能找回（POST /matches/{id}/giveup，软删匹配 + 失物重入池）
+sequenceDiagram
+    participant U as 失主(前端)
+    participant MV as MatchesView
+    participant API as match 路由
+    participant DB as match_record/lost_item/found_item
+    participant AL as audit_log
+    U->>MV: 点「未能找回」
+    MV->>API: POST /matches/{id}/giveup
+    API->>DB: 校验 当前用户 = lost.publisher_id (仅失主)
+    API->>DB: 校验 match 存在且 status ∈ {0,1,4,5}(非终态 2/3)
+    API->>DB: MatchRecord.status = 5(GIVEN_UP)
+    API->>DB: LostItem.status = 0(待匹配，重入池)
+    API->>AL: write_audit("match_give_up")
+    API-->>MV: MatchOut(status=5)
+    MV-->>U: 提示「已退回匹配池」；卡片从活跃视图消失
+
+%% 4.5 我的消息·对话面板收发（复用 useImSession）
+sequenceDiagram
+    participant U as 用户
+    participant MV as MessagesView
+    participant CS as useImSession(复用)
+    participant API as im 路由
+    Note over API: 复用 createSession/getMessages/sendMessage + 轮询
+    U->>MV: 点击会话
+    MV->>CS: init(sessionId)
+    CS->>API: GET /im/sessions/{id}/messages (since_id=0)
+    API-->>CS: 历史消息
+    CS->>CS: startPoll() 每 IM_POLL_INTERVAL_MS 拉增量
+    U->>MV: 输入并发送
+    MV->>CS: send(content)
+    CS->>API: POST /im/sessions/{id}/messages
+    API-->>CS: IMMessageOut
+    CS-->>U: 气泡渲染

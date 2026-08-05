@@ -1,0 +1,20 @@
+classDiagram
+    class PublishService { +publish_lost(user, dto) tuple; +publish_found(finder, dto) tuple; +_resolve_category_id(name, vis, tags) int; +_recall_lost_candidates(lost) list; +_recall_found_candidates(found) list }
+    class MatchService { +score(lost, found) float; +category_hit(exact) float; +photo_sim_factor(ha, hb) float; +appearance_factor(lost, found) float; +feature_factor(lost, found) float; +time_decay_factor(tl, tf) float; +location_factor(la, lb) float; +tag_match_rate(lost, found) float; +is_suspected(score) bool }
+    class HandoverService { +generate_code(match_id, op) HandoverCode; +verify(code, role, gps, op) dict }
+    class AuditService { +write_audit(db, user_id, action, ...) void }
+    class VisionService { +predict(bytes) dict; +_fallback() dict }
+    class TaggingService { +extract(title, desc, vision_label, cat) list }
+    class IMService { +create_session(...) IMSession; +list_messages(session_id) list; +poll(session_id) list }
+    class AuthService { +register(...) User; +login(...) token; +sms_code(phone) void }
+    class IAMAuthService { <<管理端/未来工作>> }
+    class AppealService { <<管理端/未来工作>> }
+    PublishService --> VisionService
+    PublishService --> TaggingService
+    PublishService --> MatchService
+    PublishService --> AuditService
+    MatchService ..> AuditService
+    HandoverService ..> MatchService
+    HandoverService ..> AuditService
+    IMService ..> AuditService
+    AuthService ..> AuditService

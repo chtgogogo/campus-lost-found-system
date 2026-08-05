@@ -1,0 +1,43 @@
+%% 4.1 切换 tab → 拉取过滤列表（Q1/Q2，真实后端与演示态统一）
+sequenceDiagram
+    participant U as 用户
+    participant BV as BoardView
+    participant API as itemsApi
+    participant AD as mockAdapter / FastAPI items 路由
+    participant DB as LostItem / FoundItem 表
+
+    U->>BV: 切换 typeFilter('all'|'lost'|'found'|'resolved')
+    BV->>BV: load()（onMounted 或首次）
+    par 主三 tab 数据
+        BV->>API: listLost({ exclude_resolved:true, page:1, page_size:100 })
+        BV->>API: listFound({ exclude_resolved:true, page:1, page_size:100 })
+    and 已完成交接 tab 数据
+        BV->>API: listLost({ resolved_only:true, page:1, page_size:100 })
+        BV->>API: listFound({ resolved_only:true, page:1, page_size:100 })
+    end
+    API->>AD: GET /lost-items?exclude_resolved=true ...
+    API->>AD: GET /found-items?resolved_only=true ...
+    AD->>DB: SELECT ... WHERE lost.status!=3 / =3 ; found.status!=1 / =1
+    DB-->>AD: 过滤后集合 + 准确 total
+    AD-->>API: Page[...]（{code,message,data}）
+    API-->>BV: lostItems / foundItems / resolvedLost / resolvedFound
+    BV->>BV: merged 再次前端过滤 Lost.status===3 / Found.status===1（P0 保底）
+    BV->>BV: resolvedMerged 仅保留已解决
+    BV->>BV: filteredItems / pagedItems 渲染卡片
+    BV-->>U: 主三 tab 仅进行中；已完成交接 tab 仅已解决
+
+%% 4.2 「已完成交接」tab 展示增强（Q3，counterpart 关联）
+sequenceDiagram
+    participant BV as BoardView
+    participant MAPI as matchApi
+    participant AD as mockAdapter / /matches 路由
+    participant MM as mockMatches / MatchRecord
+
+    BV->>MAPI: myMatches({ status:2, page:1, page_size:100 })
+    MAPI->>AD: GET /matches?status=2
+    AD->>MM: 取 status==COMPLETED(2) 的匹配（演示=全量；真实=当前用户相关）
+    MM-->>AD: MatchOut[]（含 lost_item / found_item / created_at）
+    AD-->>BV: completedMatches
+    BV->>BV: 构建 counterpartIndex: lost_id→found_item, found_id→lost_item, at=created_at
+    BV->>BV: resolvedMerged 每项附加 counterpart + completedAt
+    BV-->>BV: ItemCard 渲染「已完成交接」徽标 + 对方物品(category/title) + 完成时间

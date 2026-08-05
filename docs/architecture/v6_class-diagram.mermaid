@@ -1,0 +1,110 @@
+classDiagram
+    class LostItemStatus {
+        <<复用·枚举>>
+        +PENDING_MATCH = 0
+        +MATCHING = 1
+        +PENDING_CLAIM = 2
+        +RESOLVED = 3  %% 已解决(物品自身)
+    }
+    class FoundItemStatus {
+        <<复用·枚举>>
+        +PENDING = 0
+        +RESOLVED = 1  %% 已解决(物品自身)
+    }
+    class MatchStatus {
+        <<复用·枚举>>
+        +PENDING_CLAIM = 0
+        +CLAIMING = 1
+        +COMPLETED = 2  %% 交接完成=>物品置已解决
+        +REJECTED = 3   %% ⚠️数值碰撞:≠LostItem.RESOLVED
+        +MANUAL_PENDING = 4
+        +GIVEN_UP = 5
+    }
+    class LostItem {
+        <<复用>>
+        +BigInteger id
+        +SmallInt status  %% 0/1/2 进行中; 3 已解决
+    }
+    class FoundItem {
+        <<复用>>
+        +BigInteger id
+        +SmallInt status  %% 0 进行中; 1 已解决
+    }
+    class MatchRecord {
+        <<复用>>
+        +BigInteger id
+        +int lost_id
+        +int found_id
+        +SmallInt status  %% 仅COMPLETED(2)用于溯源, 不用于判定已解决
+    }
+    class ItemsRouter {
+        <<变更>>
+        +GET /lost-items  %% +exclude_resolved, +resolved_only
+        +GET /found-items %% +exclude_resolved, +resolved_only
+    }
+    class ItemListParams {
+        <<变更·前端>>
+        +status?
+        +exclude_resolved? : bool
+        +resolved_only? : bool
+        +page?
+        +page_size?
+    }
+    class itemsApi {
+        <<变更·前端>>
+        +listLost(params)
+        +listFound(params)
+    }
+    class MockAdapter {
+        <<变更>>
+        +listLost 过滤 exclude_resolved/resolved_only(及兼容status)
+        +listFound 过滤 exclude_resolved/resolved_only(及兼容status)
+    }
+    class mockData {
+        <<变更>>
+        +mockLostItems 新增 status=3 示例
+        +mockFoundItems 新增 status=1 示例
+        +mockMatches 新增 status=2 关联二者
+    }
+    class BoardView {
+        <<变更>>
+        -merged 过滤已解决(P0保底)
+        -resolvedMerged 仅已解决
+        -counterpartIndex 来自myMatches(status=2)
+        +load() 主=exclude_resolved / 已解决=resolved_only
+    }
+    class ItemCard {
+        <<变更>>
+        +resolved? : bool  %% 徽标
+        +counterpart? : 对方物品
+        +completedAt? : string
+    }
+    class matchApi {
+        <<复用>>
+        +myMatches({status:2})  %% Q3 counterpart源
+    }
+    class MatchOut {
+        <<复用>>
+        +int lost_id
+        +int found_id
+        +LostItemOut lost_item
+        +FoundItemOut found_item
+        +status : 2=COMPLETED
+        +created_at  %% 完成时间
+    }
+
+    LostItem ..> LostItemStatus : status
+    FoundItem ..> FoundItemStatus : status
+    MatchRecord ..> MatchStatus : status
+    ItemsRouter ..> LostItem
+    ItemsRouter ..> FoundItem
+    ItemListParams ..> itemsApi
+    itemsApi ..> ItemsRouter
+    itemsApi ..> MockAdapter
+    MockAdapter ..> mockData
+    BoardView ..> itemsApi
+    BoardView ..> ItemCard
+    BoardView ..> matchApi
+    matchApi ..> MatchOut
+    MatchOut *-- LostItemOut
+    MatchOut *-- FoundItemOut

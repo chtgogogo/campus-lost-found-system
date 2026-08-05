@@ -33,6 +33,7 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.models.category import Category  # noqa: E402
+from app.models.im import IMMessage, IMSession  # noqa: E402
 
 API = "/api/v1"
 _BUSINESS_TABLES = (
@@ -40,6 +41,8 @@ _BUSINESS_TABLES = (
     MatchRecord,
     AuditLog,
     TrustScoreLog,
+    IMSession,
+    IMMessage,
     LostItem,
     FoundItem,
     User,
@@ -100,10 +103,9 @@ def register_and_login(client: TestClient, tag: str):
 
 
 def publish_pair(client: TestClient):
-    """发布失主 A 与拾得者 B 的同类目同校区记录，返回 (token_a, token_b, lost_id, match_id)。"""
+    """发布失主 A 与拾得者 B 的同类目同地点记录，返回 (token_a, token_b, lost_id, match_id)。"""
     token_a, _, _, _, _ = register_and_login(client, "pa")
     token_b, _, _, _, _ = register_and_login(client, "pb")
-    region = "510107"
     lost_time = datetime(2026, 7, 16, 10, 0, 0).isoformat()
     r = client.post(
         f"{API}/lost-items",
@@ -112,7 +114,7 @@ def publish_pair(client: TestClient):
             "title": "黑色书包",
             "description": "图书馆丢失黑色书包",
             "lost_location": "图书馆三楼",
-            "region_code": region,
+            "category_name": "书包",
             "lost_time": lost_time,
         },
         files={"images": ("lost.png", PNG, "image/png")},
@@ -126,7 +128,7 @@ def publish_pair(client: TestClient):
             "keep_status": "0",
             "description": "捡到黑色书包看起来像图书馆丢的",
             "found_location": "图书馆二楼",
-            "region_code": region,
+            "category_name": "书包",
         },
         files={"images": ("found.png", PNG, "image/png")},
     )
@@ -169,13 +171,19 @@ def _clean_business_tables():
 
 
 def _initial_cleanup() -> None:
-    # 每次会话从干净 schema 起步：先删除旧库文件再重建，
-    # 规避跨运行残留/损坏的 SQLite 表结构（drop_all 在损坏文件上可能静默失败）。
+    # 每次会话从干净 schema 起步：**先物理删除旧库文件**，再 drop_all + create_all。
+    #
+    # ⚠️ 删文件这一步不可省（曾被误改为只 drop_all，导致大面积随机 401 /
+    # StaleDataError：残留的 SQLite 文件 + 连接池里的陈旧连接会让请求侧读到
+    # 「user 行已不存在」的旧快照，症状表现为登录后第 N 个请求突然未认证）。
+    # 删文件后再 drop_all 是双保险：文件被占用删不掉时仍能重建 schema。
     try:
+        engine.dispose()          # 释放连接池，避免 Windows 下文件被占用删不掉
         if os.path.exists(_TEST_DB):
             os.remove(_TEST_DB)
     except OSError:
         pass
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     s = SessionLocal()
     try:

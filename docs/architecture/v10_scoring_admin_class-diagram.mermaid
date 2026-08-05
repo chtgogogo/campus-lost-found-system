@@ -1,0 +1,158 @@
+classDiagram
+    %% ============ 配置层 ============
+    class Settings {
+        +float MATCH_W2_PHOTO_CAT = 20.0
+        +float MATCH_W2_QTY = 15.0
+        +float MATCH_W2_COLOR = 20.0
+        +float MATCH_W2_STATE = 10.0
+        +float MATCH_W2_PLACE = 15.0
+        +float MATCH_W2_KEYWORD = 10.0
+        +float MATCH_TIME_TAU_DAYS = 15.0
+        +bool MATCH_NORMALIZE = True
+        +str ADMIN_APPLY_CODE = "110"
+        +int ADMIN_RETENTION_DAYS = 270
+        +float MATCH_THRESHOLD = 80.0
+        +float MATCH_LOW_SCORE = 60.0
+        +int MATCH_TOP_N = 10
+    }
+
+    %% ============ 评分参考数据集（v10 新增） ============
+    class ScoringRefs {
+        <<module: app/services/scoring_refs.py>>
+        +dict COLOR_FAMILY
+        +set COLOR_ADJACENCY
+        +dict STATE_WORD_PAIRS
+        +list CAMPUS_WORDS
+        +regex ROOM_RE
+        +int QTY_SAME / QTY_DIFF_MEASURE / QTY_SAME_DIFF_COUNT / QTY_DIFF_DIFF_COUNT / QTY_MISSING_CAND
+        +int COLOR_SAME / COLOR_NEAR
+        +int STATE_W
+        +int PLACE_ROOM / PLACE_FLOOR / PLACE_BUILDING / PLACE_CAMPUS / PLACE_ALL
+        +int KEYWORD_W
+        +tuple classify_qty(lost_tags, found_tags)
+        +tuple classify_color(lost_tags, found_tags)
+        +tuple classify_state(lost_tags, found_tags)
+        +tuple classify_place(lost_tags, found_tags)
+        +float keyword_score(lost_tags, found_tags)
+    }
+
+    %% ============ 标签抽取层（不变，复用） ============
+    class TaggingService {
+        <<module: app/services/tagging_service.py>>
+        +list COLOR_WORDS
+        +list LOCATION_WORDS
+        +set NOUN_SET
+        +list extract(title, description, vision_label, category_name)
+    }
+
+    %% ============ 评分引擎（v2 重构） ============
+    class MatchService {
+        <<module: app/services/match_service.py>>
+        +float score(lost, found, normalize=null)
+        +dict score_detail(lost, found, normalize=null)
+        +bool is_suspected(score)
+        -dict _text_sub_scores(lost, found)
+        -float _photo_category(lost, found)
+        -float _time_score(lost, found)
+        -float _normalize(total, provided_max)
+    }
+
+    %% ============ 发布/召回（变更 B 单切片） ============
+    class PublishService {
+        <<module: app/services/publish_service.py>>
+        +list _reverse_match_lost(lost)
+        +list _reverse_match_found(found)
+        +list refresh_lost_candidates(lost)
+        -list _recall_lost_candidates(lost)
+        -int _cut(scored)  %% max(MATCH_TOP_N, 疑似数)
+    }
+
+    %% ============ 认证（变更 C） ============
+    class AuthService {
+        <<module: app/services/auth_service.py>>
+        +User register(dto)
+        -bool _is_admin_code(dto.admin_code)
+    }
+
+    %% ============ 管理员后台（变更 D） ============
+    class AdminRouter {
+        <<module: app/routers/admin.py>>
+        +list GET /admin/users
+        +dict GET /admin/matches/{id}/detail
+        +file POST /admin/export
+        +list GET /admin/matches?all_time=
+    }
+    class AdminExportService {
+        <<module: app/services/admin_export_service.py (新)>>
+        +dict build_forensic_row(match)
+        +list build_conversation_rows(match)
+        +str build_conversation(match)
+        +bytes export_csv(rows, scope)
+        +bytes export_xlsx(rows, scope)
+        +str export_md(rows, scope)
+    }
+    class CleanupService {
+        <<module: app/services/cleanup.py>>
+        -int ADMIN_RETENTION_DAYS  %% v10: 改读 settings
+        +void run_once()
+    }
+
+    %% ============ 契约（schema 扩展） ============
+    class MatchOut {
+        <<schema: app/schemas/match.py>>
+        +float photo_category
+        +float qty
+        +float color
+        +float state
+        +float place
+        +float keyword
+        +list signals
+        +float photo  %% 旧键=photo_category
+        +float category  %% 旧键=0.0
+        +float text  %% 旧键=五子维度之和
+        +float text_match_rate  %% 旧键=text/70
+        +float location  %% 旧键=place
+        +float time
+        +float total
+    }
+    class UserCreate {
+        <<schema: app/schemas/user.py>>
+        +str student_no
+        +str phone
+        +str password
+        +Optional~str~ admin_code
+    }
+    class AdminUserOut {
+        <<schema: app/schemas/user.py (新)>>
+        +int id
+        +str student_no
+        +str phone  %% 明文
+        +str real_name
+        +int role
+        +int status
+        +int credit_score
+        +datetime created_at
+    }
+
+    %% ============ 关系 ============
+    Settings <.. MatchService : 读取权重/τ/normalize
+    Settings <.. PublishService : 读取 MATCH_TOP_N/阈值
+    Settings <.. AuthService : 读取 ADMIN_APPLY_CODE
+    Settings <.. CleanupService : 读取 ADMIN_RETENTION_DAYS
+
+    ScoringRefs <.. MatchService : 调用 classify_*
+    TaggingService <.. ScoringRefs : 复用 COLOR_WORDS/LOCATION_WORDS/NOUN_SET
+    TaggingService <.. MatchService : 提供两侧 tag 集
+
+    MatchService ..> MatchOut : 透传 7 新键
+    MatchService <.. PublishService : 调用 score/score_detail
+
+    AuthService ..> UserCreate : 消费 admin_code
+    AuthService ..> AdminUserOut : 不依赖(role 写入)
+    AdminRouter ..> AdminExportService : 复用取证/对话构建
+    AdminExportService ..> MatchOut : 取分数明细
+    AdminRouter ..> AdminUserOut : 返回明文用户
+
+    note for PublishService "L368-369 keep1 早退\nflow-v3 护栏，v10 不动"
+    note for MatchService "normalize 分支默认生效\nMATCH_NORMALIZE=True(Q10 用户拍板启用)"
+    note for ScoringRefs "评分参考数据唯一归宿\n不塞回 tagging_service"

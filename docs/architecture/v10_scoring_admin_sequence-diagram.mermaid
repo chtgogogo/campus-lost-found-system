@@ -1,0 +1,88 @@
+sequenceDiagram
+    autonumber
+    participant L as LostItem
+    participant F as FoundItem
+    participant T as TaggingService
+    participant R as ScoringRefs
+    participant M as MatchService
+    participant P as PublishService
+    participant S as Settings
+
+    %% ===== 流程1：评分引擎 v2 计算（含归一化插入点） =====
+    box rgb(235,245,255) 流程1 · 评分引擎 v2（变更 A）
+        L->>T: extract(title, description) → lost_tags
+        F->>T: extract(description) → found_tags
+        T->>R: classify_qty/color/state/place + keyword_score
+        R-->>M: 五子维度分 + signals(color_conflict/state_conflict)
+        M->>M: photo_category = f(category_hit)
+        M->>M: time = 10*exp(-Δ/τ), τ=15
+        M->>S: 读 MATCH_NORMALIZE
+        alt MATCH_NORMALIZE == True (Q10 用户拍板，默认生效)
+            M->>M: total = 100 * total / provided_max
+        else False（环境变量显式关闭，降级用）
+            M->>M: total 保持原值
+        end
+        M-->>M: score_detail = {photo_category,qty,color,state,place,keyword,signals,total...}
+    end
+
+    %% ===== 流程2：发布失物 · 候选排序（变更 B 单切片 + keep1 正向召回） =====
+    box rgb(235,255,235) 流程2 · 发布失物（变更 B + flow-v3 keep1 正向放开）
+        L->>P: publish_lost_item
+        P->>P: _recall_lost_candidates(lost)  %% 含 keep1（flow-v3 已放开）
+        P->>M: score(lost, f) 对每件候选
+        M-->>P: scored 列表
+        P->>P: scored.sort((-score, id))
+        P->>P: suspect_n = count(score>=80)
+        P->>P: cut = max(MATCH_TOP_N, suspect_n)
+        P->>P: for score,f in scored[:cut] → 生成 status=0 候选
+        Note over P: 前10 ∪ 疑似全列，单切片完成
+    end
+
+    %% ===== 流程3：发布 keep1 拾物 · 反向早退保留（flow-v3 护栏） =====
+    box rgb(255,245,235) 流程3 · 发布 keep1 拾物（反向不生成，G-1 护栏）
+        F->>P: publish_found_item(keep_status=1)
+        P->>P: _reverse_match_found(found)
+        P->>P: if keep_status == NOT_KEEPING: return []  %% L368-369 不动
+        Note over P: keep1 拾得者侧绝不反向生成候选
+    end
+
+    %% ===== 流程4：管理员注册（变更 C） =====
+    box rgb(245,235,255) 流程4 · 管理员注册（变更 C）
+        participant U as User
+        participant A as AuthService
+        U->>A: POST /auth/register{admin_code?}
+        A->>S: 读 ADMIN_APPLY_CODE
+        alt admin_code 命中
+            A->>A: role = 1
+            A->>A: 写审计 register_admin
+        else 不填或填错
+            A->>A: role = 0（静默，无报错）
+        end
+        A-->>U: 返回 user（含 role）
+    end
+
+    %% ===== 流程5：管理员导出（变更 D：xlsx/md/csv） =====
+    box rgb(255,255,235) 流程5 · 管理员导出（变更 D）
+        participant Admin as AdminUser
+        participant AdminR as AdminRouter
+        participant Exp as AdminExportService
+        Admin->>AdminR: POST /admin/export{ids, scope, format}
+        AdminR->>Exp: build_forensic_row + build_conversation_rows
+        alt format == xlsx
+            Exp->>Exp: openpyxl 写双 Sheet（个人信息/对话记录）
+        else format == md
+            Exp->>Exp: 纯 f-string 拼装 Markdown
+        else format == csv（默认，兼容老调用）
+            Exp->>Exp: csv.DictWriter
+        end
+        AdminR->>AdminR: 写审计 admin_export
+        AdminR-->>Admin: 下载文件
+    end
+
+    %% ===== 流程6：留存放开（变更 D · all_time） =====
+    box rgb(235,255,255) 流程6 · 留存放开（变更 D · Q4）
+        Admin->>AdminR: GET /admin/matches?all_time=true
+        AdminR->>AdminR: all_time=true → 不加 expires_at 时间窗
+        AdminR-->>Admin: 返回跨 270 天窗的全部历史匹配
+        Note over AdminR: all_time=false（默认）保持 v7 270 天窗，不回归
+    end

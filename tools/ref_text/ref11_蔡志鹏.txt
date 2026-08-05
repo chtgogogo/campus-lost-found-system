@@ -1,0 +1,407 @@
+
+===== PAGE 1 =====
+年 月 日 现代电子技术
+2026 7 15 Jul. 2026
+第 卷第 期
+49 14 Modern Electronic Technique Vol. 49 No. 14
+： -
+DOI 10.16652/j.issn.1004 373X.2026.14.010
+引用格式：蔡志鹏，黄金，陶雄杰，等 基于 的交互式问答双通道语义检索 现代电子技术， ，（ ）： -
+. Transformer [J]. 2026 49 14 60 63.
+基于 Transformer 的交互式问答双通道语义检索
+蔡志鹏，黄 金，陶雄杰，胡 斌
+（澳门科技大学，澳门 ）
+999078
+摘 要： 针对交互式问答语义检索中语义特征提取片面、检索精度不足的问题，提出一种基于 的交互式问
+Transformer
+答双通道语义检索方法。首先构建双通道语义匹配检索模型，该模型包含双通道注意力机制的 编码层、交互注
+Transformer
+意力层及语义匹配检索层；然后利用双通道注意力机制提取问题与答案文本的语义特征及位置特征；经多轮语义交互融合
+后，将匹配问题文本的答案文本按照双通道语义特征相似度排序反馈给用户，实现交互式问答双通道语义检索。实验结果
+表明，在 条目标内容量的检索任务中，所提方法的检索结果 系数始终高于 ，检索准确性与稳定性表现突
+10~110 Kappa 0.95
+出，可有效挖掘交互式问答的双通道语义特征，提升系统响应精度。
+关键词： ；交互式问答；语义检索；双通道；注意力机制；语义匹配；特征提取；相似度
+Transformer
+中图分类号： ； 文献标识码： 文章编号： （ ） - -
+TN911‐34 TP391 A 1004‐373X 2026 14 0060 04
+Interactive Q&A dual-channel semantic retrieval based on Transformer
+Cai Zhipeng, Huang Jin, Tao Xiongjie, Hu Bin
+(Macau University of Science and Technology, Macau 999078, China)
+Abstract： -
+In allusion to the issues of one sided semantic feature extraction and insufficient retrieval accuracy in interactive
+- - - -
+question answering semantic retrieval, a method of Transformer based dual channel semantic retrieval for interactive question
+-
+answering (Q&A) is proposed. A dual channel semantic matching retrieval model is built, which includes Transformer encoding
+-
+layers based on dual channel attention mechanism, interactive attention layers, and semantic matching retrieval layers. The
+-
+semantic features and positional features of question text and answer text are extracted by means of dual channel attention
+mechanism. After multiple rounds of semantic interaction and fusion, the answer texts that match the question text are sorted and
+-
+fed back to user according to the similarity of the dual channel semantic features, so as to realize the interactive Q&A dual
+channel semantic retrieval. The experimental results show that, in the retrieval tasks involving 10 to 110 target contents, the
+Kappa coefficient of the retrieval results obtained by the proposed method remains above 0.95, demonstrating outstanding
+-
+retrieval accuracy and stability. This method can effectively mine dual channel semantic features of interactive Q&A and improve
+the response precision of the system.
+Keywords： -
+Transformer; interactive Q&A; semantic retrieval; dual channel; attention mechanism; semantic matching;
+feature extraction; similarity
+化问答体验的需求 - 。
+[23]
+0 引 言
+已有研究显示，文献 通过优化提示词，让大模型
+[4]
+交互式问答语义检索是利用自然语言处理（ ） 先输出多个用户查询的同义查询，再输出答案，通过同
+NLP
+和语义理解方法，实现交互式语义查询和动态反馈的技 义查询提升输出稳定性；同时，针对开源大模型在同义
+术。它主要通过用户与检索系统之间的动态交互机制， 查询生成方面的缺陷，采用数据蒸馏方式，利用闭源大
+实现用户检索意图与语义解析之间的多轮交互融合 。 模型构建开放域检索增强的指令数据集。但同义查询
+[1]
+而传统单通道编码路径检索模式容易导致语义特征提 方法仅侧重于提升输出稳定性，并未结合交互式场景的
+取片面、匹配偏差等问题，难以满足用户对精准化、高效 多轮上下文，无法捕捉用户意图的动态变化，导致在多
+收稿日期： - - 修回日期： - -
+20251228 20260228
+基金项目：澳门特别行政区科学技术发展基金（ ）；澳门科技大学 项目（ - - - ）
+0009/2024/ITP1 Faculty Research Grants FRG25008FA
+
+===== PAGE 2 =====
+第 期 蔡志鹏，等：基于 的交互式问答双通道语义检索
+14 Transformer 61
+轮问答中易出现意图匹配偏差。文献 通过梳理知识 法主要将双通道注意力机制融入 模型，配合
+[5] Transformer
+图谱问答领域的文献，提炼出实体链接、知识嵌入等关 交互注意力与语义匹配层，构造完整的双通道语义匹配
+键技术，并应用于语义检索。而知识嵌入是基于预设知 检索模型结构，如图 所示。问题文本与答案文本分别
+2
+识图谱的语义空间构建的，未适配交互式问答中口语化 经对应通路的双通道注意力机制处理后，输入各自的
+的语义表达。当用户问题包含模糊表述、网络热词等非 编码层，完成语义特征的初步提取；提取后
+Transformer
+标准化内容时，知识嵌入的语义映射难以与知识图谱中 的特征传递至交互注意力层，进行双向语义信息的交互
+的实体或关系相匹配，导致检索结果与用户需求脱节。 与关联强化；最终由语义匹配检索层对经交互处理后的
+本文提出一种基于 的交互式问答双通 问题与答案语义特征进行匹配计算，实现问题与答案之
+Transformer
+道语义检索方法，旨在提升交互式问答系统的响应准确 间深层语义关联的挖掘与匹配。
+性与优化用户体验。
+1 交互式问答双通道语义检索方法
+交互式问答系统
+1.1
+交互式问答系统技术架构如图 所示。系统运行
+1
+时，用户向自动问答模块发起交互检索行为，模块从知
+识库调取对应内容反馈给用户 ；在此过程中，知识库接
+[6]
+收答案检索模块传递的信息，答案检索模块与用户之间
+存在双向数据交互。用户的操作会同步至历史问答数
+图2 基于Transformer的双通道语义匹配检索模型结构
+据库，历史问答数据库再将数据反馈至问题数据库；问
+题数据库则向问题推荐模块输送信息，问题推荐模块与 基于双通道注意力机制的 编码层
+1.2.1 Transformer
+用户管理模块共同作用于自动问答模块，形成覆盖提 双通道注意力机制设计了 个独立通道，分别聚焦
+2
+问、响应、数据流转、存储及模块间协同的完整系统运行 语义内容与语义位置，捕捉问题文本与答案文本的关键
+链路 [7 - 9] 。 语义信息，并细化中间语义特征 [11] 。设模块输入的文本
+( )
+为G，分别在两个独立通道计算通道注意力N G 、空间
+( ) C
+注意力N G ，将二者调节为统一维度后求取元素和值。
+S
+使用非线性激活的方式获取注意力映射：
+( ) ( ( ) ( ))
+N G β N G N G （）
+= C + S 1
+( )
+式中：N G 表示最终生成的注意力映射；β表示非线性
+激活函数。
+通过池化操作与残差连接融合信息（避免梯度消
+失），输出强化后的语义特征：
+( ) ( ) ( )
+G' Q G Q G N G （）
+= + ⊗ 2
+( )
+式中：Q 表示池化操作，负责压缩特征维度和聚合全
+图1 交互式问答系统技术架构
+·
+局信息；“ ”表示元素级乘法，实现注意力映射对池化
+⊗
+但现有模块间的信息交互多依赖单一维度的内容
+特征的加权调整。
+调取与数据传递，当问题文本与知识库答案内容之间存
+对输入的交互式问答问题-答案语义特征进行平均
+在语义歧义、上下文关联缺失时，容易降低问题文本-答
+池化处理后，通过两个全连接层（ ）捕捉语义内容的
+FC
+案文本的匹配精度 。双通道语义检索技术可通过双
+[10] 重要性：
+路径的语义特征提取与交互，强化提问与备选内容之间 ( ) ( ( ( )))
+N G Γ Γ Q G （）
+的深层语义关联挖掘能力，弥补现有架构在语义层面的 C = ˉ 3
+( )
+式中：Q 表示平均池化处理；Γ表示全连接层。
+匹配短板。为此，本文研究基于 的交互式问 ˉ ·
+Transformer 通过卷积组定位交互式问答问题-答案文本语义信
+答双通道语义检索方法。
+息在序列中的关键位置：
+1.2 基于 Transformer 的双通道语义匹配检索模型 ( ) ( ( ( ( ))))
+基于 的交互式问答双通道语义检索方
+N G Φ1×1 Φ3×3 Φ3×3 Φ1×1 G （）
+Transformer S = 3 2 1 0 4
+
+===== PAGE 3 =====
+现代电子技术 年第 卷
+62 2026 49
+式中：Φ1×1 、Φ1×1 表示 卷积操作，负责调节通道维
+0 3 1 × 1 2 实验分析
+度；Φ3×3 、Φ3×3 表示 卷积操作，用于捕捉空间维度
+1 2 3 × 3
+的语义关联。 实验内容设计
+2.1
+将N ( G ) 、N ( G ) 拼接为N ( G ) ： 在实验中，将本文方法作为图 所示知识交互式问
+3
+C S ( ) ( ( o ) ( )) 答系统中大语言模型的核心技术，用于知识交互式问答
+N G P N G N G ϖ （）
+( ) o = C , S o 5 检索。该知识交互式问答系统首先从各类文档中提取
+式中：P 表示拼接函数；ϖ 表示附加的权重矩阵。
+· o 文本，经嵌入表示后存储至向量数据库中。同时，系统
+通过前馈神经网络执行两次线性变换与 激
+ReLU 结合提示词模板与历史消息，在用户提交问题后，由知
+活，实现交互式问答问题-答案语义特征的非线性增强。
+识问答链调用向量存储中的内容，并关联大语言模型进
+非线性增强公式为：
+行处理，最终输出交互式问答的检索结果。
+( ) [ ( ) ]
+Ξ N N G ϖ a ϖ a （）
+m = max 0, o 1 + 1 2 + 2 6
+式中：ϖ 、ϖ 表示前馈神经网络中的权重矩阵，用于实
+1 2
+现特征维度的变换；a 、a 表示前馈神经网络中的偏置
+1 2
+矩阵，用于调整特征的基线分布。
+编码器的最终输出双通道语义特征（用
+Transformer
+于后续交互式问答语义检索任务）公式为：
+( ( ))
+R Ψ N Ξ N （）
+= m + m 7
+交互注意力层
+1.2.2
+设置问题文本的双通道语义特征为R ，备选答案
+1
+文本的双通道语义特征为R ，通过矩阵乘法计算问题
+2
+与备选答案的交互注意力矩阵：
+图3 知识交互式问答系统
+L R R （）
+T
+= 1 2 8
+式中R 表示备选答案特征矩阵的转置矩阵。 本文方法检索性能分析
+T 2.2
+2
+通过堆叠多层交互注意力层，可实现问题与备选答 图 是本文方法用于知识交互式问答系统后，系统
+4
+为用户提供的交互式问答语义检索界面。
+案的多轮语义信息交互，从而获取更丰富的上下文关联
+与交互语义特征 。
+[12]
+语义匹配检索层
+1.2.3
+对问题与备选答案的语义特征矩阵分别进行最大
+池化操作，得到二者的全局语义向量为：
+( )
+u Q R （）
+1 = Max max( 1) 9
+u Q R （ ）
+2 = Max max 2 10
+式中：u 、u 分别表示问题文本的全局向量、备选答案文
+1 2
+本的全局向量。
+通过拼接向量本身、元素积、元素差的绝对值这
+图4 交互式问答语义检索界面
+三类特征，输入全连接网络与分类器，得到交互式问答
+由图 可知，本文方法作为大语言模型的核心技
+问题-答案语义匹配的相似度判断结果，公式为：
+4
+( [ | |] ) 术，通过双通道注意力机制分别捕捉“孤舟蓑笠翁”对应
+x Z u u u u u u （ ）
+= 1; 2; 1 ∘ 2; 1 - 2 11 的内容语义特征与位置语义关联。在精准提取语句核
+式中：u u 表示向量的元素级乘法，用于刻画问题与
+1 ∘ 2 心信息后，系统将其与候选答案文本进行语义匹配，最
+| |
+备选答案的语义相似性；u u 表示向量元素差的绝
+终在界面输出准确的语义检索结果。由此可知，本文方
+1 - 2
+对值，用于刻画问题与备选答案的语义差异性；Z表示 法可有效捕捉用户查询意图与答案资源之间的语义关
+特征处理函数；x表示问题与备选答案的语义匹配结 联，降低问题与答案的匹配偏差；同时，该方法能适配交
+果，用于交互式问答答案检索的相似度排序。 互式场景下的语义查询需求，保障检索结果的准确性，
+
+===== PAGE 4 =====
+第 期 蔡志鹏，等：基于 的交互式问答双通道语义检索
+14 Transformer 63
+支撑知识交互式问答系统反馈用户准确的检索结果。 义检索时，双通道语义检索的特征提取与匹配信息如
+本文方法在对问题文本与答案文本进行双通道语 表 所示。
+1
+表1 双通道语义检索的特征提取与匹配信息
+特征提取通道 提取的具体特征示例 候选答案文本 特征匹配相似度% 相似度排名
+/
+核心实体：孤舟、蓑笠翁；语义属性：物体（孤舟）、人物
+内容通道注意力 柳宗元《江雪》中“孤舟蓑笠翁”释义
+（蓑笠翁）、状态（孤零零） 98.70 1
+位置通道注意力 语义结构“：孤舟”（载体）“蓑笠翁”（主体）的依附关系 柳宗元《江雪》中“孤舟蓑笠翁”释义
+→ 97.20 2
+核心实体：舟、翁；语义属性：通用物体人物，无“孤“”蓑
+内容通道注意力 / 普通文言文中“舟翁”相关表述
+笠”细节 72.30 3
+由表 可知，本文方法的检索能力体现为：在对“孤
+1 3 结 论
+舟蓑笠翁”相关问题文本与答案文本进行双通道语义检
+索时，通过内容通道注意力提取核心实体、语义属性等 本文提出并实现了基于 的双通道语义
+Transformer
+内容特征，同时通过位置通道注意力捕捉语义结构层面 检索方法，核心研究结论如下。
+的关联特征，并分别与候选答案文本进行匹配，答案文 ）基于双通道注意力机制的 编码层，
+1 Transformer
+本的特征匹配相似度达到较高水平，且在相似度排名中 可通过内容通道分别提取问题、答案文本中的核心实
+处于前列，从而支撑知识交互式问答系统在实际场景中 体、语义属性等关键信息，并通过位置通道提取语义结
+输出符合用户意图的结果。最后，本文将增强式检索方 构中的关联关系。将双通道特征进行互补融合，使特征
+法（文献 方法）、知识图谱式检索方法（文献 方法） 表达更加全面。例如，在对“孤舟蓑笠翁”的检索中，成
+[5] [6]
+作为对比方法，设定用户需要获取的交互式问答语义检 功提取“孤舟-蓑笠翁”的载体-主体关系，以及“孤”“蓑
+索结果对应的目标内容量分别为 条，在此前提 笠”等细节特征，匹配相似度达 %以上。
+10~110 97
+下，测试三种方法为用户提供的语义检索结果是否准 ）实验数据验证本文方法的可用性。在检索
+2 10~
+确。测试指标采用 系数，该指标可用于分析本文 条目标内容量信息时，该方法的 系数高于 ，
+Kappa 110 Kappa 0.95
+方法检索得到的语义内容与用户需求目标内容之间的 显著优于增强式检索方法、知识图谱式检索方法。这验证
+一致性程度。
+了在检索任务量扩大时，该方法仍能保持稳定的语义检索
+系数测试结果如图 所示。
+精度，说明其能适配不同规模的交互式问答场景。
+Kappa 5
+注：本文通讯作者为胡斌。
+参 考 文 献
+王鑫鑫，陈亮，刘昌宏，等 基于多模态交叉融合的多图表联合
+[1] .
+问答方法 计算机集成制造系统， ，（）： -
+[J]. 2025 31 8 2829 2842.
+颜洪，黄青松，刘利军 面向视觉问答的上下文感知多模态交
+[2] .
+互网络 中文信息学报， ，（）： -
+[J]. 2024 38 7 106 114.
+白云天，郝文宁，靳大尉 基于检索增强生成的开放域问答方
+[3] .
+法研究 计算机科学， ，（增刊 ）： -
+[J]. 2025 52 1 48 54.
+李铂鑫 面向私有问答系统的检索增强式大模型稳定输出方
+[4] .
+法 计算机科学与探索， ，（）： -
+[J]. 2025 19 1 132 140.
+钱慎一，付博文，李代祎，等 面向知识图谱的问答技术研究综
+[5] .
+图5 Kappa系数测试结果 述 计算机工程与应用， ，（ ）：-
+[J]. 2025 61 23 1 23.
+王昱婷，陈波，闫强，等 基于问题导向提示学习和多路推理的检
+由图 可知，在用户需求目标内容量从 条的 [6] .
+5 10~110 索增强生成问答 计算机工程与应用， ，（ ）： -
+检索任务中，以增强式检索方法、知识图谱式检索方法 [J]. 2025 61 12 120 128.
+田萱，吴志超 基于信息检索的知识库问答综述 计算机研
+为对比，本文方法的 系数大于 ，始终处于三者 [7] . [J].
+Kappa 0.95 究与发展， ，（）： -
+2025 62 2 314 335.
+中的最高水平，且整体更接近期望结果对应的系数区
+朱嘉骏，包美凯，张凯，等 基于多源知识注入的常识问答方法
+[8] .
+间。这表明，在交互式问答语义检索任务中，本文方法 研究 计算机工程与科学， ，（）： -
+[J]. 2025 47 2 349 360.
+能够保持较好的语义匹配性能。 （下转第 页）
+70
+
+===== PAGE 5 =====
+现代电子技术 年第 卷
+70 2026 49
+参 考 文 献 for vision applications [C]// Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition.
+-
+闵锋，张雨薇，刘煜晖，等 改进 的轻量化水下生物检 Seattle, USA: IEEE, 2024: 5652 5661.
+[1] . YOLOv8
+测模型 计算机工程与应用， ，（）： - [11] Ma Ningning, Zhang Xiangyu, Sun Jian. Funnel activation for
+[J]. 2025 61 6 96 105.
+谢国波，梁立辉，林志毅，等 改进 的轻量级水下目 visual recognition [C]// Computer Vision ECCV 2020: 16th
+[2] . YOLOv8n -
+标检测算法 激光与光电子学进展， ，（ ）： - European Conference. Glasgow: Springer, 2020: 351 368.
+[J]. 2024 61 24 384 395.
+赵永胜，严志远，毛瑞霞，等 - ：改进 的水下 [12] Dai Xiyang, Chen Yinpeng, Xiao Bin, et al. Dynamic head:
+[3] .MEAS YOLO YOLOv5
+目标智能检测算法 电子测量技术， ，（ ）： - unifying object detection heads with attentions [C]//
+[J]. 2024 47 13 183 190.
+Proceedings of the IEEE/CVF Conference on Computer Vision
+[4] Yi Weiguo, Wang Bo. Research on underwater small target -
+and Pattern Recognition. New York: IEEE, 2021: 7373 7382.
+detection algorithm based on improved YOLOv7 [J]. IEEE
+[13] Xu Fengqiang, Wang Huibing, Sun Xudong, et al. Refined
+- -
+Access, 2023, 11: 66818 66827. marine object detector with attention based spatial pyramid
+[5] Cai Shaobin, Zhang Xin, Mo Yuchang. A lightweight underwater pooling networks and bidirectional feature fusion strategy [J].
+-
+detector enhanced by attention mechanism, GSConv and WIoU Neural Computing and Applications, 2022, 34(17): 14881
+on YOLOv8 [J]. Scientific Reports, 2024, 14(1): 25797. 14894.
+[6] Pan Wei, Chen Jiabao, LÜ Bangjun, et al. Optimization and [14] Liu Chongwei, Li Haojie, Wang Shuchang, et al. A dataset
+-
+application of improved YOLOv9s UI for underwater object and benchmark of underwater object detection for robot
+detection [J]. Applied Sciences, 2024, 14(16): 7162. picking [C]// 2021 IEEE International Conference on
+-
+- -
+Multimedia & Expo workshops (ICMEW). Shenzhen: IEEE,
+[7] Wang Ao, Chen Hui, Liu Lihao, et al. YOLOv10: real time end -
+- 2021: 1 6.
+to end object detection [J]. Advances in Neural Information
+- [15] Zhao Yian, Lü Wenyu, Xu Shangliang, et al. DETRs beat
+Processing Systems, 2024, 37: 107984 108011. -
+YOLOs on real time object detection [C]// Proceedings of the
+[8] Zhang Xin, Liu Chen, Yang Degang, et al. RFAConv: innovating
+IEEE/CVF Conference on Computer Vision and Pattern
+spatial attention and standard convolutional operation [EB/OL]. -
+- - Recognition. Seattle, USA: IEEE, 2024: 16965 16974.
+[2025 01 12]. https://arxiv.org/pdf/2304.03198.
+[16] Sun Yu, Zheng Wei, Du Xingchen, et al. Underwater small
+[9] Feijoo D, Benito J C, Garcia A, et al. DarkIR: robust
+target detection based on YOLOx combined with mobilevit and
+low‐light image restoration [C]// Proceedings of the IEEE/CVF
+double coordinate attention [J]. Journal of Marine Science and
+Conference on Computer Vision and Pattern Recognition. Engineering, 2023, 11(6): 1178.
+- -
+Nashville, USA: IEEE, 2025: 10879 10889. [17] Wen Ge, Li Shibao, Liu Fuchang, et al. YOLOv5s CA: a
+[10] Xiong Yuwen, Li Zhiqi, Chen Yuntao, et al. Efficient modified YOLOv5s network with coordinate attention for
+deformable ConvNets: rethinking dynamic and sparse operator underwater target detection [J]. Sensors, 2023, 23(7): 3367.
+作者简介：张 强（ —），男，河北邯郸人，硕士研究生，副教授，硕士生导师，研究方向为计算机应用技术。
+1977
+杜德成（ —），男，河北石家庄人，在读硕士研究生，研究方向为计算机视觉。
+1999
+赵伟康（ —），女，河北邯郸人，博士研究生，讲师，研究方向为计算机视觉。
+1991
+崔 冬（ —），女，河北邯郸人，硕士研究生，讲师，研究方向为计算机视觉。
+1977
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+（上接第 页）
+63
+尚雪茹，陈翰 基于结构化语料库的最优概念语义模板自检索
+[9] . [12] Seung H W, Seonho W, Young J S. Crisis impact extraction
+计算机仿真， ，（）： - -
+[J]. 2025 42 1 550 554. language model using transformer based synergy via transfer
+方全，张金龙，王冰倩，等 基于组合上下文提示的大型语言 learning [J]. Expert Systems with Application, 2025, 285:
+[10] . -
+模型领域知识问答研究 计算机科学， ，（ ）： - 127956.1 127956.12.
+[J]. 2025 52 11 13 21. 骆仕杰，金日泽，韩抒真 采用低秩编码优化大语言模型的高
+[13] .
+刘杰，林绍鑫，王善鹏 基于交互引导的问答对联合生成模型 校基础知识问答研究 计算机科学与探索， ，（）：
+[11] . [J]. 2024 18 8
+计算机学报， ，（）： - -
+[J]. 2024 47 2 251 265. 2156 2168.
+作者简介：蔡志鹏（ —），男，江苏南京人，硕士研究生，研究方向为智能交互设计、人机交互。
+2000
+黄 金（ —），男，江苏淮安人，硕士研究生，研究方向为智能交互设计。
+1995
+陶雄杰（ —），男，广西贵港人，硕士研究生，工程师，研究方向为人工智能医学图像、数字孪生。
+1995
+胡 斌（ —），男，澳门人，博士研究生，教授，博士生导师，研究方向为用户体验与协同设计、多模态情感化识别。
+1984

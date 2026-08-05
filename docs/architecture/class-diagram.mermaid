@@ -1,0 +1,58 @@
+classDiagram
+    class VisionService {
+        -device: str
+        -model_dir: str
+        -_coco_model: YOLO
+        -_world_model: YOLO
+        -_category_map: dict
+        -conf_threshold: float
+        +__init__(device, model_dir)
+        +_load_models() None
+        +_build_category_map() dict
+        +predict(image_bytes) dict
+        -_predict_coco(img) tuple
+        -_predict_world(img) tuple
+        -_fallback() dict
+    }
+
+    class Category {
+        +id: int
+        +name: str
+        +yolo_class_id: int | None
+        +recognition_mode: int
+        +yolo_prompt: str | None
+        +is_active: int
+    }
+
+    class PublishService {
+        +publish_lost(publisher, dto, ip, ua) tuple
+        +publish_found(finder, dto, ip, ua) tuple
+        -_resolve_category(provided_id, images) int
+        -_reverse_match_lost(lost) list
+        -_reverse_match_found(found) list
+    }
+
+    class MatchService {
+        +score(lost, found, exact) float
+        +is_suspected(score) bool
+        +category_hit(exact) float
+        +time_decay_factor(lt, ft) float
+        +location_hit_factor(l, f) float
+        +keyword_jaccard_factor(l, f) float
+    }
+
+    class VisionRouter {
+        +predict(image) dict
+    }
+
+    class get_vision_service {
+        <<factory>>
+        +get_vision_service() VisionService
+    }
+
+    VisionService ..> Category : 读取映射(yolo_class_id / yolo_prompt)
+    get_vision_service ..> VisionService : 唯一单例
+    PublishService ..> VisionService : get_vision_service().predict()
+    VisionRouter ..> VisionService : get_vision_service().predict()
+    PublishService ..> MatchService : 反向匹配打分(公式不变)
+    note for VisionService "单例由 get_vision_service() 提供；main.py 仅在此预热，禁止重复实例化；模型缺失→降级返回有效活跃分类"

@@ -1,0 +1,97 @@
+classDiagram
+    class LostItem {
+        <<变更>>
+        +BigInteger id
+        +SmallInt status
+        +DateTime created_at
+        +DateTime expires_at  %% [新增] created_at+90d / 完成时重置
+        +DateTime deleted_at  %% [新增] 软删标记
+    }
+    class FoundItem {
+        <<变更>>
+        +BigInteger id
+        +SmallInt status
+        +DateTime created_at
+        +DateTime expires_at  %% [新增]
+        +DateTime deleted_at  %% [新增]
+    }
+    class MatchRecord {
+        <<变更>>
+        +BigInteger id
+        +int lost_id
+        +int found_id
+        +SmallInt status
+        +DateTime created_at
+        +DateTime completed_at  %% [新增] status→2 时写入
+    }
+    class IMSession {
+        <<复用>>
+        +DateTime expires_at  %% 范式来源
+    }
+    class User {
+        <<复用>>
+        +String student_no
+        +String phone  %% 导出用明文
+        +SmallInt role  %% 1=管理员
+    }
+    class ItemsRouter {
+        <<变更>>
+        +GET /lost-items  %% +deleted_at IS NULL + expires_at>now
+        +GET /found-items %% 同上
+        +GET /users/me/items %% +同上用户侧过滤
+        +DELETE /lost-items/{id}  %% 语义→软删(deleted_at)
+        +DELETE /found-items/{id} %% 语义→软删
+    }
+    class AdminRouter {
+        <<变更>>
+        +GET /admin/matches  %% require_admin, 未失效匹配列表
+        +POST /admin/export  %% require_admin, ids→CSV
+        +POST /admin/cleanup  %% require_admin, 触发清理
+    }
+    class HandoverService {
+        <<变更>>
+        +verify()  %% 写 completed_at + 重置双方 expires_at
+    }
+    class MatchRouter {
+        <<变更>>
+        +POST /matches/{id}/self-complete  %% 写 completed_at + 重置
+    }
+    class IMService {
+        <<变更>>
+        +success_session_archive()  %% 写 completed_at + 重置
+    }
+    class CleanupService {
+        <<新增>>
+        +run_once(db)  %% 依赖序物理清理超1年
+    }
+    class LostItemOut {
+        <<变更>>
+        +expires_at? : string
+        +deleted_at? : string
+    }
+    class FoundItemOut {
+        <<变更>>
+        +expires_at? : string
+        +deleted_at? : string
+    }
+    class MatchOut {
+        <<变更>>
+        +completed_at? : string
+    }
+
+    LostItem "1" --> "0..*" MatchRecord : lost_id(RESTRICT)
+    FoundItem "1" --> "0..*" MatchRecord : found_id(RESTRICT)
+    MatchRecord "1" --> "0..*" IMSession : match_id(RESTRICT)
+    IMSession "1" --> "0..*" IMMessage : session_id(RESTRICT)
+    LostItem ..> LostItemOut
+    FoundItem ..> FoundItemOut
+    MatchRecord ..> MatchOut
+    ItemsRouter ..> LostItem
+    ItemsRouter ..> FoundItem
+    AdminRouter ..> MatchRecord
+    AdminRouter ..> CleanupService
+    HandoverService ..> MatchRecord
+    HandoverService ..> LostItem
+    HandoverService ..> FoundItem
+    MatchRouter ..> MatchRecord
+    IMService ..> MatchRecord

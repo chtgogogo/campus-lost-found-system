@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    participant U as 失主(前端 MatchesView)
+    participant API as items.py / match.py
+    participant PS as PublishService
+    participant MS as MatchService
+    participant DB as MatchRecord
+
+    U->>API: POST /lost-items（发布失物）
+    API->>PS: publish_lost()
+    PS->>PS: _recall_lost_candidates() 召回候选拾物
+    loop 每个候选 f
+        PS->>PS: _exists_match(lost_id, f.id) 幂等去重
+        PS->>MS: score(lost, f)
+    end
+    PS->>PS: 按 (-score, f.id) 降序取前 MATCH_TOP_N
+    PS->>DB: 批量落库 status=0（无论分数，suspected 由 score 派生）
+    PS->>PS: 候选非空 → lost.status = MATCHING
+    API-->>U: {item, suspected_matches(≤10, 含低分)}
+
+    U->>API: GET /matches?page_size=200
+    API->>API: 去重 + 对端软删/已解决过滤(P1-2) + score 降序 + 分页
+    API-->>U: Page[MatchOut]（低分候选 suspected=false 可见）
+
+    U->>API: POST /matches/{id}/claim（「申请匹配」填认领理由）
+    API->>DB: status 0→1（认领中）；lost.status=2
+    API-->>U: MatchOut(status=1)
+
+    Note over U, API: 拾得者侧 status=1 显示「确认归还/拒绝」（P1-1）
+    U->>API: POST /matches/{id}/confirm-return / reject
+    U->>API: POST /matches/{id}/handover/generate → 双端 verify → status=2 完成
