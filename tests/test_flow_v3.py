@@ -387,8 +387,14 @@ def test_f3_11b_suspected_semantics_not_drifted_by_low_score(client, db):
 def test_f3_12_score_detail_five_dimensions_on_keep1_candidate(client):
     """F3-12 五维明细完整（回归点 §9-10）：keep1 候选与 keep0 候选的明细口径完全一致。
 
-    断言 photo/category/text/location/time 五维均非 None，total 与 match_score 一致，
-    且 total ≈ 五维之和（浮点二次舍入误差 < 0.05）。
+    断言 photo/category/text/location/time 五维均非 None，total 与 match_score 一致。
+
+    ⚠️ v10 评分 v2 重标定（R2 §7.1）：**不能再断言 `total == 五维之和**，原因有二——
+      1. 子维度键回传的是**归一化前的原始分**，只有 `total` 是 `raw_total × norm_factor`；
+      2. 旧键 `location` = 新键 `place`，而 `place` 已被计入旧键 `text`（text = qty +
+         color + state + place + keyword），直接相加会把地点分**重复计一次**。
+    v2 下的恒等式是 `raw_total == photo + text + time`（category 为 deprecated 占位恒 0），
+    故本用例改为断言该恒等式 + 归一化关系，仍然覆盖「明细自洽」这一原始意图。
     """
     token_owner, _, lost_id, found_id, match = _keep1_auto_candidate(client, "f312")
 
@@ -404,11 +410,24 @@ def test_f3_12_score_detail_five_dimensions_on_keep1_candidate(client):
     assert abs(out["total"] - out["match_score"]) < 0.01, (
         f"total 应与 match_score 一致，实际 {out['total']} vs {out['match_score']}"
     )
-    assert abs(out["total"] - sum(out[k] for k in dims)) < 0.05, (
-        f"total 应等于五维加权之和，实际 total={out['total']} 五维和={sum(out[k] for k in dims)}"
+    # v2 恒等式：raw_total == photo + text + time（location 已含在 text 内，不重复相加）
+    assert out.get("raw_total") is not None, f"keep1 候选应回传 raw_total：{out}"
+    assert out.get("norm_factor") is not None, f"keep1 候选应回传 norm_factor：{out}"
+    assert abs(out["raw_total"] - (out["photo"] + out["text"] + out["time"])) < 0.05, (
+        f"raw_total 应等于 photo+text+time，实际 raw_total={out['raw_total']} "
+        f"photo={out['photo']} text={out['text']} time={out['time']}"
     )
+    # 归一化关系：total == clamp(raw_total × norm_factor, 0, 100)
+    expected_total = min(100.0, max(0.0, out["raw_total"] * out["norm_factor"]))
+    assert abs(out["total"] - expected_total) < 0.05, (
+        f"total 应等于 raw_total×norm_factor 并截断到 [0,100]，"
+        f"实际 total={out['total']} 期望={expected_total}"
+    )
+    # location 是 place 的旧键别名，且已被计入 text
+    assert out["location"] <= out["text"] + 1e-6, "location(=place) 应已含在 text 内"
     # [deprecated] 占位维度恒 0，不因 keep1 路径复活
     assert out["appearance"] == 0.0 and out["feature"] == 0.0
+    assert out["category"] == 0.0, "category 为 deprecated 占位，v2 下恒 0"
 
 
 def test_f3_13_soft_deleted_keep1_excluded_from_recall(client, db):
