@@ -279,8 +279,10 @@
             <el-descriptions-item label="失物">
               {{ detail.match.lost_item?.title || '—' }}
             </el-descriptions-item>
+            <!-- FoundItemOut 无 title 字段：沿用 MatchesView 的「类目名」展示约定，
+                 描述作为兜底，避免出现空白单元格。 -->
             <el-descriptions-item label="拾物">
-              {{ detail.match.found_item?.title || '—' }}
+              {{ detail.match.found_item?.category_name || detail.match.found_item?.description || '—' }}
             </el-descriptions-item>
           </el-descriptions>
 

@@ -74,4 +74,8 @@ web/vite.config.ts.timestamp-*.mjs
 /.op.txt
 /.recent.txt
 /.smoke.txt
+/.rev*.txt
+/.cm.txt
+/.st.txt
+/.z*.txt
 tests/_tmp_migrate_*.db-journal
