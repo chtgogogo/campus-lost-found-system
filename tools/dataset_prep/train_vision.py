@@ -9,12 +9,12 @@
   # B：零成本复训 YOLOv8n（CIoU，仅验证修正）
   python tools/dataset_prep/train_vision.py --model-size n --loss CIoU --name lostfound_v8n_v2
 
-  # A：升级 YOLOv8s + WIoU 重训（推荐）
-  python tools/dataset_prep/train_vision.py --model-size s --loss WIoU --name lostfound_v8s_wiou
+  # A：升级 YOLOv8s 重训（CIoU，推荐）
+  python tools/dataset_prep/train_vision.py --model-size s --loss CIoU --name lostfound_v8s_ciou
 
   # 从已有权重继续（迁移/微调）
-  python tools/dataset_prep/train_vision.py --model-size s --loss WIoU \
-      --weights models/weights/best.pt --name lostfound_v8s_wiou2
+  python tools/dataset_prep/train_vision.py --model-size s --loss CIoU \
+      --weights models/weights/best.pt --name lostfound_v8s_ciou2
 
 训练结束后自动把 runs/detect/<name>/weights/best.pt 备份旧权重并覆盖到 models/weights/best.pt，
 app 直接可用。
@@ -57,7 +57,7 @@ def resolve_data(data_arg: str) -> dict:
 def parse_args():
     ap = argparse.ArgumentParser(description="失物招领视觉模型训练（A+B）")
     ap.add_argument("--model-size", choices=["n", "s"], default="s", help="YOLOv8 骨干: n(纳米)/s(小)，A 用 s，B 用 n")
-    ap.add_argument("--loss", choices=["CIoU", "WIoU"], default="WIoU", help="边界框损失: CIoU(原版) / WIoU(推荐)")
+    ap.add_argument("--loss", choices=["CIoU", "WIoU"], default="CIoU", help="边界框损失: CIoU(默认/推荐) / WIoU(对本长尾数据集有害，勿用)")
     ap.add_argument("--epochs", type=int, default=120, help="训练轮数")
     ap.add_argument("--batch", type=int, default=None, help="批次大小（默认 n=16 / s=8，6G 显存友好）")
     ap.add_argument("--imgsz", type=int, default=640, help="输入尺寸")
@@ -80,8 +80,13 @@ def main():
         from wiou_loss import _install_wiou
         _install_wiou()
         print(f"[train] 损失函数: WIoU（已注入）")
+        print(
+            "[WARN] WIoU 对本数据集有害：长尾失衡≈103:1，WIoU v3 聚焦机制会抑制稀有类"
+            "低质量预测梯度，实测 val mAP@0.5 仅 0.060（CIoU 为 0.710）。仅用于消融对照，"
+            "生产训练请用默认 CIoU。"
+        )
     else:
-        print(f"[train] 损失函数: CIoU（原版）")
+        print(f"[train] 损失函数: CIoU（默认/推荐）")
 
     # 解析 data.yaml 路径：ultralytics 的 model.train(data=...) 只接受 yaml 文件路径，
     # 不接受 dict（8.4.98 会把它当文件路径去 check_file 而报错）。

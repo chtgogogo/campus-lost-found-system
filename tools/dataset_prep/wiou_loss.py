@@ -2,11 +2,16 @@
 # -*- coding: utf-8 -*-
 r"""WIoU 损失函数集成（针对 ultralytics 8.4.98 实际可用）。
 
+⚠️ 有害警告（2026-08 实测定论）：WIoU v3 对本数据集**有害**，不得作默认损失。
+本数据集长尾失衡≈103:1（backpack 7867 vs campus_card 76），WIoU v3 的单调聚焦
+机制会抑制稀有类低质量预测的梯度，实测 val mAP@0.5 仅 **0.060**（recall 0.075），
+而默认 CIoU 达 **0.710**。本模块仅保留用于"损失函数消融对照"，生产训练一律用
+CIoU（train_vision.py 默认已改为 CIoU）。
+
 本模块为「失物招领系统」视觉识别模型提供 WIoU（Wise-IoU，论文：
 Tong et al., "Wise-IoU: Bounding Box Regression Loss with Dynamic Focusing
-Mechanism", 2023）边界框损失，用于替换 YOLOv8 默认 CIoU，以在小目标 /
-类别极度失衡（glasses/keys/wallet/campus_card 样本极少）场景下获得
-+1~3pt 的 mAP 提升。
+Mechanism", 2023）边界框损失，用于替换 YOLOv8 默认 CIoU。原设计意图是在小目标 /
+类别极度失衡场景下提升 mAP，但**在本数据集上实测适得其反**（见上方警告），故不再推荐。
 
 ## 为什么不用内置？
 经核实，ultralytics 8.4.98 的 ``ultralytics.utils.metrics.bbox_iou`` 只支持
