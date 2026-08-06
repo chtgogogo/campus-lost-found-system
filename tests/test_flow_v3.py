@@ -9,7 +9,8 @@
     keep1 拾得者生成候选（F3-2，单向性核心）。
 - 变更 A' · keep1 单向性守卫（设计 §2.1–§2.3）：候选是"一条记录、两侧可见"，反向排除
   拦不住拾得者侧渲染，故补 `confirm-return` / `reject` 两处 422 守卫（F3-5 / F3-6），
-  与既有 `claim` 守卫（F3-7）三者对称；同时**保留**拾得者侧可见性（F3-8，方案 1）。
+  与既有 `claim` 守卫（F3-7）三者对称；U2=完全隐藏（方案 2）：`list_my_matches` 的
+  as_found 分支过滤掉 keep1 拾物的全部候选，拾得者侧不再看到任何 keep1 匹配（F3-8）。
 - 变更 B · 新增 `MATCH_LOW_SCORE=60`，仅驱动**失主侧**低分弱化视觉；`suspected` 阈值仍 80；
   「低分不打扰」整体删除（F3-11 + 前端静态口径守护 F3-15/16/17）。
 - 变更 C · 不提供存量回填脚本 —— `refresh-matches` 即自助回填工具（F3-10）。
@@ -266,12 +267,11 @@ def test_f3_07_owner_claim_on_keep1_rejected_422(client):
     assert r.json()["code"] == 9001, r.text
 
 
-def test_f3_08_keep1_candidate_visible_to_finder(client):
-    """F3-8 可见性守护（设计 §2.2 方案 1）：keep1 候选在拾得者 `GET /matches` 中**仍可见**。
+def test_f3_08_keep1_candidate_hidden_from_finder(client):
+    """F3-8 可见性守护（U2=完全隐藏 / 设计 §2.2 方案 2）：keep1 候选在拾得者 `GET /matches` 中**不可见**。
 
-    单向性由「前端只读 + 后端 422 守卫」两层保证，**不由列表层过滤保证**。
-    本用例防止后续误在 `list_my_matches` 的 as_found 分支加 keep_status 过滤
-    （那会让拾得者连"已完成/已撤回"记录也一起消失，破坏 PRD US-4）。
+    单向性由「后端列表层过滤 + 422 守卫」两层保证。
+    本用例防止后续误移除 `list_my_matches` 的 as_found 分支 keep_status 过滤。
     """
     token_owner, token_finder, _, found_id, match = _keep1_auto_candidate(client, "f308")
     match_id = match["id"]
@@ -280,17 +280,17 @@ def test_f3_08_keep1_candidate_visible_to_finder(client):
     assert r.status_code == 200, r.text
     items = r.json()["data"]["items"]
     mine = [m for m in items if m["id"] == match_id]
-    assert mine, f"拾得者侧应能看到 keep1 候选（只读可见），实际 {[m['id'] for m in items]}"
-    assert mine[0]["found_item"]["keep_status"] == 1
-    assert mine[0]["status"] == 0
+    assert not mine, f"拾得者侧不应看到 keep1 候选（U2=完全隐藏），实际 {[m['id'] for m in items]}"
 
-    # 完成后（终态）拾得者侧同样保持可见，保证"善意有没有被接住"的语义连续
+    # 完成后（终态）拾得者侧同样不可见（as_found 过滤不区分状态）
     client.post(f"{API}/matches/{match_id}/claim-complete", headers=auth_header(token_owner), json={})
     r = client.get(
         f"{API}/matches", headers=auth_header(token_finder), params={"status": 2, "page_size": 200}
     )
     assert r.status_code == 200, r.text
-    assert any(m["id"] == match_id for m in r.json()["data"]["items"]), "已完成记录应在拾得者侧保留可见"
+    assert not any(m["id"] == match_id for m in r.json()["data"]["items"]), (
+        "已完成 keep1 记录也不应在拾得者侧可见（U2=完全隐藏）"
+    )
 
 
 # ============ 保底条数 / 回填 / 常量 / 明细 / 软删（F3-9 ~ F3-13） ============
@@ -381,7 +381,10 @@ def test_f3_11b_suspected_semantics_not_drifted_by_low_score(client, db):
     """F3-11b 分数区间语义（§4.5 矩阵后端可测部分）：suspected 仍以 80 为界，与 60 无关。
 
     60–79 区间的候选：`suspected=false` 但仍是**正常候选**（不被弱化为不可操作），
-    解释体 threshold 仍回传 80 —— 这是"删除低分不打扰"后拾得者侧仍显示操作按钮的后端依据。
+    解释体 threshold 仍回传 80。
+
+    U2=完全隐藏：拾得者侧不再看到 keep1 候选（as_found 分支已过滤），故拾得者侧
+    可见性断言改为「不可见」，与 F3-8 保持一致。
     """
     token_owner, token_finder, _, _, match = _keep1_auto_candidate(client, "f311")
     match_id = match["id"]
@@ -396,10 +399,10 @@ def test_f3_11b_suspected_semantics_not_drifted_by_low_score(client, db):
         assert out["suspected"] is expect_suspected, (
             f"score={score} 的 suspected 应为 {expect_suspected}，实际 {out['suspected']}"
         )
-        # 拾得者侧同样能看到（60-79 / <60 都不被后端过滤，弱化纯前端视觉）
+        # U2=完全隐藏：拾得者侧不再看到 keep1 候选（as_found 分支已过滤）
         r_f = client.get(f"{API}/matches", headers=auth_header(token_finder), params={"page_size": 200})
-        assert any(m["id"] == match_id for m in r_f.json()["data"]["items"]), (
-            f"score={score} 的候选在拾得者侧不应被后端过滤"
+        assert not any(m["id"] == match_id for m in r_f.json()["data"]["items"]), (
+            f"score={score} 的 keep1 候选在拾得者侧应被完全隐藏（U2）"
         )
 
 
@@ -555,8 +558,10 @@ def test_f3_15_frontend_constants_low_score_60_and_threshold_80_kept():
 def test_f3_16_matches_view_keep1_and_low_score_copy():
     """F3-16：`MatchesView.vue` 的 §4.4 文案与 §4.5 矩阵关键分支齐备。
 
-    覆盖：失主侧「我要领走」按钮文案、拾得者侧 keep1 只读文案、isLowScore 切 60、
-    低分文案常量插值（杜绝硬编码 60）、「低分不打扰」分支已删除、`scoreColor` 配色豁免未被误改。
+    覆盖：失主侧「我要领走」按钮文案、isLowScore 切 60、低分文案常量插值（杜绝硬编码 60）、
+    「低分不打扰」分支已删除、`scoreColor` 配色豁免未被误改。
+
+    U2=完全隐藏：拾得者侧 keep1 只读文案「留在原地·等待失主自取」已移除（拾得者侧不再看到 keep1 候选）。
     """
     src = _read_web("views/MatchesView.vue")
 
@@ -564,9 +569,9 @@ def test_f3_16_matches_view_keep1_and_low_score_copy():
     assert "我要领走" in src, "失主侧 keep1 候选按钮文案应为「我要领走」"
     assert "申请匹配" in src, "keep0 候选按钮文案「申请匹配」不得丢失"
     assert "确认领走" in src, "keep1 二次确认标题应为「确认领走」"
-    # 拾得者侧 keep1 只读（§2.2 方案 1 的前端一半）
-    assert "留在原地·等待失主自取" in src, "拾得者侧 keep1 应渲染只读文案"
-    # keep1 派生判定存在
+    # U2=完全隐藏：拾得者侧 keep1 只读文案已移除（后端 as_found 分支已过滤）
+    assert "留在原地·等待失主自取" not in src, "U2=完全隐藏：拾得者侧 keep1 只读文案应已移除"
+    # keep1 派生判定存在（失主侧仍需要）
     assert "isKeep1Candidate" in src, "应存在 isKeep1Candidate 派生函数"
 
     # 低分口径切 60：isLowScore 必须引用常量而非硬编码
@@ -594,6 +599,6 @@ def test_f3_17_mock_adapter_keeps_unidirectional_alignment():
     assert "f.keep_status === 0" not in src, "mock 正向候选池不得再按 keep_status 过滤（变更 A）"
     assert "isKeep1 ? [] : genCandidatesForFound" in src, "mock 反向 keep1 早退必须保留（单向性）"
     assert "score >= MATCH_THRESHOLD" in src, "mock 的 suspected 仍以 80 为界，不随 60 漂移"
-    assert src.count("m.found_item?.keep_status === 1") >= 3, (
-        "mock 的 claim / confirm-return / reject 三处均应有 keep1 拦截，与后端守卫对齐"
+    assert src.count("m.found_item?.keep_status === 1") >= 4, (
+        "mock 的 claim / confirm-return / reject 三处守卫 + myMatches U2 过滤均应有 keep1 拦截，与后端对齐"
     )

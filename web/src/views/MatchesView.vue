@@ -217,14 +217,10 @@
 
             <template v-else-if="myRole(m) === 'found'">
               <template v-if="m.status === 0">
-                <!-- flow-v3：keep1 候选在拾得者侧「可见但只读」——单向性前端侧体现，
-                     东西留在原地不在他手上，是否被领走由失主决定（后端 confirm-return / reject 双守卫兜底） -->
-                <span v-if="isKeep1Candidate(m)" class="lf-muted">留在原地·等待失主自取</span>
-                <!-- flow-v3：已删除「低分不打扰」分流，keep0 候选无论分数一律显示「确认归还 / 拒绝」 -->
-                <template v-else>
-                  <el-button type="success" size="small" @click="onConfirmReturn(m)">确认归还</el-button>
-                  <el-button type="danger" size="small" plain @click="onReject(m)">拒绝</el-button>
-                </template>
+                <!-- flow-v3 U2=完全隐藏：keep1 候选已在后端 as_found 分支过滤，拾得者侧不可见；
+                     此处仅渲染 keep0 候选的操作按钮（确认归还 / 拒绝），无需 isKeep1 分支 -->
+                <el-button type="success" size="small" @click="onConfirmReturn(m)">确认归还</el-button>
+                <el-button type="danger" size="small" plain @click="onReject(m)">拒绝</el-button>
               </template>
               <!-- Q3 闭环：失主申请后（status=1）拾得者侧显示「确认归还/拒绝」 -->
               <template v-else-if="m.status === 1">
@@ -342,7 +338,8 @@ function isLowScore(m: MatchOut): boolean {
 }
 
 // flow-v3：keep1（留在原地未挪动）候选判定。
-// 失主侧 → 主按钮文案「我要领走」（走 claim-complete 一步完成）；拾得者侧 → 只读提示，无操作按钮。
+// 失主侧 → 主按钮文案「我要领走」（走 claim-complete 一步完成）。
+// U2=完全隐藏：拾得者侧不再看到 keep1 候选（后端 as_found 分支已过滤），此函数仅用于失主侧。
 function isKeep1Candidate(m: MatchOut): boolean {
   return m.found_item?.keep_status === 1
 }

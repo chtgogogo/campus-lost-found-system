@@ -554,6 +554,11 @@ function myMatches(ctx: Ctx): AxiosResponse {
   if (s != null) list = list.filter((m) => m.status === Number(s))
   // P1-2：对端可见性过滤（软删 / 进行中状态对端已解决 → 隐藏；终态保留）
   list = list.filter((m) => !counterpartHidden(m))
+  // flow-v3 U2=完全隐藏：拾得者侧过滤掉 keep1（留在原地未挪动）拾物的全部候选，
+  // 与后端 list_my_matches 的 as_found 分支 keep_status 过滤同口径
+  list = list.filter(
+    (m) => !(m.found_item?.finder_id === mockUser.id && m.found_item?.keep_status === 1),
+  )
   return ok(ctx.config, paginate(list, page, pageSize))
 }
 
