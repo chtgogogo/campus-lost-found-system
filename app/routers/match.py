@@ -126,6 +126,9 @@ def list_my_matches(
 
     结果含低分候选（suspected=false，按 score 降序）；进行中候选的对端物品
     已软删 / 已解决时隐藏（P1-2）。page_size 上限 200 以适配多件失物 × 10 候选场景（P1-4）。
+
+    flow-v3 U2=完全隐藏（方案 2）：as_found 分支过滤掉 keep1（留在原地未挪动）拾物的
+    全部候选，拾得者侧不再看到任何 keep1 匹配记录（无论状态），单向性由列表层过滤保证。
     """
     as_lost = (
         db.query(MatchRecord)
@@ -136,6 +139,9 @@ def list_my_matches(
         db.query(MatchRecord)
         .join(FoundItem, MatchRecord.found_id == FoundItem.id)
         .filter(FoundItem.finder_id == user.id)
+        # flow-v3 U2=完全隐藏：过滤 keep1（NOT_KEEPING=1）拾物的全部候选，
+        # 拾得者侧不再看到任何 keep1 匹配记录（与 claim/confirm-return/reject 守卫互为纵深）
+        .filter(FoundItem.keep_status != int(KeepStatus.NOT_KEEPING))
     )
     if status is not None:
         as_lost = as_lost.filter(MatchRecord.status == status)
