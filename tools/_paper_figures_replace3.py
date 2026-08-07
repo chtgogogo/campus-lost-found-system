@@ -148,7 +148,6 @@ def replace_images(plan: Dict[str, Tuple[str, str, int, int]], doc) -> List[dict
     返回每条替换记录列表。
     """
     from PIL import Image
-    import io
     from docx.oxml.ns import qn
 
     records: List[dict] = []
@@ -157,11 +156,12 @@ def replace_images(plan: Dict[str, Tuple[str, str, int, int]], doc) -> List[dict
 
     for rid, (png_path, label, orig_cx, orig_cy) in plan.items():
         # ---- 读取新图 ----
+        # 直接以原始字节写入，避免 PIL 二次编码导致与磁盘文件 md5 不一致
+        # （仅作尺寸校验，不改变像素内容）。
         with Image.open(png_path) as im:
             nw, nh = im.size
-            buf = io.BytesIO()
-            im.save(buf, format="PNG")
-            new_bytes = buf.getvalue()
+        with open(png_path, "rb") as fh:
+            new_bytes = fh.read()
 
         # ---- 替换 blob ----
         rel = doc.part.rels[rid]

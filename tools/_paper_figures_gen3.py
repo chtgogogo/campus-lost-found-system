@@ -54,63 +54,74 @@ def _note(c: Canvas, x: float, y: float, text: str, size: int = 11,
 # 图 3.4 用例图
 # ==========================================================================
 def fig_use_case() -> str:
-    W, H = 640, 2010
+    # 排版说明：原 640x2010（宽高比 3.14）单列布局，在论文中按 13cm 宽插入会被
+    # 拉成 42cm 高，横跨约 1.7 个 A4 版心。现改为「左右双侧角色 + 中间双列用例」
+    # 的标准 UML 布局，宽高比降到 0.70，插入后约 14cm x 9.8cm，单页可容纳。
+    W, H = 1400, 980
     c = Canvas(W, H, ss=3)
     _title(c, 24, 30, "图 3.4 系统用例图", size=16)
 
     # 系统边界
-    c._d.rounded_rectangle(c._xy([(300, 70), (W - 20, H - 60)]), radius=c._s(10),
+    c._d.rounded_rectangle(c._xy([(300, 70), (1100, 870)]), radius=c._s(10),
                            outline=C.GRAY_S, width=max(1, int(c._s(1.2))))
+    c.text(700, 96, "校园失物招领智能匹配系统", size=12, color=C.MUTED, anchor="mm")
 
-    # 角色（左列）
-    actors = [
-        (90, 150, "游客"),
-        (90, 560, "失主"),
-        (90, 1120, "拾得者"),
-        (90, 1680, "管理员"),
-    ]
-    for cx, cy, label in actors:
-        c.actor(cx, cy, label, scale=1.05, size=14)
+    # 角色：左右两侧分列，避免所有连线挤在一侧
+    c.actor(110, 200, "游客", scale=1.05, size=14)
+    c.actor(110, 540, "失主", scale=1.05, size=14)
+    c.actor(1290, 260, "拾得者", scale=1.05, size=14)
+    c.actor(1290, 650, "管理员", scale=1.05, size=14)
 
-    # 用例（椭圆）：(cx, cy, w, h, 文本)
+    # 用例（椭圆）：左列=失主/游客，右列=拾得者/管理员
     uc = [
-        # 失主
-        (440, 250, 230, 58, "发布失物"),
-        (440, 380, 230, 58, "浏览匹配"),
-        (440, 510, 230, 58, "认领"),
-        (440, 640, 250, 58, "我要领走(keep1)"),
-        (440, 770, 230, 58, "申诉"),
-        # 拾得者
-        (440, 980, 230, 58, "拍照发布"),
-        (440, 1110, 270, 58, "选保管状态(keep0/keep1)"),
-        (440, 1240, 260, 58, "确认归还/驳回"),
-        # 管理员
-        (440, 1430, 230, 58, "审核"),
-        (440, 1560, 230, 58, "审计报表"),
-        (440, 1690, 290, 58, "数据导出(v10新增)"),
-        (440, 1820, 260, 58, "IM 轮询沟通"),
+        (560, 190, 230, 58, "发布失物"),
+        (560, 320, 230, 58, "浏览匹配"),
+        (560, 450, 230, 58, "认领"),
+        (560, 580, 250, 58, "我要领走(keep1)"),
+        (560, 710, 230, 58, "申诉"),
+        (900, 150, 230, 58, "拍照发布"),
+        (900, 260, 290, 58, "选保管状态(keep0/keep1)"),
+        (900, 370, 260, 58, "确认归还/驳回"),
+        (900, 480, 230, 58, "审核"),
+        (900, 590, 230, 58, "审计报表"),
+        (900, 700, 290, 58, "数据导出(v10新增)"),
+        (900, 810, 260, 58, "IM 轮询沟通"),
     ]
+    rects = {}
     for cx, cy, w, h, t in uc:
-        c.ellipse_node((cx - w / 2, cy - h / 2, w, h), t, size=13)
+        r = (cx - w / 2, cy - h / 2, w, h)
+        rects[t] = r
+        c.ellipse_node(r, t, size=13)
 
-    # 关联线：actor -> use case
-    def link(actor_y, uc_y, ax=90):
-        c.line((ax + 22, actor_y), (200, uc_y), color=C.LINE, width=1.4)
+    def link_l(actor_cy: float, target: str, dash=None) -> None:
+        """左侧角色 → 用例椭圆左沿。"""
+        tr = rects[target]
+        c.line((140, actor_cy), (tr[0] - 2, tr[1] + tr[3] / 2),
+               color=C.LINE, width=1.4, dash=dash)
 
-    link(560, 250); link(560, 380); link(560, 510); link(560, 640); link(560, 770)
-    link(1120, 980); link(1120, 1110); link(1120, 1240)
-    # 管理员关联
-    c.line((112, 1680), (200, 1430), color=C.LINE, width=1.4)
-    c.line((112, 1680), (200, 1560), color=C.LINE, width=1.4)
-    c.line((112, 1680), (200, 1690), color=C.LINE, width=1.4)
-    c.line((112, 1680), (200, 1820), color=C.LINE, width=1.4)
-    # 游客关联：浏览匹配（也作为游客可用）
-    c.line((112, 150), (200, 380), color=C.LINE, width=1.4, dash=(5, 4))
+    def link_r(actor_cy: float, target: str) -> None:
+        """右侧角色 → 用例椭圆右沿。"""
+        tr = rects[target]
+        c.line((1260, actor_cy), (tr[0] + tr[2] + 2, tr[1] + tr[3] / 2),
+               color=C.LINE, width=1.4)
 
-    # keep1 标注
-    _note(c, 200, 640 + 46, "keep1: 物品留在原地，U2 完全隐藏", size=10, color=C.ORANGE_S)
-    # v10 标注
-    _note(c, 200, 1690 + 46, "v10 新增：数据导出 + IM 轮询沟通", size=10, color=C.GREEN_S)
+    # 失主（左）
+    for t in ("发布失物", "浏览匹配", "认领", "我要领走(keep1)", "申诉"):
+        link_l(540, t)
+    # 游客（左，虚线：仅浏览）
+    link_l(200, "浏览匹配", dash=(5, 4))
+    # 拾得者（右）
+    for t in ("拍照发布", "选保管状态(keep0/keep1)", "确认归还/驳回"):
+        link_r(260, t)
+    # 管理员（右）
+    for t in ("审核", "审计报表", "数据导出(v10新增)", "IM 轮询沟通"):
+        link_r(650, t)
+
+    # 标注（置于系统边界下方空白区）
+    _note(c, 300, 912, "keep1：物品留在原地，失主「我要领走」直达待交接，拾得者侧(U2)完全隐藏",
+          size=11, color=C.ORANGE_S)
+    _note(c, 300, 946, "v10 新增：数据导出 + IM 轮询沟通（前端 4s 轮询，非 WebSocket）",
+          size=11, color=C.GREEN_S)
 
     return c.save(os.path.join(OUT_DIR, "fig_03_use_case.png"))
 
@@ -218,38 +229,45 @@ def fig_state() -> str:
     # 已拒绝（下排）
     s7 = state(480, 980, 170, 60, "已拒绝", fill=C.RED_F, stroke=C.RED_S)
 
-    # 主链路箭头
-    c.arrow(right(s1), left(s2), label="反向匹配命中")
-    c.arrow(right(s2), left(s3), label="生成 match_record")
-    c.arrow(right(s3), left(s4), label="失主认领(keep0)")
-    c.arrow(right(s4), left(s5), label="拾得者确认归还")
+    # 主链路水平箭头：贴在状态框【下沿】(y=120)，label 置于其下方，避免压字
+    y_edge = 120
+
+    def harrow(a, b, lab: str) -> None:
+        c.arrow((a[0] + a[2], y_edge), (b[0], y_edge), label=lab, label_offset=(0, 12))
+
+    harrow(s1, s2, "反向匹配命中")
+    harrow(s2, s3, "生成 match_record")
+    harrow(s3, s4, "失主认领(keep0)")
+    harrow(s4, s5, "拾得者确认归还")
     # 待交接 → 已解决（向下）
-    c.arrow(bottom(s5), top(s6), label="双端扫码验证")
+    c.arrow(bottom(s5), top(s6), label="双端扫码验证", label_offset=(12, 0))
 
-    # keep1 分支：待认领 → 待交接（跳过拾得者确认，U2 完全隐藏）
-    c.arrow(right(s3), bottom(s3), color=C.ORANGE_S, head=False, label="")
-    c.polyline([right(s3), offset(right(s3), 40, 0), (820, 400), bottom(s5)],
+    # keep1 分支：待认领 → 待交接（跳过认领中/拾得者确认），从上方绕行
+    c.polyline([top(s3), (s3[0] + s3[2] / 2, 28), (s5[0] + s5[2] / 2, 28), top(s5)],
                color=C.ORANGE_S, width=1.6)
-    c.arrow_head((910, 360), (0, 1), color=C.ORANGE_S, size=8)
-    c.text(840, 360, "keep_status==1 & 我要领走\n(跳拾得者确认, U2 隐藏)", size=10.5,
-           color=C.ORANGE_S, anchor="rm")
+    c.arrow_head(top(s5), (0, 1), color=C.ORANGE_S, size=8)
+    c.text((s3[0] + s3[2] / 2 + s5[0] + s5[2] / 2) / 2, 16,
+           "keep_status==1 & 我要领走(跳拾得者确认, U2 隐藏)",
+           size=10.5, color=C.ORANGE_S, anchor="mm")
 
-    # 认领中 → 已拒绝（驳回）
-    c.polyline([bottom(s4), (790, 700), (560, 700), bottom(s7)],
+    # 认领中 → 已拒绝（驳回）：从 s4 下沿向下进入 s7 上沿
+    c.polyline([bottom(s4), (s4[0] + s4[2] / 2, 560), (s7[0] + s7[2] / 2, 560), top(s7)],
                color=C.RED_S, width=1.6)
-    c.arrow_head((560, 940), (0, 1), color=C.RED_S, size=8)
-    c.text(600, 700, "拾得者驳回", size=10.5, color=C.RED_S, anchor="rm")
+    c.arrow_head(top(s7), (0, 1), color=C.RED_S, size=8)
+    c.text(s4[0] + s4[2] / 2 + 8, 560, "拾得者驳回", size=10.5, color=C.RED_S, anchor="lm")
 
-    # 已拒绝 → 待匹配（重入匹配池）
-    c.arrow(top(s7), (560, 920), color=C.MUTED, head=False)
-    c.polyline([(560, 920), (300, 920), (300, 120), bottom(s1)],
+    # 已拒绝 → 待匹配（重入匹配池）：从 s7 左侧沿画布最左侧竖直回到 s1 【左沿】
+    # 注意：不可走 y=120，该横向通道已被上排主链路箭头占用，会叠线。
+    x_back = 18
+    y_s1c = s1[1] + s1[3] / 2
+    c.polyline([left(s7), (x_back, s7[1] + s7[3] / 2), (x_back, y_s1c), left(s1)],
                color=C.MUTED, width=1.5, dash=(5, 4))
-    c.arrow_head((120, 120), (0, 1), color=C.MUTED, size=8)
-    c.text(310, 920, "重入匹配池", size=10.5, color=C.MUTED, anchor="lm")
+    c.arrow_head(left(s1), (1, 0), color=C.MUTED, size=8)
+    c.text(x_back + 10, s7[1] + s7[3] / 2 - 16, "重入匹配池", size=10.5,
+           color=C.MUTED, anchor="lm")
 
-    # 申诉（已拒绝 上 → 关闭）
-    c.line((s7[0] + s7[2] / 2, s7[1]), (s7[0] + s7[2] / 2, 880), color=C.MUTED, width=1.4)
-    c.text(s7[0] + s7[2] / 2 + 8, 880, "申诉成立→关闭(维持已拒绝)", size=10,
+    # 申诉：改为 s7 下方注记（原竖线 x=565 与驳回箭头同轴，会重叠）
+    c.text(s7[0], s7[1] + s7[3] + 20, "申诉成立→关闭(维持已拒绝)", size=10,
            color=C.MUTED, anchor="lm")
 
     return c.save(os.path.join(OUT_DIR, "fig_07_state.png"))
@@ -259,7 +277,8 @@ def fig_state() -> str:
 # 图 3.9 E-R 图
 # ==========================================================================
 def fig_er() -> str:
-    W, H = 1440, 940
+    # H 由 940 增至 1000：为底部跨列总线（y=946/968）留出通道，避免斜穿表体。
+    W, H = 1440, 1000
     c = Canvas(W, H, ss=3)
     _title(c, 24, 26, "图 3.9 数据库 E-R 图（10 张表）", size=15)
 
@@ -293,36 +312,81 @@ def fig_er() -> str:
                   size=12, body_size=11.5, body_align_left=True)
         rects[name] = r
 
-    # 关系线 (a,b) + 标签
-    def rel(a, b, lab, mult_a="1", mult_b="*"):
+    # ---- 关系线路由 --------------------------------------------------
+    # 原实现固定「右沿→左沿」直连，导致 user→trust_score_log / user→audit_log
+    # 斜穿 lost_item、found_item、match_record 表体，且同列回折线反向压表。
+    # 现按相对位置分派三种走法，全部走空白通道，保证不穿任何表体。
+    def _mult(x, y, s, anchor):
+        c.text(x, y, s, size=11, color=C.MUTED, anchor=anchor)
+
+    def rel_h(a, b, lab, mult_a="1", mult_b="*", a_off=0.0, b_off=0.0):
+        """左右列相邻：a 右沿 → b 左沿 直连（中间为空白列间距）。"""
         ra, rb = rects[a], rects[b]
-        p0 = (ra[0] + ra[2], ra[1] + ra[3] / 2)
-        p1 = (rb[0], rb[1] + rb[3] / 2)
+        p0 = (ra[0] + ra[2], ra[1] + ra[3] / 2 + a_off)
+        p1 = (rb[0], rb[1] + rb[3] / 2 + b_off)
         c.line(p0, p1, color=C.LINE, width=1.4)
-        c.text(p0[0] - 6, p0[1] - 8, mult_a, size=11, color=C.MUTED, anchor="rm")
-        c.text(p1[0] + 6, p1[1] - 8, mult_b, size=11, color=C.MUTED, anchor="lm")
-        mx = (p0[0] + p1[0]) / 2
-        c.text(mx, p0[1] - 8, lab, size=10.5, color=C.MUTED, anchor="mm")
+        # 基数标注放在【框外】的列间隙里（放框内会压住表格边框/字段）
+        _mult(p0[0] + 7, p0[1] - 9, mult_a, "lm")
+        _mult(p1[0] - 7, p1[1] - 9, mult_b, "rm")
+        # 关系名放线的【下方】，与两端基数错开，避免三者挤在同一水平线
+        c.text((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 + 11, lab,
+               size=10.5, color=C.MUTED, anchor="mm")
 
-    rel("user", "lost_item", "发布")
-    rel("user", "found_item", "发布")
-    rel("user", "trust_score_log", "记分")
-    rel("user", "audit_log", "操作")
-    rel("category", "lost_item", "标注")
-    rel("category", "found_item", "标注")
-    rel("lost_item", "match_record", "参与")
-    rel("found_item", "match_record", "参与")
-    rel("match_record", "handover_code", "生成", mult_a="1", mult_b="1")
-    rel("match_record", "im_session", "开启")
-    rel("lost_item", "im_session", "涉及")
-    rel("found_item", "im_session", "涉及")
-    rel("im_session", "im_message", "包含")
+    def rel_v(a, b, lab, mult_a="1", mult_b="*"):
+        """同列上下相邻：a 下沿 → b 上沿 垂直连。"""
+        ra, rb = rects[a], rects[b]
+        x = ra[0] + ra[2] / 2
+        y0, y1 = ra[1] + ra[3], rb[1]
+        c.line((x, y0), (x, y1), color=C.LINE, width=1.4)
+        _mult(x - 7, y0 + 11, mult_a, "rm")
+        _mult(x - 7, y1 - 11, mult_b, "rm")
+        c.text(x + 8, (y0 + y1) / 2, lab, size=10.5, color=C.MUTED, anchor="lm")
 
-    # 高亮 keep_status
-    _note(c, 800, 470, "found_item.keep_status 字段：0=需认领 / 1=留在原地(keep1)",
-          size=11, color=C.ORANGE_S)
-    _note(c, 800, 805, "handover_code.expire_at：交接码过期时间存 DB（非 Redis TTL）",
-          size=11, color=C.GREEN_S)
+    def rel_elbow(a, b, xc, lab, mult_a="1", mult_b="*"):
+        """同列但不相邻：经列左侧空白通道 xc 正交绕行，不穿中间表。"""
+        ra, rb = rects[a], rects[b]
+        p0 = (ra[0], ra[1] + ra[3] / 2)
+        p1 = (rb[0], rb[1] + rb[3] / 2)
+        c.polyline([p0, (xc, p0[1]), (xc, p1[1]), p1], color=C.LINE, width=1.4)
+        _mult(p0[0] - 8, p0[1] - 10, mult_a, "rm")
+        _mult(p1[0] - 8, p1[1] - 10, mult_b, "rm")
+        # 标签贴近目标端而非通道中点：中点处会与列间隙里的 rel_h 关系名撞字
+        c.text(xc - 6, p1[1] - 45, lab, size=10.5, color=C.MUTED, anchor="rm")
+
+    def rel_bus(a, b, y_bus, x_out, x_in, lab, mult_a="1", mult_b="*", a_off=0.0):
+        """跨越整列的远距离关系：左出 → 画布底部总线 → 右侧回折进入 b 右沿。"""
+        ra, rb = rects[a], rects[b]
+        p0 = (ra[0], ra[1] + ra[3] / 2 + a_off)
+        p1 = (rb[0] + rb[2], rb[1] + rb[3] / 2)
+        c.polyline([p0, (x_out, p0[1]), (x_out, y_bus), (x_in, y_bus),
+                    (x_in, p1[1]), p1], color=C.LINE, width=1.4)
+        _mult(p0[0] - 8, p0[1] - 10, mult_a, "rm")
+        _mult(p1[0] + 8, p1[1] - 10, mult_b, "lm")
+        c.text((x_out + x_in) / 2, y_bus - 10, lab, size=10.5, color=C.MUTED, anchor="mm")
+
+    # 列相邻直连（入口点上下错开，避免多线共点）
+    rel_h("user", "lost_item", "发布", a_off=-30, b_off=-25)
+    rel_h("user", "found_item", "发布", a_off=30, b_off=-25)
+    rel_h("category", "lost_item", "标注", a_off=-25, b_off=25)
+    rel_h("category", "found_item", "标注", a_off=25, b_off=25)
+    rel_h("lost_item", "im_session", "涉及", b_off=-40)
+    rel_h("found_item", "im_session", "涉及", b_off=0)
+    rel_h("match_record", "im_session", "开启", b_off=40)
+    # 同列上下相邻：垂直连
+    rel_v("found_item", "match_record", "参与")
+    rel_v("match_record", "handover_code", "生成", mult_b="1")
+    rel_v("im_session", "im_message", "包含")
+    # 同列不相邻：走 col1|col2 之间的空白通道 x=412
+    rel_elbow("lost_item", "match_record", 412, "参与")
+    # 跨整列：走画布底部总线（表体最低 920，总线 946/968 均在其下）
+    rel_bus("user", "trust_score_log", 946, 32, 1258, "记分", a_off=-30)
+    rel_bus("user", "audit_log", 968, 18, 1238, "操作", a_off=30)
+
+    # 高亮标注：移到左下空白区（原 x=800 位置会被新增的列间通道穿过）
+    _note(c, 45, 430, "keep_status：0=需认领 / 1=留在原地(keep1)",
+          size=10.5, color=C.ORANGE_S)
+    _note(c, 45, 470, "expire_at：交接码过期存 DB（非 Redis TTL）",
+          size=10.5, color=C.GREEN_S)
 
     return c.save(os.path.join(OUT_DIR, "fig_09_er.png"))
 
@@ -331,37 +395,44 @@ def fig_er() -> str:
 # 图 3.10 类图
 # ==========================================================================
 def fig_class() -> str:
-    W, H = 1520, 1120
+    # 重排版原因（原 1520x1120 双列实体布局存在两类硬伤）：
+    #   1) service->entity 依赖线固定「服务左沿→实体右沿」直连，凡目标在第 1 列的
+    #      连线都会斜穿第 2 列实体框体（如 MatchService→FoundItem 整条穿过
+    #      TrustScoreLog）；AuditService 的两条线还穿过 VisionService/MatchService。
+    #   2) 注记框 (820,910,680,70) 与 IMService (820,850,320,110) 实测重叠 320x50px。
+    # 现改为「实体单列 + 服务单列 + 注记独立列」，所有依赖线只落在 x=360..620
+    # 的空白通道内，结构上不可能穿框；注记移到右侧独立列，彻底消除重叠。
+    W, H = 1460, 1300
     c = Canvas(W, H, ss=3)
     _title(c, 24, 26, "图 3.10 服务层类图", size=15)
 
     entities = {
-        "User": (40, 60, 300, 130, ["- user_id: int", "- name: str", "- role: str",
+        "User": (40, 60, 320, 118, ["- user_id: int", "- name: str", "- role: str",
                                     "- trust_score: float"]),
-        "LostItem": (40, 250, 300, 130, ["- lost_id: int", "- cat_id: int",
+        "LostItem": (40, 200, 320, 118, ["- lost_id: int", "- cat_id: int",
                                          "- desc: str", "- status: str"]),
-        "FoundItem": (40, 440, 300, 150, ["- found_id: int", "- cat_id: int",
+        "FoundItem": (40, 340, 320, 118, ["- found_id: int", "- cat_id: int",
                                           "- photo: str", "- keep_status: int ★"]),
-        "MatchRecord": (40, 640, 300, 140, ["- match_id: int", "- lost_id: int",
+        "MatchRecord": (40, 480, 320, 118, ["- match_id: int", "- lost_id: int",
                                             "- found_id: int", "- score: float"]),
-        "HandoverCode": (40, 850, 300, 130, ["- code_id: int", "- match_id: int",
+        "HandoverCode": (40, 620, 320, 118, ["- code_id: int", "- match_id: int",
                                              "- code: str", "- expire_at: dt"]),
-        "IMSession": (380, 60, 300, 120, ["- session_id: int", "- lost_id: int",
+        "IMSession": (40, 760, 320, 100, ["- session_id: int", "- lost_id: int",
                                           "- found_id: int"]),
-        "IMMessage": (380, 240, 300, 120, ["- msg_id: int", "- session_id: int",
-                                           "- content: str"]),
-        "TrustScoreLog": (380, 430, 300, 130, ["- log_id: int", "- user_id: int",
+        "IMMessage": (40, 882, 320, 100, ["- msg_id: int", "- session_id: int",
+                                          "- content: str"]),
+        "TrustScoreLog": (40, 1004, 320, 118, ["- log_id: int", "- user_id: int",
                                                "- delta: float", "- reason: str"]),
-        "AuditLog": (380, 620, 300, 140, ["- audit_id: int", "- op: str",
+        "AuditLog": (40, 1144, 320, 118, ["- audit_id: int", "- op: str",
                                           "- detail: str", "- partition_month"]),
     }
     services = {
-        "PublishService": (820, 60, 320, 120, ["+ publish()", "+ reverse_match()"]),
-        "VisionService": (820, 250, 320, 150, ["+ predict(photo)", "+ 进程内单例"]),
-        "MatchService": (820, 460, 320, 140, ["+ score()", "+ claim()", "+ reject()"]),
-        "HandoverService": (820, 670, 320, 120, ["+ confirm()", "+ gen_code()"]),
-        "IMService": (820, 850, 320, 110, ["+ poll(4s)", "+ send()"]),
-        "AuditService": (1180, 60, 320, 120, ["+ write()", "+ report()"]),
+        "PublishService": (620, 240, 330, 100, ["+ publish()", "+ reverse_match()"]),
+        "VisionService": (620, 380, 330, 100, ["+ predict(photo)", "+ 进程内单例"]),
+        "MatchService": (620, 520, 330, 118, ["+ score()", "+ claim()", "+ reject()"]),
+        "HandoverService": (620, 678, 330, 100, ["+ confirm()", "+ gen_code()"]),
+        "IMService": (620, 820, 330, 100, ["+ poll(4s)", "+ send()"]),
+        "AuditService": (620, 1080, 330, 100, ["+ write()", "+ report()"]),
     }
 
     e_rects = {}
@@ -375,38 +446,39 @@ def fig_class() -> str:
         s_rects[name] = c.box((x, y, w, h), meths, header=name, header_fill=stroke,
                               size=12, body_size=11, body_align_left=True)
 
-    # 依赖线：service -> entity
-    def dep(s, e, dash=False):
-        rs, re = s_rects[s], e_rects[e]
-        p0 = (rs[0], rs[1] + rs[3] / 2)
-        p1 = (re[0] + re[2], re[1] + re[3] / 2)
+    # 依赖线：service 左沿 → entity 右沿。两列之间 x=360..620 为纯空白通道，
+    # 任何端点落在两列边沿的直线都只经过该通道，不会穿过任何类框。
+    # s_off / e_off 让同一端的多条线错开，避免共点重叠。
+    def dep(s, e, s_off=0.0, e_off=0.0, dash=False):
+        rs, re_ = s_rects[s], e_rects[e]
+        p0 = (rs[0], rs[1] + rs[3] / 2 + s_off)
+        p1 = (re_[0] + re_[2], re_[1] + re_[3] / 2 + e_off)
         c.line(p0, p1, color=C.MUTED, width=1.3, dash=(5, 4) if dash else None)
 
-    dep("PublishService", "FoundItem")
-    dep("PublishService", "LostItem")
-    dep("MatchService", "MatchRecord")
-    dep("MatchService", "LostItem")
-    dep("MatchService", "FoundItem")
-    dep("HandoverService", "HandoverCode")
-    dep("HandoverService", "MatchRecord")
-    dep("IMService", "IMSession")
-    dep("IMService", "IMMessage")
-    dep("AuditService", "AuditLog")
-    dep("AuditService", "TrustScoreLog")
+    dep("PublishService", "LostItem", s_off=-15, e_off=-22)
+    dep("PublishService", "FoundItem", s_off=15, e_off=-22)
+    dep("MatchService", "LostItem", s_off=-30, e_off=22)
+    dep("MatchService", "FoundItem", s_off=0, e_off=22)
+    dep("MatchService", "MatchRecord", s_off=30, e_off=-22)
+    dep("HandoverService", "MatchRecord", s_off=-15, e_off=22)
+    dep("HandoverService", "HandoverCode", s_off=15, e_off=0)
+    dep("IMService", "IMSession", s_off=-15, e_off=0)
+    dep("IMService", "IMMessage", s_off=15, e_off=0)
+    dep("AuditService", "TrustScoreLog", s_off=-15, e_off=0)
+    dep("AuditService", "AuditLog", s_off=15, e_off=0)
 
-    # VisionService 进程内单例（虚线，PublishService 调用）
-    c.line(right(s_rects["PublishService"]), left(s_rects["VisionService"]),
-           color=C.PURPLE_S, width=1.5, dash=(5, 4))
-    c.text((s_rects["PublishService"][0] + s_rects["VisionService"][0]) / 2,
-           s_rects["PublishService"][1] + s_rects["PublishService"][3] + 14,
-           "进程内调用（非微服务）", size=10.5, color=C.PURPLE_S, anchor="mm")
+    # VisionService 进程内单例（虚线，PublishService 调用）——同列上下相邻，走垂直连
+    xv = 620 + 330 / 2
+    c.line((xv, 340), (xv, 380), color=C.PURPLE_S, width=1.5, dash=(5, 4))
+    c.text(xv + 10, 360, "进程内调用（非微服务）",
+           size=10.5, color=C.PURPLE_S, anchor="lm")
 
-    # 标注
-    c.box((820, 910, 680, 70),
-          ["VisionService: YOLOv8s(best.pt, 12类) 进程内单例"],
+    # 标注：独立右列 x=990..1430，与服务列（止于 950）完全分离，杜绝压框
+    c.box((990, 240, 440, 110),
+          ["VisionService:", "YOLOv8s(best.pt, 12 类)", "进程内单例"],
           fill=C.PURPLE_F, stroke=C.PURPLE_S, size=12)
-    c.box((820, 1000, 680, 56),
-          ["YOLO-World 代码保留未接线（mode=0 休眠）"],
+    c.box((990, 390, 440, 96),
+          ["YOLO-World 代码保留未接线", "（seed mode=0 休眠）"],
           fill=C.GRAY_F, stroke=C.GRAY_S, size=11, dash=True)
 
     return c.save(os.path.join(OUT_DIR, "fig_10_class.png"))
@@ -416,7 +488,9 @@ def fig_class() -> str:
 # 图 3.11 部署图
 # ==========================================================================
 def fig_deploy() -> str:
-    W, H = 1600, 600
+    # H 600→620 且 Redis 下移到 y=500：原 FastAPI(止于450) 与 Redis(起于480)
+    # 仅 30px 间隙，"可选" 标签放不下，实测压住 FastAPI 框 22x4px。
+    W, H = 1600, 620
     c = Canvas(W, H, ss=3)
     _title(c, 24, 26, "图 3.11 系统部署图", size=15)
 
@@ -433,19 +507,23 @@ def fig_deploy() -> str:
     c.cylinder((1060, 200, 300, 200), ["MySQL 8.0", "主库 (10 表)"],
                fill=C.TEAL_F, stroke=C.TEAL_S, size=14)
     # Redis（可选，关闭）
-    c.box((440, 480, 520, 80),
+    c.box((440, 500, 520, 80),
           ["Redis：生产可选 · 默认关闭（内存兜底）"],
           fill=C.GRAY_F, stroke=C.GRAY_S, size=12, dash=True)
 
-    # 箭头
+    # 箭头（label 置于连线中点上方，落在组件间隙，避免压字）
     c.arrow(right((40, 200, 280, 180)), left((440, 150, 520, 300)),
-            label="HTTPS JSON + IM 轮询(4s)", label_size=12, color=C.BLUE_S)
+            label="HTTPS JSON\n+ IM 轮询(4s)", label_size=11.5, color=C.BLUE_S,
+            label_offset=(0, -16))
     c.arrow(right((440, 150, 520, 300)), left((1060, 200, 300, 200)),
-            label="SQLAlchemy ORM", label_size=12, color=C.TEAL_S)
-    c.arrow(bottom((440, 150, 520, 300)), top((440, 480, 520, 80)),
-            label="可选", label_size=11, color=C.MUTED, dash=(5, 4))
+            label="SQLAlchemy ORM", label_size=11.5, color=C.TEAL_S,
+            label_offset=(0, -16))
+    # 短箭头：标签移到连线【右侧】的空白处，不再压在两框之间
+    c.arrow(bottom((440, 150, 520, 300)), top((440, 500, 520, 80)),
+            label="可选", label_size=11, color=C.MUTED, dash=(5, 4),
+            label_offset=(46, 0))
 
-    _note(c, 40, 560, "无独立推理微服务 / 无 WebSocket 服务器；IM 为前端 4s 轮询",
+    _note(c, 40, 596, "无独立推理微服务 / 无 WebSocket 服务器；IM 为前端 4s 轮询",
           size=11, color=C.MUTED)
 
     return c.save(os.path.join(OUT_DIR, "fig_11_deploy.png"))
@@ -455,7 +533,9 @@ def fig_deploy() -> str:
 # 图 4.1 功能模块流程图
 # ==========================================================================
 def fig_flow() -> str:
-    W, H = 1020, 1760
+    # W 1020→1240：宽高比由 1.73 降到 1.42，按 14cm 宽插入后高度从 24.2cm 降到
+    # 19.9cm，可与图题同页；纵向结构与分支走线保持不变。
+    W, H = 1240, 1760
     c = Canvas(W, H, ss=3)
     _title(c, 24, 26, "图 4.1 核心业务功能模块流程图", size=15)
 
@@ -514,8 +594,9 @@ def fig_flow() -> str:
            "是(keep1)\n跳拾得者确认\nU2 完全隐藏", size=10.5, color=C.ORANGE_S, anchor="lm")
     down(d2, n8, label="否")
     down(n8, d3)
-    # d3 reject 分支回退
-    c.polyline([bottom(d3), (cx - 360, center(d3)[1]), (cx - 360, center(n4)[1]),
+    # d3 reject 分支回退：必须从菱形【左顶点】出发；原先从 bottom(d3) 起步再折向
+    # 左侧，那条斜边会从菱形内部穿出去（自检可复现）。
+    c.polyline([left(d3), (cx - 360, center(d3)[1]), (cx - 360, center(n4)[1]),
                 left(n4)], color=C.RED_S, width=1.6)
     c.arrow_head((left(n4)[0], center(n4)[1]), (1, 0), color=C.RED_S, size=8)
     c.text(cx - 370, (center(d3)[1] + center(n4)[1]) / 2,
@@ -531,7 +612,7 @@ def fig_flow() -> str:
 # 图 4.2 加权打分伪代码
 # ==========================================================================
 def fig_pseudocode() -> str:
-    W, H = 1320, 600
+    W, H = 1320, 740
     c = Canvas(W, H, ss=3)
     _title(c, 24, 26, "图 4.2 加权打分伪代码（v10）", size=15)
 
