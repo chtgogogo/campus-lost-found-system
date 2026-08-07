@@ -79,3 +79,7 @@ web/vite.config.ts.timestamp-*.mjs
 /.st.txt
 /.z*.txt
 tests/_tmp_migrate_*.db-journal
+
+# 论文图中间产物目录（PNG 可由 _paper_figures_gen3.py 重跑生成；大文件，不入库）
+/tools/_paper_figures_new/
+/tools/_paper_figures_out/
