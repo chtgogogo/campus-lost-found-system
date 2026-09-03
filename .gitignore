@@ -86,3 +86,8 @@ tests/_tmp_migrate_*.db-journal
 
 # graphviz dot 探测临时文件（由脚本运行时生成）
 /tools/_dot_probe
+
+# Environment secrets
+.env
+.env.local
+

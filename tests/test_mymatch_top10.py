@@ -76,7 +76,7 @@ def _desc_sorted(matches) -> bool:
 
 
 def _claim_handover_close(client, token_owner, token_finder, match_id):
-    """完整闭环：认领 → 确认归还 → 交接码 → 双端验证 → 完成。返回最终 MatchOut。"""
+    """完整闭环：认领 → 确认归还 → 双码生成 → 交叉验证 → 完成。返回最终 MatchOut。"""
     r = client.post(
         f"{API}/matches/{match_id}/claim",
         headers=auth_header(token_owner),
@@ -91,26 +91,38 @@ def _claim_handover_close(client, token_owner, token_finder, match_id):
     )
     assert r.status_code == 200, r.text
 
+    # 失主生成 lost_code
     r = client.post(
         f"{API}/matches/{match_id}/handover/generate",
         headers=auth_header(token_owner),
     )
     assert r.status_code == 200, r.text
-    code = r.json()["data"]["code"]
-    assert len(code) == 6
+    lost_code = r.json()["data"]["code"]
+    assert len(lost_code) == 4
 
+    # 拾得者生成 finder_code
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/generate",
+        headers=auth_header(token_finder),
+    )
+    assert r.status_code == 200, r.text
+    finder_code = r.json()["data"]["code"]
+    assert len(finder_code) == 4
+
+    # 失主验证拾得者的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=auth_header(token_owner),
-        json={"code": code, "role": "lost", "gps": "30.1,104.1"},
+        json={"code": finder_code, "role": "lost", "gps": "30.1,104.1"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is False
 
+    # 拾得者验证失主的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=auth_header(token_finder),
-        json={"code": code, "role": "finder", "gps": "30.2,104.2"},
+        json={"code": lost_code, "role": "finder", "gps": "30.2,104.2"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is True

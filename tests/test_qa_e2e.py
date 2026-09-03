@@ -160,26 +160,37 @@ def test_full_closed_loop(client):
     )
     assert r.status_code == 200, r.text
 
-    # 生成交接码
+    # 生成交接码（失主生成 lost_code）
     r = client.post(
         f"{API}/matches/{match_id}/handover/generate", headers=_auth(token_a)
     )
     assert r.status_code == 200, r.text
-    code = r.json()["data"]["code"]
-    assert len(code) == 6
+    lost_code = r.json()["data"]["code"]
+    assert len(lost_code) == 4
+    assert r.json()["data"]["role"] == "lost"
 
-    # 双端验证
+    # 拾得者生成 finder_code
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/generate", headers=_auth(token_b)
+    )
+    assert r.status_code == 200, r.text
+    finder_code = r.json()["data"]["code"]
+    assert len(finder_code) == 4
+    assert r.json()["data"]["role"] == "finder"
+
+    # 交叉验证：失主输入拾得者的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=_auth(token_a),
-        json={"code": code, "role": "lost", "gps": "30.1,104.1"},
+        json={"code": finder_code, "role": "lost", "gps": "30.1,104.1"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is False
+    # 交叉验证：拾得者输入失主的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=_auth(token_b),
-        json={"code": code, "role": "finder", "gps": "30.2,104.2"},
+        json={"code": lost_code, "role": "finder", "gps": "30.2,104.2"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is True
@@ -307,22 +318,27 @@ def test_handover_code_expired_returns_4002(client):
         json={"claim_reason": "我的校园卡在书包里"},
     )
     client.post(f"{API}/matches/{match_id}/confirm-return", headers=_auth(token_b))
-    r = client.post(
+    # 失主生成 lost_code
+    client.post(
         f"{API}/matches/{match_id}/handover/generate", headers=_auth(token_a)
     )
-    code = r.json()["data"]["code"]
+    # 拾得者生成 finder_code
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/generate", headers=_auth(token_b)
+    )
+    finder_code = r.json()["data"]["code"]
 
-    # 将交接码 expire_at 置为过去
+    # 将 finder_code_expire 置为过去（失主验证时检查 finder_code 的过期时间）
     with SessionLocal() as db:
-        hc = db.query(HandoverCode).filter(HandoverCode.code == code).first()
+        hc = db.query(HandoverCode).filter(HandoverCode.finder_code == finder_code).first()
         assert hc is not None
-        hc.expire_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+        hc.finder_code_expire = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=5)
         db.commit()
 
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=_auth(token_a),
-        json={"code": code, "role": "lost"},
+        json={"code": finder_code, "role": "lost"},
     )
     assert r.status_code == 400, r.text
     assert r.json()["code"] == 4002

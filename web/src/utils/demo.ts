@@ -30,13 +30,11 @@ export function readStoredDemo(): boolean | null {
   }
 }
 
-/** 当前是否处于演示模式 */
+/** 当前是否处于演示模式。
+ *  2026-08-20 按用户要求永久关闭：本系统经 cpolar 对外提供服务，一律走真实后端，
+ *  不再使用本地 mock 假数据（避免家人看到空账号/假数据）。无论 localStorage 曾经如何设置，均强制 false。 */
 export function getDemo(): boolean {
-  if (_demo === null) {
-    const stored = readStoredDemo()
-    _demo = stored === null ? false : stored
-  }
-  return _demo
+  return false
 }
 
 /** 设置演示模式（true 演示数据 / false 真实后端），并持久化 */

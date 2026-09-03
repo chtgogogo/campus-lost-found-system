@@ -154,7 +154,15 @@ def list_my_matches(
         if m.id not in seen:
             seen.add(m.id)
             unique.append(m)
-    unique.sort(key=lambda x: float(x.match_score), reverse=True)
+    # v11（2026-08-27）：CLIP 精排次排序——同分时照片相似度高的排前；
+    # clip_sim 为 NULL（未精排/不可用）排在后面（COALESCE -1），行为与激活前一致。
+    unique.sort(
+        key=lambda x: (
+            -float(x.match_score),
+            -(float(x.clip_sim) if x.clip_sim is not None else -1.0),
+            x.id,
+        )
+    )
     # P1-2：对端软删 / 进行中状态对端已解决 → 隐藏（终态保留）
     unique = [m for m in unique if not _counterpart_hidden(db, m)]
     total = len(unique)
@@ -299,11 +307,11 @@ def handover_generate(
     if int(user.id) not in (int(lost.publisher_id), int(found.finder_id)):
         raise PermissionError("仅失主或拾得者可生成交接码")
 
-    hc = HandoverService(db).generate_code(match_id, operator_id=user.id)
+    hc, role = HandoverService(db).generate_code(match_id, operator_id=user.id)
+    code = hc.lost_code if role == "lost" else hc.finder_code
+    expire = hc.lost_code_expire if role == "lost" else hc.finder_code_expire
     return success(
-        data=HandoverGenerateOut(
-            code=hc.code, qr_token=hc.qr_token, expire_at=hc.expire_at
-        )
+        data=HandoverGenerateOut(role=role, code=code, expire_at=expire)
     )
 
 
@@ -326,6 +334,7 @@ def handover_verify(
         raise PermissionError("仅失主或拾得者可验证交接码")
 
     result = HandoverService(db).verify(
+        match_id=match_id,
         code=body.code,
         role=body.role,
         gps=body.gps,
@@ -334,8 +343,8 @@ def handover_verify(
     return success(
         data=HandoverVerifyOut(
             both_verified=result["both_verified"],
-            verified_by_lost=result["verified_by_lost"],
-            verified_by_finder=result["verified_by_finder"],
+            lost_code_verified=result["lost_code_verified"],
+            finder_code_verified=result["finder_code_verified"],
         )
     )
 

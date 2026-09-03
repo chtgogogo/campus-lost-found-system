@@ -13,6 +13,7 @@ import { http } from './request'
 import type {
   AdminMatchDetailOut,
   AdminUserOut,
+  AuditLog,
   ExportFormat,
   ExportScope,
   MatchOut,
@@ -45,6 +46,13 @@ export const adminApi = {
       .then((resp) => {
         saveBlob(resp as unknown as Blob, `audit_logs.${format}`)
       })
+  },
+
+  /** 审计日志列表（管理后台页内时间线；与导出同源）。 */
+  auditLogs(
+    params: { page?: number; page_size?: number } = {},
+  ): Promise<Page<AuditLog>> {
+    return http.get('/admin/audit-logs', { params })
   },
 
   /**

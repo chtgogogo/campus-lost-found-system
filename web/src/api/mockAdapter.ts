@@ -48,7 +48,7 @@ import {
 // ---------------- 会话内可变状态 ----------------
 let mockToken: string | null = null
 let mockUser: UserOut = mockCurrentUser
-const handoverState: Record<number, { code: string; verified_by_lost: boolean; verified_by_finder: boolean }> = {}
+const handoverState: Record<number, { lost_code: string; finder_code: string; lost_code_verified: boolean; finder_code_verified: boolean }> = {}
 
 function setSession(token: string, user: UserOut) {
   mockToken = token
@@ -663,32 +663,46 @@ function handoverGenerate(ctx: Ctx, id: number): AxiosResponse {
   const m = mockMatches.find((x) => x.id === id)
   if (!m) return fail(ctx.config, 2001, '匹配不存在', 404)
   if (m.status !== 1) return fail(ctx.config, 3003, '仅认领中（待交接）的匹配可生成交接码', 409)
-  const code = genCode(6)
-  handoverState[id] = { code, verified_by_lost: false, verified_by_finder: false }
+  // 演示用户在此匹配中的角色（lost=失主 / finder=拾得者）
+  const myRole = m.lost_item && m.lost_item.publisher_id === mockUser.id ? 'lost' : 'finder'
+  // 双码模型：失主码 + 拾得者码 各 4 位，10 秒 TTL（与后端一致）
+  const lostCode = genCode(4)
+  const finderCode = genCode(4)
+  handoverState[id] = {
+    lost_code: lostCode,
+    finder_code: finderCode,
+    lost_code_verified: false,
+    finder_code_verified: false,
+  }
+  const myCode = myRole === 'lost' ? lostCode : finderCode
+  const peerCode = myRole === 'lost' ? finderCode : lostCode
   return ok(ctx.config, {
-    code,
-    qr_token: Math.random().toString(36).slice(2) + Date.now().toString(36),
-    expire_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    role: myRole,
+    code: myCode,
+    expire_at: new Date(Date.now() + 10 * 1000).toISOString(),
+    peer_code: peerCode, // 仅演示模式返回对方码，便于单浏览器完成交叉验证
   })
 }
 
 function handoverVerify(ctx: Ctx, id: number): AxiosResponse {
   const b = ctx.body as Record<string, string>
-  const code = (b.code || '').trim().toUpperCase()
-  const role = b.role
+  const code = (b.code || '').trim()
+  const role = b.role // 谁在验证：lost=失主输入拾得者码 / finder=拾得者输入失主码
   const st = handoverState[id]
-  if (!st) return fail(ctx.config, 4001, '交接码无效', 400)
-  if (st.code !== code) return fail(ctx.config, 4001, '交接码无效', 400)
+  if (!st) return fail(ctx.config, 4001, '请先生成交接码', 400)
+  // 校验：lost 用户应输入 finder_code；finder 用户应输入 lost_code
+  const expected = role === 'lost' ? st.finder_code : st.lost_code
+  if (code !== expected) return fail(ctx.config, 4001, '交接码不正确', 400)
   if (role === 'lost') {
-    if (st.verified_by_lost) return fail(ctx.config, 4003, '失主端已验证，请等待对方确认', 409)
-    st.verified_by_lost = true
+    if (st.finder_code_verified) return fail(ctx.config, 4003, '已验证，请等待对方确认', 409)
+    st.finder_code_verified = true // 失主输对了拾得者码
   } else if (role === 'finder') {
-    if (st.verified_by_finder) return fail(ctx.config, 4003, '拾得者端已验证，请等待对方确认', 409)
-    st.verified_by_finder = true
+    if (st.lost_code_verified) return fail(ctx.config, 4003, '已验证，请等待对方确认', 409)
+    st.lost_code_verified = true // 拾得者输对了失主码
   } else {
     return fail(ctx.config, 9001, 'role 必须为 lost 或 finder', 422)
   }
-  const both = st.verified_by_lost && st.verified_by_finder
+  const both = st.lost_code_verified && st.finder_code_verified
   if (both) {
     const m = mockMatches.find((x) => x.id === id)
     if (m) {
@@ -698,8 +712,8 @@ function handoverVerify(ctx: Ctx, id: number): AxiosResponse {
   }
   return ok(ctx.config, {
     both_verified: both,
-    verified_by_lost: st.verified_by_lost,
-    verified_by_finder: st.verified_by_finder,
+    lost_code_verified: st.lost_code_verified,
+    finder_code_verified: st.finder_code_verified,
   })
 }
 

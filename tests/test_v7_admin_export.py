@@ -92,23 +92,48 @@ def test_export_csv_columns_and_accounts(client, db):
     assert "text/csv" in r.headers.get("content-type", "")
     text = r.text
 
-    # 列完整（与后端 _FORENSIC_FIELDS 对齐）
-    header = text.splitlines()[0]
+    # v8 长表（2026-08-20）：表头必须是 记录ID,字段,值,说明，且整张文件就这一张表
+    header_line = text.splitlines()[0]
+    # 兼容"# ..."取证声明注释行：剥掉注释行后再取表头
+    non_comment = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+    assert non_comment, "CSV 应至少包含表头一行"
+    header = non_comment[0]
+    assert header.startswith("记录ID,字段,值,说明"), f"长表表头不符：{header!r}"
+    # 不应再有「字段说明」之类的单独块
+    assert "字段说明" not in text, "v8 已移除独立的字段说明块，整张 CSV 仅为一张长表"
+    assert "found_title" not in text, "FoundItem 无 title 字段，导出不应引用"
+
+    # 解析长表，按记录 ID + 字段 索引
+    import csv as _csv
+    import io as _io
+
+    reader = _csv.DictReader(_io.StringIO("\n".join(non_comment)))
+    long_rows = list(reader)
+    assert long_rows, "长表至少应有数据行"
+    by_field: dict[str, list[dict]] = {}
+    for row in long_rows:
+        by_field.setdefault(row["字段"], []).append(row)
+
+    # 列完整（与后端 PROFILE_FIELDS 对齐）
+    # v8 长表只含匹配记录字段；对话已抽离为独立流水（见下方对话断言）。
     for col in (
         "match_id",
         "lost_item_id",
-        "found_item_id",
+        "lost_category",
+        "lost_title",
         "lost_student_no",
         "lost_phone",
+        "lost_real_name",
+        "found_item_id",
+        "found_category",
         "found_student_no",
         "found_phone",
+        "found_real_name",
+        "match_score",
+        "status",
         "completed_at",
-        "conversation",
     ):
-        assert col in header, f"导出缺少列 {col}"
-    # v7 收尾修复①：FoundItem 无 title 字段，导出列不应含 found_title
-    # （后端若仍引用 found.title 会 500；此处显式断言该笔误已被剔除）
-    assert "found_title" not in header, "导出列不应含 found_title（FoundItem 无 title 字段，引用会 500）"
+        assert col in by_field, f"导出缺少字段 {col}"
 
     # 双方明文账号（student_no / phone 来自真实用户，未脱敏）
     ua = db.get(User, uid_a)
@@ -118,5 +143,11 @@ def test_export_csv_columns_and_accounts(client, db):
     assert ub.student_no in text, "导出应含拾主明文 student_no"
     assert ub.phone in text, "导出应含拾主明文 phone"
 
-    # 对话文本
-    assert "你好，这是我的失物" in text, "导出应含 IM 对话文本"
+    # 对话：独立于长表的可读流水（时间 + 角色 + 内容），呈现双方完整说话流程
+    assert "# ===== 对话记录" in text, "导出应含独立对话流水区块"
+    assert "失主：你好，这是我的失物" in text, "导出应含对话文本（时间 角色：内容 形式）"
+
+    # 编码字段「说明」直接解出该值的具体含义（而非只写字段名）
+    status_row = next(r for r in long_rows if r["字段"] == "status")
+    assert "匹配状态：" in status_row["说明"], "status 说明应解出具体状态含义"
+    assert "已完成" in status_row["说明"], "status=已完成 的说明应直接写明含义"

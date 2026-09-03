@@ -5,7 +5,6 @@ import {
   clearDemoPreference,
   getDemo,
   getDemoRole,
-  probeBackend,
   setDemo,
   setDemoRole,
 } from '@/utils/demo'
@@ -25,40 +24,19 @@ export const useDemoStore = defineStore('demo', () => {
   // demoRole：演示身份（0 普通用户 / 1 管理员），用于演示态进入管理后台
   const demoRole = ref<number>(getDemoRole())
 
-  /** 启动时探测：用户未手动设置过时，后端不可达则自动开启演示模式 */
+  /** 启动初始化：2026-08-20 演示模式已永久关闭（getDemo 恒 false），
+   *  一律走真实后端，不再因"探测不到"自动开启演示模式。 */
   async function init() {
-    const stored = getDemo()
-    // 注意 getDemo() 在 null 时返回 false；这里需要判断是否“从未手动设置”
-    const raw = (() => {
-      try {
-        return localStorage.getItem('lf_demo_mode')
-      } catch {
-        return null
-      }
-    })()
-    if (raw === null) {
-      const ok = await probeBackend()
-      backendReachable.value = ok
-      if (!ok) {
-        setDemo(true)
-        enabled.value = true
-        autoDetected.value = true
-        bannerVisible.value = true
-      } else {
-        enabled.value = false
-        autoDetected.value = false
-      }
-    } else {
-      enabled.value = stored
-      autoDetected.value = false
-    }
+    enabled.value = false
+    autoDetected.value = false
+    backendReachable.value = null
     applyDemoMode()
   }
 
-  /** 手动切换演示模式 */
-  function setEnabled(on: boolean) {
-    setDemo(on)
-    enabled.value = on
+  /** 手动切换演示模式：已永久关闭，恒为真实后端（保留签名防调用方断裂）。 */
+  function setEnabled(_on: boolean) {
+    setDemo(false)
+    enabled.value = false
     autoDetected.value = false
     applyDemoMode()
     dataVersion.value += 1
@@ -71,7 +49,7 @@ export const useDemoStore = defineStore('demo', () => {
     dataVersion.value += 1
   }
 
-  /** 恢复“自动探测”语义 */
+  /** 恢复“自动探测”语义（演示模式已关闭，等同直接回到真实后端） */
   function resetToAuto() {
     clearDemoPreference()
     enabled.value = false
@@ -80,14 +58,13 @@ export const useDemoStore = defineStore('demo', () => {
     init()
   }
 
-  /** 网络错误时由请求层调用：自动切演示模式并弹出 Banner（不重复切换） */
+  /** 网络错误回退：2026-08-20 起演示模式永久关闭，
+   *  网络错误只由请求层提示，不再自动切换（保留签名防调用方断裂）。 */
   function notifyNetworkFallback() {
-    if (!enabled.value) {
-      setDemo(true)
-      enabled.value = true
-    }
-    autoDetected.value = true
-    bannerVisible.value = true
+    setDemo(false)
+    enabled.value = false
+    autoDetected.value = false
+    bannerVisible.value = false
   }
 
   /** 用户手动关闭 Banner（不退出演示模式，仅隐藏提示条） */

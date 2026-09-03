@@ -95,7 +95,7 @@ def test_upgrade_head_creates_0004_columns_and_indexes():
 
         with engine.connect() as conn:
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0006_flow_v2"
+        assert ver == "0008_clip_reorder_and_correction"
     finally:
         try:
             engine.dispose()
@@ -122,7 +122,7 @@ def test_upgrade_idempotent_rerun():
         engine = create_engine(db_url)
         with engine.connect() as conn:
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0006_flow_v2"
+        assert ver == "0008_clip_reorder_and_correction"
         assert "expires_at" in _columns(engine, "lost_item")
         assert "flow_type" in _columns(engine, "match_record")
     finally:

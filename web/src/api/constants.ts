@@ -63,7 +63,7 @@ export const KEEP_STATUS_LABEL: Record<number, string> = {
 /** 「已完成交接」tab 状态徽标文案（v6：已解决项专属徽标，避免硬编码） */
 export const RESOLVED_BADGE_LABEL = '已完成交接'
 
-/** 审计操作类型中文映射（app/services/audit_service.py / common.AuditAction） */
+/** 审计操作类型中文映射（与后端 app/routers/admin.py _AUDIT_ACTION_MEANING 对齐） */
 export const AUDIT_ACTION_LABEL: Record<string, string> = {
   publish_lost: '发布失物',
   publish_found: '发布拾物',
@@ -75,10 +75,38 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   handover_verify: '验证交接码',
   ban: '封禁',
   appeal: '申诉',
+  im_message: '发送消息',
+  im_success_archive: '对话归档',
+  manual_match_create: '手动创建匹配',
+  manual_self_complete: '手动完成',
+  match_give_up: '放弃匹配',
+  keep1_claim_complete: '单边认领即完成',
+  keep1_claim_revoke: '撤销单边认领',
+  register_admin: '注册管理员',
+  admin_list_users: '查看用户列表',
+  admin_view_match_detail: '查看匹配详情',
+  admin_export: '导出取证数据',
 }
 
 export function auditActionLabel(action: string): string {
   return AUDIT_ACTION_LABEL[action] || action
+}
+
+/** 审计操作对象类型中文映射（与后端 _AUDIT_TARGET_TYPE_MEANING 对齐） */
+export const AUDIT_TARGET_TYPE_LABEL: Record<string, string> = {
+  user: '用户',
+  item: '物品',
+  lost: '失物条目',
+  found: '拾物条目',
+  lost_item: '失物条目',
+  found_item: '拾物条目',
+  match: '匹配记录',
+  handover: '交接码',
+  im_session: '会话',
+}
+
+export function auditTargetTypeLabel(t: string | null | undefined): string {
+  return AUDIT_TARGET_TYPE_LABEL[t ?? ''] || t || '—'
 }
 
 export function categoryName(id: number | null | undefined): string {

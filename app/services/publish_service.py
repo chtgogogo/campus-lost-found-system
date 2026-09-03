@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.exceptions import CategoryError, MatchProcessedError, NotFoundError, ParamError
 from app.models.category import Category
+from app.models.correction import CorrectionSample
 from app.models.item import FoundItem, LostItem
 from app.models.match import MatchRecord
 from app.models.user import TrustScoreLog
@@ -151,6 +152,35 @@ class PublishService:
             return vision_result["label"]
         return None
 
+    def _record_correction_sample(
+        self,
+        item_type: str,
+        item_id: int,
+        user_id: Optional[int],
+        vision_result: dict,
+        final_category_name: str,
+    ) -> None:
+        """数据飞轮（2026-08-27，④）：用户最终分类 ≠ 视觉预标 → 记录纠错样本。
+
+        只加存储不加推理逻辑；任何失败静默（不影响发布主流程）。
+        攒够数据后可：① 微调 YOLO；② 统计高频误分类修正类目映射。
+        """
+        try:
+            vision_label = self._vision_label(vision_result)
+            if not vision_label or vision_label == final_category_name:
+                return
+            self.db.add(
+                CorrectionSample(
+                    item_type=item_type,
+                    item_id=item_id,
+                    user_id=user_id,
+                    vision_label=vision_label,
+                    final_category_name=final_category_name,
+                )
+            )
+        except Exception:  # pragma: no cover - 防御性兜底
+            pass
+
     # ---------------- 失物发布 ----------------
     def publish_lost(
         self,
@@ -210,6 +240,10 @@ class PublishService:
             ip=ip,
             ua=ua,
             detail=f"title={dto.title};category_id={category_id};category_name={dto.category_name.strip()};tags={tags}",
+        )
+        # 数据飞轮：用户最终分类 ≠ 视觉预标 → 记录纠错样本
+        self._record_correction_sample(
+            "lost", lost.id, publisher.id, vision_result, category_name
         )
 
         matches = self._reverse_match_lost(lost)
@@ -298,6 +332,10 @@ class PublishService:
             ip=ip,
             ua=ua,
             detail=f"keep_status={dto.keep_status};category_id={category_id};category_name={dto.category_name.strip()};tags={tags}",
+        )
+        # 数据飞轮：用户最终分类 ≠ 视觉预标 → 记录纠错样本
+        self._record_correction_sample(
+            "found", found.id, finder.id, vision_result, category_name
         )
 
         matches = self._reverse_match_found(found)

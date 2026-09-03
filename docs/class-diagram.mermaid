@@ -1,121 +1,76 @@
 classDiagram
-    %% ===== 图例：<<变更>> 改动字段/方法 / <<新增>> 新类或新字段 =====
-
-    class LostItem {
-        <<复用>>
+    class HandoverCode {
         +BigInteger id
-        +int publisher_id
-        +int category_id
-        +str category_name
-        +str title
-        +Text description
-        +JSON images
-        +str color
-        +JSON tags
-        +str image_hash
-        +SmallInt status   %% 0待匹配/1匹配中/2待认领/3已解决
-    }
-
-    class FoundItem {
-        <<复用>>
-        +BigInteger id
-        +int finder_id
-        +int category_id
-        +str category_name
-        +Text description
-        +JSON images
-        +JSON tags
-        +str image_hash
-        +SmallInt keep_status   %% 0暂为保管/1未挪动(文案改名)
-        +SmallInt contact_allowed  %% keep_status=0 时强制=1
-        +SmallInt status   %% 0待认领/1已解决
+        +BigInteger match_id
+        +SmallInteger seq
+        +String|None lost_code
+        +String|None finder_code
+        +DateTime|None lost_code_expire
+        +DateTime|None finder_code_expire
+        +Boolean lost_code_verified
+        +Boolean finder_code_verified
+        +SmallInteger status
+        +String|None gps_lost
+        +String|None gps_finder
+        +DateTime generated_at
     }
 
     class MatchRecord {
-        <<变更·枚举>>
         +BigInteger id
-        +int lost_id
-        +int found_id
+        +BigInteger lost_id
+        +BigInteger found_id
         +Numeric match_score
-        +SmallInt status   %% v4: 0待认领/1认领中/2已完成/3已拒绝/4待自取(MANUAL_PENDING)
+        +SmallInteger status
+        +SmallInteger flow_type
+        +Text|None claim_reason
+        +String|None code
+        +DateTime|None code_expire
+        +DateTime created_at
+        +DateTime|None completed_at
     }
 
-    class MatchStatus {
-        <<变更·枚举>>
-        +PENDING_CLAIM = 0
-        +CLAIMING = 1
-        +COMPLETED = 2
-        +REJECTED = 3
-        +MANUAL_PENDING = 4  %% v4 新增(待自取/自行寻找中)
+    class HandoverService {
+        -Session db
+        +generate_code(match_id, operator_id) HandoverCode
+        +verify(match_id, code, role, gps, operator_id) dict
     }
 
-    class TaggingService {
-        <<变更>>
-        +list~str~ COLOR_WORDS
-        +list~str~ LOCATION_WORDS
-        +list~str~ ITEM_NOUN_WORDS  %% v4 新增(物品名词典)
-        +extract(title, description, vision_label, category_name) list~str~  %% v4 顺序:名词>颜色>地点>视觉label
+    class HandoverGenerateOut {
+        +str role
+        +str code
+        +datetime expire_at
     }
 
-    class MatchService {
-        <<变更>>
-        +score(lost, found) float  %% v4: containment + 颜色门控
-        +tag_containment_factor(lost_tags, found_tags) float  %% v4 新增(替代对称 jaccard)
-        +color_conflict(lost_tags, found_tags) bool  %% v4 新增(硬门控)
-        +photo_sim_factor(a,b) float
-        +category_hit(exact) float
-        +time_decay_factor(lt,ft) float
+    class HandoverVerifyRequest {
+        +str code
+        +str role
+        +str|None gps
     }
 
-    class PublishService {
-        <<变更>>
-        +publish_lost(publisher, dto) tuple
-        +publish_found(finder, dto) tuple
-        +_resolve_category_id(category_name, vision, noun_tags) int  %% v4 新增(名词优先解析)
-        +_reverse_match_lost(lost) list  %% v4 名词召回+颜色门控
-        +_reverse_match_found(found) list  %% v4 名词召回+颜色门控
+    class HandoverVerifyOut {
+        +bool both_verified
+        +bool lost_code_verified
+        +bool finder_code_verified
     }
 
-    class MatchRouter {
-        <<变更>>
-        +GET /matches?status=
-        +POST /matches/manual  %% v4 新增(申请匹配→status=4)
-        +POST /matches/{id}/self-complete  %% v4 新增(未挪动自取单边归档)
-    }
-
-    class IMRouter {
-        <<变更>>
-        +POST /im/sessions  %% v4 支持 found_id(无 match)
-        +GET /im/sessions/{id}/messages
-        +POST /im/sessions/{id}/messages
-    }
-
-    class IMSession {
-        <<复用·零迁移>>
+    class LostItem {
         +BigInteger id
-        +int match_id  %% 已可空(v4 无 match 会话 match_id=null)
-        +int lost_user_id
-        +int finder_user_id
-        +SmallInt status
-        +DateTime expires_at
+        +BigInteger publisher_id
+        +SmallInteger status
     }
 
-    class IMMessage {
-        <<复用>>
+    class FoundItem {
         +BigInteger id
-        +int session_id
-        +int sender_id
-        +SmallInt sender_role
-        +SmallInt content_type
-        +str content
+        +BigInteger finder_id
+        +SmallInteger status
     }
 
-    LostItem "1" --> "0..*" MatchRecord : lost_id
-    FoundItem "1" --> "0..*" MatchRecord : found_id
-    MatchRouter ..> MatchService : 打分/手动建匹配
-    MatchRouter ..> MatchStatus : status=4
-    PublishService ..> TaggingService : 名词抽取(v4)
-    PublishService ..> MatchService : 反向匹配(v4召回)
-    IMRouter ..> IMSession : 创建(支持 found_id)
-    IMRouter ..> IMMessage : CRUD
-    MatchRecord ..> MatchStatus : 状态枚举
+    HandoverCode }o--|| MatchRecord : match_id FK
+    MatchRecord }o--|| LostItem : lost_id FK
+    MatchRecord }o--|| FoundItem : found_id FK
+    HandoverService --> HandoverCode : reads/writes
+    HandoverService --> MatchRecord : reads/writes
+    HandoverService --> LostItem : reads
+    HandoverService --> FoundItem : reads
+    HandoverGenerateOut ..> HandoverCode : maps from
+    HandoverVerifyOut ..> HandoverService : maps from verify result

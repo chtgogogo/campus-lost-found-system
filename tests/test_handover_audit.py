@@ -1,4 +1,11 @@
-"""交接码 + 审计日志测试：端到端闭环 + 服务级 TTL/冲突/双写 + 审计落库。"""
+"""交接码 + 审计日志测试：端到端闭环 + 服务级 TTL/冲突/双写 + 审计落库。
+
+双码交叉验证模型：
+- 失主生成 lost_code → 拾得者生成 finder_code
+- 失主输入拾得者的码（role="lost"）→ finder_code_verified=True
+- 拾得者输入失主的码（role="finder"）→ lost_code_verified=True
+- 双方验证 → 交接完成
+"""
 from __future__ import annotations
 
 import re
@@ -8,7 +15,9 @@ import pytest
 
 from app.core.exceptions import MatchProcessedError
 from app.models.audit import AuditLog
+from app.models.item import FoundItem, LostItem
 from app.models.match import HandoverCode, MatchRecord
+from app.models.user import User
 from app.schemas.common import HandoverStatus, MatchStatus
 from app.services.handover_service import (
     HandoverConflictError,
@@ -20,6 +29,43 @@ from app.services.handover_service import (
 from conftest import API, PNG, auth_header, publish_pair
 
 
+# ---------------- 服务级 helper ----------------
+def _make_match_with_items(db, status=None):
+    """创建 User + LostItem + FoundItem + MatchRecord，供服务级测试使用。"""
+    u_lost = User(student_no="svc_lost", phone="13000000021", password_hash="x")
+    u_found = User(student_no="svc_found", phone="13000000022", password_hash="x")
+    db.add_all([u_lost, u_found])
+    db.flush()
+
+    lost = LostItem(
+        publisher_id=u_lost.id,
+        category_name="书包",
+        title="黑色书包",
+        description="图书馆丢失黑色书包",
+        status=2,
+    )
+    found = FoundItem(
+        finder_id=u_found.id,
+        category_name="书包",
+        description="捡到黑色书包",
+        images=[],
+        keep_status=0,
+    )
+    db.add_all([lost, found])
+    db.flush()
+
+    m = MatchRecord(
+        lost_id=lost.id,
+        found_id=found.id,
+        match_score=85.0,
+        status=status if status is not None else int(MatchStatus.CLAIMING),
+    )
+    db.add(m)
+    db.flush()
+    return m, u_lost, u_found
+
+
+# ---------------- E2E ----------------
 def test_handover_e2e_and_audit(client, db):
     token_a, token_b, lost_id, match_id = publish_pair(client)
 
@@ -36,27 +82,37 @@ def test_handover_e2e_and_audit(client, db):
     r = client.post(f"{API}/matches/{match_id}/confirm-return", headers=auth_header(token_b))
     assert r.status_code == 200
 
-    # 生成交接码
+    # 失主生成 lost_code
     r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_a))
     assert r.status_code == 200, r.text
-    body = r.json()
-    code = body["data"]["code"]
-    assert re.fullmatch(r"[A-Z2-9]{6}", code), code
-    assert len(body["data"]["qr_token"]) == 64
+    body = r.json()["data"]
+    assert body["role"] == "lost"
+    lost_code = body["code"]
+    assert re.fullmatch(r"\d{4}", lost_code), lost_code
 
-    # 双端验证（先失主，后拾得者）
+    # 拾得者生成 finder_code
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_b))
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert body["role"] == "finder"
+    finder_code = body["code"]
+    assert re.fullmatch(r"\d{4}", finder_code), finder_code
+
+    # 交叉验证：失主输入拾得者的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=auth_header(token_a),
-        json={"code": code, "role": "lost", "gps": "30.123,104.456"},
+        json={"code": finder_code, "role": "lost", "gps": "30.123,104.456"},
     )
     assert r.status_code == 200
     assert r.json()["data"]["both_verified"] is False
+    assert r.json()["data"]["finder_code_verified"] is True
 
+    # 交叉验证：拾得者输入失主的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=auth_header(token_b),
-        json={"code": code, "role": "finder", "gps": "30.124,104.457"},
+        json={"code": lost_code, "role": "finder", "gps": "30.124,104.457"},
     )
     assert r.status_code == 200
     assert r.json()["data"]["both_verified"] is True
@@ -104,14 +160,16 @@ def test_handover_verify_invalid_code(client):
         headers=auth_header(token_a),
         json={"claim_reason": "特征吻合"},
     )
+    # 失主生成 lost_code（finder_code 尚未生成）
     r = client.post(
         f"{API}/matches/{match_id}/handover/generate",
         headers=auth_header(token_a),
     )
+    # 验证 role="lost" 时对方（finder_code）尚未生成 → 4001
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=auth_header(token_a),
-        json={"code": "ZZZZZZ", "role": "lost"},
+        json={"code": "9999", "role": "lost"},
     )
     assert r.status_code == 400
     assert r.json()["code"] == 4001
@@ -119,73 +177,67 @@ def test_handover_verify_invalid_code(client):
 
 # ---------------- 服务级（直接调用 HandoverService，db 双写可验证） ----------------
 def test_handover_service_generate_success_and_seq(db):
-    m = MatchRecord(lost_id=1, found_id=1, match_score=85.0, status=int(MatchStatus.CLAIMING))
-    db.add(m)
-    db.flush()
-    hc = HandoverService(db).generate_code(m.id)
-    assert re.fullmatch(r"[A-Z2-9]{6}", hc.code)
+    m, u_lost, u_found = _make_match_with_items(db)
+    # 失主生成 → seq=1，lost_code 设置
+    hc, role = HandoverService(db).generate_code(m.id, operator_id=u_lost.id)
+    assert role == "lost"
+    assert re.fullmatch(r"\d{4}", hc.lost_code)
     assert hc.seq == 1
-    # 再次生成 seq 自增（双写镜像到 match_record.code）
-    hc2 = HandoverService(db).generate_code(m.id)
-    assert hc2.seq == 2
+    # 拾得者生成 → 同一行（seq 不变），finder_code 设置
+    hc2, role2 = HandoverService(db).generate_code(m.id, operator_id=u_found.id)
+    assert role2 == "finder"
+    assert re.fullmatch(r"\d{4}", hc2.finder_code)
+    assert hc2.seq == 1
+    assert hc2.id == hc.id  # 同一行
+    # 镜像到 match_record.code（最近一次生成的码）
     db.expire_all()
     refreshed = db.query(MatchRecord).filter(MatchRecord.id == m.id).one()
-    assert refreshed.code == hc2.code
+    assert refreshed.code == hc2.finder_code
 
 
 def test_handover_service_generate_requires_claiming(db):
-    m = MatchRecord(
-        lost_id=1, found_id=1, match_score=85.0, status=int(MatchStatus.PENDING_CLAIM)
-    )
-    db.add(m)
-    db.flush()
+    m, u_lost, _ = _make_match_with_items(db, status=int(MatchStatus.PENDING_CLAIM))
     with pytest.raises(MatchProcessedError):
-        HandoverService(db).generate_code(m.id)
+        HandoverService(db).generate_code(m.id, operator_id=u_lost.id)
 
 
 def test_handover_service_expired(db):
-    m = MatchRecord(lost_id=1, found_id=1, match_score=85.0, status=int(MatchStatus.CLAIMING))
-    db.add(m)
-    db.flush()
+    m, _, _ = _make_match_with_items(db)
     hc = HandoverCode(
         match_id=m.id,
         seq=1,
-        code="EXPTST",
-        qr_token="x" * 64,
+        finder_code="1234",
+        finder_code_expire=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=5),
         status=int(HandoverStatus.VALID),
-        expire_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5),
     )
     db.add(hc)
     db.commit()
     with pytest.raises(HandoverExpiredError) as exc:
-        HandoverService(db).verify(code="EXPTST", role="lost")
+        HandoverService(db).verify(match_id=m.id, code="1234", role="lost")
     assert exc.value.code == 4002
     assert exc.value.http_status == 400
 
 
 def test_handover_service_conflict(db):
-    m = MatchRecord(lost_id=1, found_id=1, match_score=85.0, status=int(MatchStatus.CLAIMING))
-    db.add(m)
-    db.flush()
+    m, _, _ = _make_match_with_items(db)
     hc = HandoverCode(
         match_id=m.id,
         seq=1,
-        code="CNFTST",
-        qr_token="y" * 64,
+        finder_code="1234",
+        finder_code_expire=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=30),
         status=int(HandoverStatus.VALID),
-        expire_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=30),
     )
     db.add(hc)
     db.commit()
-    res = HandoverService(db).verify(code="CNFTST", role="lost")
-    assert res["verified_by_lost"] is True
+    res = HandoverService(db).verify(match_id=m.id, code="1234", role="lost")
+    assert res["finder_code_verified"] is True
     assert res["both_verified"] is False
     with pytest.raises(HandoverConflictError) as exc:
-        HandoverService(db).verify(code="CNFTST", role="lost")
+        HandoverService(db).verify(match_id=m.id, code="1234", role="lost")
     assert exc.value.code == 4003
     assert exc.value.http_status == 409
 
 
 def test_handover_service_invalid_code(db):
     with pytest.raises(HandoverInvalidError):
-        HandoverService(db).verify(code="NOPE11", role="lost")
+        HandoverService(db).verify(match_id=99999, code="9999", role="lost")

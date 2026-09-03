@@ -308,6 +308,12 @@ def test_v6_migration_head_is_0004():
     revs, heads = _migration_chain()
     assert "0004_v7_incremental" in revs, "v7 应存在 0004_v7_incremental 迁移"
     assert "0005_v8_match" in revs, "v8 应存在 0005_v8_match 迁移"
-    # flow-v2 增量在 0005 之上追加 0006_flow_v2（flow_type + lost_time nullable），head 现为 0006。
+    # flow-v2 增量在 0005 之上追加 0006_flow_v2（flow_type + lost_time nullable）。
     assert "0006_flow_v2" in revs, "flow-v2 应存在 0006_flow_v2 迁移"
-    assert heads == ["0006_flow_v2"], f"迁移 head 应为 0006_flow_v2，实际 {heads}"
+    # 双码交接码重构在 0006 之上追加 0007_dual_handover_code；
+    # v11（2026-08-27）在 0007 之上追加 0008_clip_reorder_and_correction，head 现为 0008。
+    assert "0007_dual_handover_code" in revs, "应存在 0007_dual_handover_code 迁移"
+    assert "0008_clip_reorder_and_correction" in revs, "应存在 0008_clip_reorder_and_correction 迁移"
+    assert heads == ["0008_clip_reorder_and_correction"], (
+        f"迁移 head 应为 0008_clip_reorder_and_correction，实际 {heads}"
+    )

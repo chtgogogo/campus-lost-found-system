@@ -40,6 +40,8 @@ EXPECTED_TABLES = [
     "im_session",
     "im_message",
     "trust_score_log",
+    # v11（2026-08-27）：数据飞轮——用户纠错样本表
+    "correction_sample",
 ]
 
 
@@ -70,12 +72,12 @@ def _mysql_available() -> bool:
 
 
 def test_metadata_registers_10_tables():
-    """不依赖真实 MySQL：Base.metadata 即 create_all 的建表依据，断言恰好 10 张表。
+    """不依赖真实 MySQL：Base.metadata 即 create_all 的建表依据，断言恰好 11 张表。
 
-    即便本机 MySQL 因鉴权/未启动而跳过，也能保证“10 张表”这一目标本身被覆盖。
+    即便本机 MySQL 因鉴权/未启动而跳过，也能保证“11 张表”这一目标本身被覆盖。
     """
-    assert len(Base.metadata.tables) == 10, (
-        f"期望 10 张表，实际 {len(Base.metadata.tables)}: "
+    assert len(Base.metadata.tables) == 11, (
+        f"期望 11 张表，实际 {len(Base.metadata.tables)}: "
         f"{sorted(Base.metadata.tables.keys())}"
     )
     for expected in EXPECTED_TABLES:
@@ -110,8 +112,8 @@ def test_mysql_init_db_creates_10_tables():
     try:
         Base.metadata.create_all(bind=engine)
         table_names = inspect(engine).get_table_names()
-        assert len(table_names) == 10, (
-            f"期望 10 张表，实际 {len(table_names)}: {table_names}"
+        assert len(table_names) == 11, (
+            f"期望 11 张表，实际 {len(table_names)}: {table_names}"
         )
         for expected in EXPECTED_TABLES:
             assert expected in table_names, f"缺少表 {expected}"

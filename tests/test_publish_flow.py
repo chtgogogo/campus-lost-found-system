@@ -161,28 +161,40 @@ def test_publish_match_claim_handover(client: TestClient):
     )
     assert r.status_code == 200, r.text
 
-    # ---- 生成交接码（A 或 B 均可） ----
+    # ---- 生成交接码（失主生成 lost_code） ----
     r = client.post(
         f"{API}/matches/{match_id}/handover/generate",
         headers=_auth_header(token_a),
     )
     assert r.status_code == 200, r.text
-    code = r.json()["data"]["code"]
-    assert len(code) == 6
+    lost_code = r.json()["data"]["code"]
+    assert len(lost_code) == 4
+    assert r.json()["data"]["role"] == "lost"
 
-    # ---- 双端验证 ----
+    # 拾得者生成 finder_code
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/generate",
+        headers=_auth_header(token_b),
+    )
+    assert r.status_code == 200, r.text
+    finder_code = r.json()["data"]["code"]
+    assert len(finder_code) == 4
+    assert r.json()["data"]["role"] == "finder"
+
+    # ---- 交叉验证：失主输入拾得者的码 ----
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=_auth_header(token_a),
-        json={"code": code, "role": "lost", "gps": "30.123,104.456"},
+        json={"code": finder_code, "role": "lost", "gps": "30.123,104.456"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is False
 
+    # 交叉验证：拾得者输入失主的码
     r = client.post(
         f"{API}/matches/{match_id}/handover/verify",
         headers=_auth_header(token_b),
-        json={"code": code, "role": "finder", "gps": "30.124,104.457"},
+        json={"code": lost_code, "role": "finder", "gps": "30.124,104.457"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["both_verified"] is True

@@ -55,6 +55,81 @@ _EXPORT_FIELDS = [
     "created_at",
 ]
 
+# 审计日志字段含义表（字段 → 基础含义）。导出长表时把说明直接写到对应行的「说明」列，
+# 不再单独成块（v8 之前会把字段说明追加到文件末尾，2026-08-20 取消）。
+_AUDIT_FIELD_MEANING: dict[str, str] = {
+    "id": "审计记录自增主键",
+    "user_id": "操作人用户ID（空=系统/匿名）",
+    "action": "操作类型",
+    "target_type": "操作对象类型",
+    "target_id": "操作对象ID",
+    "ip": "操作者来源IP",
+    "ua": "操作者浏览器/设备标识（User-Agent）",
+    "session_id": "登录会话标识",
+    "gps": "操作地理位置（如有）",
+    "detail": "操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）",
+    "created_at": "操作发生时间（ISO8601 UTC）",
+}
+
+# 审计编码字段取值字典：让「说明」列直接解出该值的具体含义，而不是只写字段名。
+_AUDIT_ACTION_MEANING: dict[str, str] = {
+    "publish_lost": "发布失物",
+    "publish_found": "发布拾物",
+    "claim": "认领",
+    "confirm_return": "确认归还",
+    "reject": "拒绝认领",
+    "handover_generate": "生成交接码",
+    "handover_complete": "交接完成",
+    "handover_verify": "验证交接码",
+    "ban": "封禁用户",
+    "appeal": "申诉",
+    "im_message": "发送消息",
+    "im_success_archive": "对话归档（交接成功后消息留存）",
+    "manual_match_create": "管理员手动创建匹配",
+    "manual_self_complete": "管理员手动完成（单边直达终态）",
+    "match_give_up": "放弃匹配",
+    "keep1_claim_complete": "单边认领即完成（keep1）",
+    "keep1_claim_revoke": "撤销单边认领（keep1）",
+    "register_admin": "注册管理员",
+    "admin_list_users": "管理员查看用户列表",
+    "admin_view_match_detail": "管理员查看匹配详情",
+    "admin_export": "管理员导出取证数据",
+}
+_AUDIT_TARGET_TYPE_MEANING: dict[str, str] = {
+    "user": "用户",
+    "item": "物品",
+    "lost": "失物条目",
+    "found": "拾物条目",
+    "lost_item": "失物条目",
+    "found_item": "拾物条目",
+    "match": "匹配记录",
+    "handover": "交接码",
+    "im_session": "会话",
+}
+
+
+def _audit_field_explanation(field: str, value) -> str:
+    """审计「说明」：基础含义 +（编码字段）该值的具体含义。
+
+    - `action=handover_complete` → "操作类型：handover_complete=交接完成"
+    - `target_type=match` → "操作对象类型：match=匹配记录"
+    - 普通字段（如 ip） → 仅基础含义
+    """
+    base = _AUDIT_FIELD_MEANING.get(field, "")
+    if field == "action" and value in _AUDIT_ACTION_MEANING:
+        return f"操作类型：{value}={_AUDIT_ACTION_MEANING[value]}"
+    if field == "target_type" and value in _AUDIT_TARGET_TYPE_MEANING:
+        return f"操作对象类型：{value}={_AUDIT_TARGET_TYPE_MEANING[value]}"
+    return base
+
+# 长表列定义：与 `admin_export_service.LONG_FORMAT_COLUMNS` 对齐。
+_LONG_COLUMNS = ["记录ID", "字段", "值", "说明"]
+
+_AUDIT_LEGEND_HEADER = (
+    "本文件由失物招领系统自动生成，与审计黑匣子一致，"
+    "可作为责任认定（追责）依据。时间均为 UTC（ISO8601）。"
+)
+
 
 def _serialize(row: AuditLog) -> dict:
     return {
@@ -78,7 +153,13 @@ def export_audit_logs(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    """导出审计日志为 CSV 或 JSON（数据源：MySQL audit_log）。"""
+    """导出审计日志为 CSV 或 JSON（数据源：MySQL audit_log）。
+
+    **v8 长表格式（2026-08-20）**：整张文件就是一张表 `[记录ID, 字段, 值, 说明]`，
+    每条审计记录的每个字段展开成一行，说明直接跟在值后面；不再有单独一块
+    「审计日志字段说明」。记录 ID = 该审计记录的 `id`，方便在 Excel 里按 ID 分组
+    看同一记录的所有字段。
+    """
     if format not in ("csv", "json"):
         return Response(
             content=json.dumps({"code": 9001, "message": "format 仅支持 csv|json"}),
@@ -88,27 +169,76 @@ def export_audit_logs(
     rows = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
     records = [_serialize(r) for r in rows]
 
+    # 长表：每条记录的每个字段一行（说明对该值的具体含义，而非只写字段名）
+    long_rows: list[dict] = []
+    for rec in records:
+        record_id = rec["id"]
+        for field in _EXPORT_FIELDS:
+            long_rows.append({
+                "记录ID": record_id,
+                "字段": field,
+                "值": rec.get(field, ""),
+                "说明": _audit_field_explanation(field, rec.get(field, "")),
+            })
+
     if format == "json":
+        # JSON 也是一张「长表」数组，与 CSV 同源同结构
+        payload = {
+            "_meta": {
+                "导出声明": _AUDIT_LEGEND_HEADER,
+                "记录条数": len(records),
+                "长表行数": len(long_rows),
+                "字段列表": _EXPORT_FIELDS,
+            },
+            "rows": long_rows,
+        }
         return Response(
-            content=json.dumps(records, ensure_ascii=False, indent=2),
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
             media_type="application/json",
             headers={
                 "Content-Disposition": "attachment; filename=audit_logs.json"
             },
         )
 
-    # CSV
+    # CSV：顶部一行 # 取证声明注释，第二行起长表（Excel 打开后第一行仍是表头）
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=_EXPORT_FIELDS, extrasaction="ignore")
+    buf.write(f"# {_AUDIT_LEGEND_HEADER}\n")
+    writer = csv.DictWriter(buf, fieldnames=_LONG_COLUMNS)
     writer.writeheader()
-    for rec in records:
-        writer.writerow(rec)
+    for row in long_rows:
+        writer.writerow(row)
     return PlainTextResponse(
         buf.getvalue(),
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; filename=audit_logs.csv"
         },
+    )
+
+
+@router.get("/audit-logs")
+def list_audit_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """审计日志列表（管理后台页内时间线用，与导出同源）。按 id 降序分页。"""
+    total = db.query(func.count()).select_from(AuditLog).scalar() or 0
+    rows = (
+        db.query(AuditLog)
+        .order_by(AuditLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return success(
+        data=Page[dict](
+            items=[_serialize(r) for r in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
     )
 
 
@@ -329,7 +459,7 @@ def export_matches(
 
     try:
         content, media_type, filename = admin_export_service.render(
-            db, matches, payload.scope, payload.format
+            db, matches, payload.scope, payload.format, exported_by=getattr(admin, "id", None)
         )
     except ExportDependencyError as exc:
         return _error(str(exc))

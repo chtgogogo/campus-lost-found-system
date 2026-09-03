@@ -227,19 +227,32 @@ def test_d2_match_out_carries_v10_dimensions(client):
 # 变更 D3：POST /admin/export（scope × format）
 # ===========================================================================
 def test_d8_legacy_export_call_still_csv(client):
-    """AC-D8：老前端只传 `ids` → 与 v7 行为一致（CSV + 全量取证列）。"""
+    """AC-D8：老前端只传 `ids` → 与 v7 行为一致（CSV + 全量取证列）。
+
+    v8 长表（2026-08-20）：整张 CSV 仅为一张表 `[记录ID, 字段, 值, 说明]`，
+    不再保留 v7 的宽表头；故改为断言"match_id 字段作为长表行的「字段」列存在"。
+    """
     _, _, _, match_id = publish_pair(client)
     token = make_admin(client, "d8")
 
     r = client.post(f"{API}/admin/export", headers=auth_header(token), json={"ids": [match_id]})
     assert r.status_code == 200, r.text
     assert "text/csv" in r.headers["content-type"]
-    assert "match_id" in r.text.splitlines()[0]
+    # 剥掉 # 取证声明注释行后，第一行应是长表表头
+    non_comment = [ln for ln in r.text.splitlines() if not ln.lstrip().startswith("#")]
+    assert non_comment and non_comment[0].startswith("记录ID,字段,值,说明"), \
+        f"长表表头不符：{non_comment[0] if non_comment else '<空>'}"
+    # 取证数据：match_id 字段 + 值=match_id 应同时出现于长表某行
+    assert f",match_id,{match_id}," in r.text
 
 
 @pytest.mark.parametrize("scope", ["profile", "conversation", "all"])
 def test_d3_export_csv_all_scopes(client, scope):
-    """三种 scope 的 CSV 导出都应成功，且表头与 SCOPE_FIELDS 一致。"""
+    """三种 scope 的 CSV 导出都应成功。
+
+    - `profile` / `all`：长表表头 `[记录ID, 字段, 值, 说明]`；
+    - `conversation`：**无长表**，只有独立对话流水（时间 角色：内容）。
+    """
     _, _, _, match_id = publish_pair(client)
     token = make_admin(client, f"d3{scope[:3]}")
 
@@ -249,13 +262,27 @@ def test_d3_export_csv_all_scopes(client, scope):
         json={"ids": [match_id], "format": "csv", "scope": scope},
     )
     assert r.status_code == 200, r.text
-    header = r.text.splitlines()[0].strip()
-    expected = ",".join(admin_export_service.SCOPE_FIELDS[scope])
-    assert header == expected, f"scope={scope} 表头应为 {expected}，实际 {header}"
+    if scope == "conversation":
+        # 对话流水独立于长表：应为「时间 角色：内容」的可读形式（无对话时注明）
+        assert "对话记录" in r.text, f"scope=conversation 应含对话流水区块：{r.text[:200]}"
+        assert (
+            "失主：" in r.text or "拾得者：" in r.text or "无对话记录" in r.text
+        ), f"对话流水应含角色+内容（或无对话提示）：{r.text[:200]}"
+        return
+    non_comment = [ln for ln in r.text.splitlines() if not ln.lstrip().startswith("#")]
+    assert non_comment and non_comment[0].startswith("记录ID,字段,值,说明"), \
+        f"scope={scope} 表头应为 记录ID,字段,值,说明，实际 {non_comment[0] if non_comment else '<空>'}"
+    # 不应再有「字段说明」单独块
+    assert "字段说明" not in r.text
+    # v9：编码字段说明直接解出含义（status=2 → 已完成）
+    assert "匹配状态：" in r.text and "已完成" in r.text, "status 说明应解出具体含义"
 
 
 def test_d3_export_md_is_markdown(client):
-    """md 导出零依赖，应产出 Markdown 表格。"""
+    """md 导出零依赖，应产出 Markdown 表格。
+
+    v8 长表：不再按匹配分节（## 匹配 #N），整张 md 就是一张大表 [记录ID | 字段 | 值 | 说明]。
+    """
     _, _, _, match_id = publish_pair(client)
     token = make_admin(client, "d3md")
 
@@ -266,7 +293,11 @@ def test_d3_export_md_is_markdown(client):
     )
     assert r.status_code == 200, r.text
     assert "# 失物招领取证导出" in r.text
-    assert f"## 匹配 #{match_id}" in r.text
+    # v8 长表头与表头分隔行
+    assert "| 记录ID | 字段 | 值 | 说明 |" in r.text
+    assert "| --- | --- | --- | --- |" in r.text
+    # 该匹配记录应在表中出现
+    assert f"| {match_id} | match_id | {match_id} |" in r.text
 
 
 def test_d3_export_xlsx_is_zip_container(client):

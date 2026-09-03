@@ -52,6 +52,14 @@
             <!-- flow-v3：低分候选弱化标签（suspected 语义不变，前端用 match_score<60 独立派生） -->
             <el-tag v-if="isLowScore(m)" size="small" type="warning" effect="plain">低匹配度·谨慎申请</el-tag>
             <span v-if="m.suspected" class="lf-muted match-sus">疑似匹配</span>
+            <!-- v11：CLIP 后台精排过渡态（图片相似度计算中，稍后刷新可见最终排序） -->
+            <el-tooltip
+              v-if="isClipPending(m)"
+              content="系统正在比对双方照片相似度，稍后刷新可见最终排序"
+              placement="top"
+            >
+              <el-tag size="small" type="info" effect="plain">AI 精排中…</el-tag>
+            </el-tooltip>
           </div>
 
           <!-- 对方物品 -->
@@ -326,7 +334,7 @@ const visibleMatches = computed<MatchOut[]>(() =>
 
 const emptyText = computed(() =>
   tab.value === 'active'
-    ? '暂无进行中的匹配。可完善物品外观/特征/地点信息，系统将自动推荐；或前往拾物广场浏览。'
+    ? '暂时没有符合匹配的项。可完善物品外观/特征/地点信息后点「刷新候选」，或前往拾物广场浏览。'
     : '暂无已完成的匹配。',
 )
 
@@ -335,6 +343,12 @@ const emptyText = computed(() =>
 // 拾得者侧不存在任何低分判定（「低分不打扰」已整体删除）。
 function isLowScore(m: MatchOut): boolean {
   return m.match_score < MATCH_LOW_SCORE
+}
+
+// v11（2026-08-27）：CLIP 精排过渡态——进行中候选且图片相似度尚未算完
+// （发布后后台任务几秒内完成，刷新列表即消失；CLIP 不可用则恒为 null，不影响展示）。
+function isClipPending(m: MatchOut): boolean {
+  return m.status === 0 && m.clip_sim == null
 }
 
 // flow-v3：keep1（留在原地未挪动）候选判定。
