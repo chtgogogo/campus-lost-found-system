@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     YOLO_CONF_THRESHOLD: float = 0.12  # 降低门槛以提升弱类（钥匙/钱包/水杯）召回，代价是偶发误识别
 
     # ---------------- 交接码 ----------------
-    HANDOVER_TTL_MIN: int = 30                  # 交接码 30 分钟有效
+    # [deprecated] 旧单码模型 TTL（30 分钟），保留定义避免外部引用断裂；新代码改用 HANDOVER_TTL_SEC
+    HANDOVER_TTL_MIN: int = 30
+    HANDOVER_TTL_SEC: int = 10                 # 双码交叉验证模型 TTL（10 秒）
 
     # ---------------- 短信 ----------------
     SMS_RATE_LIMIT_PER_MIN: int = 5             # 每分钟上限

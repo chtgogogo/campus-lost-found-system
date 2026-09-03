@@ -1,27 +1,77 @@
 sequenceDiagram
-    participant U as 失主(前端)
-    participant API as items 路由
-    participant PS as PublishService
-    participant TG as TaggingService
-    participant VS as VisionService
-    participant DB as LostItem/FoundItem/Category
-    participant MS as MatchService
+    autonumber
+    participant L as 失主(Lost)
+    participant F as 拾得者(Finder)
+    participant R as Router
+    participant S as HandoverService
+    participant DB as Database
 
-    U->>API: POST /lost-items (title="银色钥匙", category_name="钥匙", 无图)
-    API->>PS: publish_lost(dto)
-    PS->>VS: predict(b"") → 降级 fallback
-    PS->>TG: extract(title, description, label, category_name="钥匙")
-    TG-->>PS: tags=["钥匙","银色"]  %% 名词优先, 含颜色
-    PS->>PS: _resolve_category_id("钥匙", vision, nouns=["钥匙"])
-    PS->>DB: Category 按 name/名词回退 → id=11(钥匙)
-    PS->>DB: LostItem(tags, category_id=11, image_hash=null)
-    PS->>DB: 候选召回: FoundItem WHERE (category_id=11 AND status=0) OR (tags 含"钥匙")
-    loop 每个候选(found)
-        PS->>MS: score(lost, found)
-        MS->>MS: tag_containment=|lost∩found|/|lost|  %% C vs A=1.0
-        MS->>MS: color_conflict? C{银色} vs A{黑色} → 冲突→0
-        MS->>MS: 20·photo + 40·containment + 25·cat + 15·time
-        MS-->>PS: score (AC1: A=80,B=80; AC2: B=80,A=0)
+    Note over L,F: 前置：claim(认领) + confirm-return(确认归还) 已完成，match.status=CLAIMING
+
+    %% ===== 失主生成码 =====
+    L->>R: POST /matches/{id}/handover/generate
+    R->>S: generate_code(match_id, operator_id=lost.user_id)
+    S->>DB: 查 match.status == CLAIMING?
+    S->>DB: 查 LostItem.publisher_id == operator_id → role="lost"
+    S->>DB: 查/建 HandoverCode 行(status=VALID)
+    S->>DB: SET lost_code="1234", lost_code_expire=now+10s, lost_code_verified=False
+    S->>DB: 镜像 match.code="1234", match.code_expire=now+10s
+    S->>DB: audit_log: handover_generate(seq, role=lost, code=1234)
+    S-->>R: HandoverCode(role=lost, code="1234", expire=now+10s)
+    R-->>L: {role:"lost", code:"1234", expire_at:...}
+
+    %% ===== 拾得者生成码 =====
+    F->>R: POST /matches/{id}/handover/generate
+    R->>S: generate_code(match_id, operator_id=finder.user_id)
+    S->>DB: 查 FoundItem.finder_id == operator_id → role="finder"
+    S->>DB: 查同一 HandoverCode 行(status=VALID)
+    S->>DB: SET finder_code="5678", finder_code_expire=now+10s, finder_code_verified=False
+    S->>DB: 镜像 match.code="5678", match.code_expire=now+10s
+    S->>DB: audit_log: handover_generate(seq, role=finder, code=5678)
+    S-->>R: HandoverCode(role=finder, code="5678", expire=now+10s)
+    R-->>F: {role:"finder", code:"5678", expire_at:...}
+
+    %% ===== 拾得者交叉验证（输入失主的码） =====
+    F->>R: POST /matches/{id}/handover/verify {code:"1234", role:"finder", gps:"..."}
+    R->>S: verify(match_id, code="1234", role="finder", gps, operator_id)
+    S->>DB: 查 HandoverCode(match_id, status=VALID) 最新 seq
+    S->>DB: role="finder" → target = lost_code="1234"
+    S->>DB: 校验 lost_code != None ✓
+    S->>DB: 校验 lost_code == "1234" ✓
+    S->>DB: 校验 lost_code_expire > now ✓
+    S->>DB: SET lost_code_verified=True, gps_finder=gps
+    S->>DB: both = lost_code_verified AND finder_code_verified = False
+    S-->>R: {both_verified:false, lost_code_verified:true, finder_code_verified:false}
+    R-->>F: {both_verified:false, lost_code_verified:true, finder_code_verified:false}
+
+    %% ===== 失主交叉验证（输入拾得者的码） =====
+    L->>R: POST /matches/{id}/handover/verify {code:"5678", role:"lost", gps:"..."}
+    R->>S: verify(match_id, code="5678", role="lost", gps, operator_id)
+    S->>DB: 查 HandoverCode(match_id, status=VALID) 最新 seq
+    S->>DB: role="lost" → target = finder_code="5678"
+    S->>DB: 校验 finder_code != None ✓
+    S->>DB: 校验 finder_code == "5678" ✓
+    S->>DB: 校验 finder_code_expire > now ✓
+    S->>DB: SET finder_code_verified=True, gps_lost=gps
+    S->>DB: both = True → SET hc.status=VERIFIED
+    S->>DB: SET match.status=COMPLETED, completed_at=now
+    S->>DB: SET lost.status=RESOLVED, found.status=RESOLVED
+    S->>DB: SET lost.expires_at=now+90d, found.expires_at=now+90d
+    S->>DB: audit_log: handover_complete(seq, lost_code, finder_code)
+    S-->>R: {both_verified:true, lost_code_verified:true, finder_code_verified:true}
+    R-->>L: {both_verified:true, lost_code_verified:true, finder_code_verified:true}
+
+    Note over L,F: 交接完成 — match.status=COMPLETED, lost/found=RESOLVED
+
+    %% ===== 边界：码过期重新生成 =====
+    rect rgb(255, 245, 230)
+        Note over L,F: 边界场景：码过期后重新生成
+        L->>R: POST /matches/{id}/handover/generate (码已过期)
+        R->>S: generate_code(match_id, operator_id=lost.user_id)
+        S->>DB: 查同一 HandoverCode 行(status=VALID)
+        S->>DB: 覆盖 lost_code="9999", lost_code_expire=now+10s
+        S->>DB: 重置 lost_code_verified=False
+        Note right of S: finder_code 及 finder_code_verified 不受影响
+        S-->>R: HandoverCode(role=lost, code="9999")
+        R-->>L: {role:"lost", code:"9999", expire_at:...}
     end
-    PS->>DB: 阈值≥80 → 建 MatchRecord (A,B)
-    PS-->>API: (item, matches)

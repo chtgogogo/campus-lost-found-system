@@ -15,6 +15,8 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    // 允许任意 host（含 ngrok/cpolar 等内网穿透域名，每次地址会变，不能写死）
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

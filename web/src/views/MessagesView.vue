@@ -2,7 +2,7 @@
   <div class="lf-container messages-view">
     <h2 class="lf-page-title">我的消息</h2>
 
-    <div class="messages-layout lf-card">
+    <div class="messages-layout lf-card" :class="{ 'has-selected': !!selected }">
       <!-- 左栏：会话列表 -->
       <aside class="session-list">
         <div v-if="loadingList" class="lf-muted list-hint">加载中…</div>
@@ -32,6 +32,7 @@
       <section class="chat-panel">
         <template v-if="selected">
           <div class="chat-header">
+            <el-button class="mobile-back" text @click="onBack">‹ 返回</el-button>
             <span class="chat-title">{{ selected.title }}</span>
             <span v-if="selected.match_id" class="lf-muted chat-meta">
               匹配 #{{ selected.match_id }}
@@ -171,6 +172,12 @@ async function openConversation(s: IMSessionListItem): Promise<void> {
   s.unread = false
   await im.initSession(s.id)
   scrollDown()
+}
+
+function onBack(): void {
+  selected.value = null
+  selectedId.value = null
+  im.reset()
 }
 
 async function onSend(): Promise<void> {
@@ -418,5 +425,38 @@ loadSessions()
   display: flex;
   gap: 12px;
   padding: 0 16px 14px;
+}
+/* 桌面端默认隐藏移动端返回按钮 */
+.mobile-back {
+  display: none;
+}
+/* 移动端：列表页 ↔ 对话页 两态切换，避免横向分栏被挤压到屏外 */
+@media (max-width: 768px) {
+  .messages-layout {
+    position: relative;
+    height: calc(100vh - 140px);
+    overflow: hidden;
+  }
+  .session-list {
+    width: 100%;
+    flex: 1 1 auto;
+    border-right: none;
+  }
+  .chat-panel {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    z-index: 10;
+  }
+  .messages-layout.has-selected .session-list {
+    display: none;
+  }
+  .messages-layout.has-selected .chat-panel {
+    display: flex;
+  }
+  .mobile-back {
+    display: inline-flex;
+  }
 }
 </style>

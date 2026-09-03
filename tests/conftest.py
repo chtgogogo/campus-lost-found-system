@@ -25,6 +25,7 @@ from app.core.seed import seed_categories  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (  # noqa: E402
     AuditLog,
+    CorrectionSample,
     FoundItem,
     HandoverCode,
     LostItem,
@@ -46,6 +47,7 @@ _BUSINESS_TABLES = (
     LostItem,
     FoundItem,
     User,
+    CorrectionSample,
 )
 
 

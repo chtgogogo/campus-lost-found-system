@@ -216,8 +216,8 @@
           type="info"
           :closable="false"
           show-icon
-          title="后端未暴露审计日志接口"
-          description="当前后端 app/routers 未提供 /audit-logs 接口，本页在“演示数据”开启时展示本地示例审计流；开启演示数据即可查看完整时间线。"
+          title="审计日志加载失败"
+          description="未能从后端获取审计日志，请确认后端已启动并具备管理员权限；也可点上方『导出 CSV / JSON』下载完整审计记录。"
           style="margin-bottom: 14px"
         />
 
@@ -239,7 +239,7 @@
                     {{ auditActionLabel(log.action) }}
                   </el-tag>
                   <span class="lf-muted audit-target">
-                    目标：{{ log.target_type || '—' }} #{{ log.target_id ?? '—' }}
+                    目标：{{ auditTargetTypeLabel(log.target_type) }} #{{ log.target_id ?? '—' }}
                   </span>
                   <span v-if="log.user_id" class="lf-muted audit-uid">
                     操作人 #{{ log.user_id }}
@@ -345,9 +345,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { LocationFilled } from '@element-plus/icons-vue'
-import { matchApi } from '@/api/match'
 import { adminApi } from '@/api/admin'
-import { auditActionLabel } from '@/api/constants'
+import { auditActionLabel, auditTargetTypeLabel } from '@/api/constants'
 import type {
   AdminMatchDetailOut,
   AdminUserOut,
@@ -548,7 +547,7 @@ async function load(): Promise<void> {
   loading.value = true
   backendMissing.value = false
   try {
-    const res = await matchApi.auditLogs({ page: 1, page_size: 100 })
+    const res = await adminApi.auditLogs({ page: 1, page_size: 100 })
     logs.value = (res as Page<AuditLog>).items
   } catch {
     // 后端未提供该接口（404 等）时给出提示，不阻断页面

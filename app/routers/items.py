@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ from app.schemas.common import (
 )
 from app.schemas.item import FoundItemOut, LostItemPublishDTO, LostItemOut
 from app.schemas.match import MatchOut
+from app.services.clip_reorder import reorder_match_ids
 from app.services.match_service import build_match_outs
 from app.services.publish_service import PublishService
 
@@ -65,6 +66,7 @@ def _now() -> datetime:
 @router.post("/lost-items", response_model=StandardResponse)
 async def create_lost_item(
     request: Request,
+    background_tasks: BackgroundTasks,
     title: str = Form(..., max_length=100),
     description: str = Form(...),
     category_name: str = Form(..., max_length=100, description="纯自由文本分类（必填）"),
@@ -82,6 +84,9 @@ async def create_lost_item(
     ``lost_time`` 选填（R3：不知道/记不清可留空，落库 NULL）；其余同现状。
     响应 ``suspected_matches``：本次发布自动生成的候选匹配（≤10 条，按分数降序，
     可能含低分 score<80 候选；suspected=false 由 score 派生，前端用 match_score<80 弱化呈现）。
+
+    v11（2026-08-27）：CLIP 两阶段精排走后台（BackgroundTasks），发布请求不卡；
+    精排写回 match_record.clip_sim，仅作同分打破平局，不改 match_score。
     """
     if len(images) > settings.IMG_MAX_COUNT:
         raise ParamError(f"图片数量不得超过 {settings.IMG_MAX_COUNT} 张")
@@ -100,6 +105,10 @@ async def create_lost_item(
     lost, matches = PublishService(db).publish_lost(
         user, dto, ip=_client_ip(request), ua=request.headers.get("user-agent")
     )
+    if matches:
+        background_tasks.add_task(
+            reorder_match_ids, [m.id for m in matches]
+        )
     out = LostItemOut.from_model(lost)
     return success(
         data={"item": out, "suspected_matches": build_match_outs(db, matches)}
@@ -110,6 +119,7 @@ async def create_lost_item(
 @router.post("/found-items", response_model=StandardResponse)
 async def create_found_item(
     request: Request,
+    background_tasks: BackgroundTasks,
     keep_status: int = Form(..., description="0 暂为保管 / 1 未保管"),
     category_name: str = Form(..., max_length=100, description="纯自由文本分类（必填）"),
     images: List[UploadFile] = File(..., description="至少 1 张照片"),
@@ -126,6 +136,8 @@ async def create_found_item(
 
     响应 ``suspected_matches``：对称生成的候选失物匹配（≤10 条，按分数降序，
     可能含低分 score<80 候选；Q5 对称落库，拾得者侧低分由前端弱化呈现）。
+
+    v11（2026-08-27）：CLIP 两阶段精排走后台（BackgroundTasks），发布请求不卡。
     """
     if keep_status not in (0, 1):
         raise ParamError("keep_status 必须为 0 或 1")
@@ -155,6 +167,10 @@ async def create_found_item(
     found, matches = PublishService(db).publish_found(
         user, dto, ip=_client_ip(request), ua=request.headers.get("user-agent")
     )
+    if matches:
+        background_tasks.add_task(
+            reorder_match_ids, [m.id for m in matches]
+        )
     out = FoundItemOut.from_model(found)
     return success(
         data={"item": out, "suspected_matches": build_match_outs(db, matches)}

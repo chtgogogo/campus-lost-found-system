@@ -11,7 +11,9 @@ import pytest
 from app.core import redis_client
 from app.core.config import settings
 from app.core.redis_client import RedisClient
+from app.models.item import FoundItem, LostItem
 from app.models.match import MatchRecord
+from app.models.user import User
 from app.schemas.common import MatchStatus
 from app.services.handover_service import HandoverService
 
@@ -43,21 +45,68 @@ def test_kv_singleton_memory_roundtrip():
     assert redis_client.kv.get("k1") is None
 
 
+def _make_match_with_items(db):
+    """创建 User + LostItem + FoundItem + MatchRecord，供服务级测试使用。"""
+    u_lost = User(student_no="rdq_lost", phone="13000000011", password_hash="x")
+    u_found = User(student_no="rdq_found", phone="13000000012", password_hash="x")
+    db.add_all([u_lost, u_found])
+    db.flush()
+
+    lost = LostItem(
+        publisher_id=u_lost.id,
+        category_name="书包",
+        title="黑色书包",
+        description="图书馆丢失黑色书包",
+        status=2,
+    )
+    found = FoundItem(
+        finder_id=u_found.id,
+        category_name="书包",
+        description="捡到黑色书包",
+        images=[],
+        keep_status=0,
+    )
+    db.add_all([lost, found])
+    db.flush()
+
+    m = MatchRecord(
+        lost_id=lost.id,
+        found_id=found.id,
+        match_score=85.0,
+        status=int(MatchStatus.CLAIMING),
+    )
+    db.add(m)
+    db.flush()
+    return m, u_lost, u_found
+
+
 def test_handover_code_generate_verify_without_redis(db, monkeypatch):
-    # 即便 KV 处于内存兜底（无 Redis），交接码生成 / 双端校验仍可走 DB 完整跑通
+    # 即便 KV 处于内存兜底（无 Redis），交接码生成 / 双码交叉验证仍可走 DB 完整跑通
     monkeypatch.setattr(settings, "REDIS_ENABLED", True)
     monkeypatch.setattr(settings, "REDIS_URL", "redis://127.0.0.1:6399/0")
     assert RedisClient().available is False  # 确认内存兜底生效
 
-    m = MatchRecord(
-        lost_id=1, found_id=1, match_score=85.0, status=int(MatchStatus.CLAIMING)
+    m, u_lost, u_found = _make_match_with_items(db)
+
+    # 失主生成 lost_code
+    hc_lost, role_lost = HandoverService(db).generate_code(m.id, operator_id=u_lost.id)
+    assert role_lost == "lost"
+    assert hc_lost.lost_code
+
+    # 拾得者生成 finder_code
+    hc_finder, role_finder = HandoverService(db).generate_code(m.id, operator_id=u_found.id)
+    assert role_finder == "finder"
+    assert hc_finder.finder_code
+
+    # 失主验证拾得者的码（确认物品已收到）
+    res1 = HandoverService(db).verify(
+        match_id=m.id, code=hc_finder.finder_code, role="lost"
     )
-    db.add(m)
-    db.flush()
-    hc = HandoverService(db).generate_code(m.id)
-    assert hc.code
-    res1 = HandoverService(db).verify(code=hc.code, role="lost")
-    assert res1["verified_by_lost"] is True
+    assert res1["finder_code_verified"] is True
     assert res1["both_verified"] is False
-    res2 = HandoverService(db).verify(code=hc.code, role="finder")
+
+    # 拾得者验证失主的码（证明是授权领取人）
+    res2 = HandoverService(db).verify(
+        match_id=m.id, code=hc_lost.lost_code, role="finder"
+    )
     assert res2["both_verified"] is True

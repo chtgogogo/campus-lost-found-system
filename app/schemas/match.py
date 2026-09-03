@@ -28,18 +28,18 @@ class MatchManualCreate(BaseModel):
 
 
 class HandoverGenerateOut(BaseModel):
-    """交接码生成响应。"""
+    """交接码生成响应（返回调用方刚生成的码）。"""
 
-    code: str
-    qr_token: str
+    role: str          # "lost" | "finder" — 本次生成的是哪方的码
+    code: str          # 4位数字码
     expire_at: datetime
 
 
 class HandoverVerifyRequest(BaseModel):
-    """交接码验证请求体。"""
+    """交接码验证请求体（结构不变，语义变更）。"""
 
-    code: str = Field(..., min_length=1)
-    role: str = Field(..., description="lost | finder")
+    code: str = Field(..., min_length=4, max_length=4, description="对方的4位数字码")
+    role: str = Field(..., description="lost | finder — 谁在验证")
     gps: Optional[str] = None
 
 
@@ -47,8 +47,8 @@ class HandoverVerifyOut(BaseModel):
     """交接码验证响应。"""
 
     both_verified: bool
-    verified_by_lost: bool
-    verified_by_finder: bool
+    lost_code_verified: bool       # 拾得者已正确输入失主码
+    finder_code_verified: bool     # 失主已正确输入拾得者码
 
 
 class MatchOut(BaseModel):
@@ -92,6 +92,9 @@ class MatchOut(BaseModel):
     raw_total: Optional[float] = None        # 归一化前原始总分（0–100）
     norm_factor: Optional[float] = None      # 归一化系数 k（≥1.0）
     provided_dims: list[str] = []            # 失主实际填写的维度名（可解释 + 可测）
+    # v11（2026-08-27）：CLIP 图片相似度（0-1），NULL=未精排/CLIP 不可用。
+    # 仅作列表同分打破平局，不改 match_score 语义；前端据此显示"AI 精排中"过渡态。
+    clip_sim: Optional[float] = None
 
     @classmethod
     def from_model(
@@ -162,6 +165,9 @@ class MatchOut(BaseModel):
             raw_total=raw_total,
             norm_factor=norm_factor,
             provided_dims=provided_dims or [],
+            clip_sim=(
+                float(match.clip_sim) if getattr(match, "clip_sim", None) is not None else None
+            ),
         )
 
 

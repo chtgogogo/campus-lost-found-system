@@ -156,6 +156,9 @@ export interface MatchOut {
   raw_total?: number | null // 归一化前原始总分（0–100）
   norm_factor?: number | null // 归一化系数 k（≥1.0）
   provided_dims?: string[] // 失主实际填写的维度名（可解释 + 可测）
+  // v11（2026-08-27）：CLIP 图片相似度（0-1），null=未精排/CLIP 不可用。
+  // 仅作列表同分打破平局，不改 match_score 语义；前端据此显示「AI 精排中」过渡态。
+  clip_sim?: number | null
 }
 
 export interface ClaimRequest {
@@ -164,9 +167,13 @@ export interface ClaimRequest {
 }
 
 export interface HandoverGenerate {
+  /** 本次生成的是哪一方的码（后端按当前登录用户判定：lost=失主 / finder=拾得者） */
+  role: 'lost' | 'finder'
+  /** 4 位数字交接码（调用方自己的码） */
   code: string
-  qr_token: string
   expire_at: string
+  /** 仅演示模式返回：对方（另一角色）的码，便于单浏览器完成交叉验证；真实环境恒为 null */
+  peer_code?: string | null
 }
 
 export interface HandoverVerifyRequest {
@@ -177,8 +184,10 @@ export interface HandoverVerifyRequest {
 
 export interface HandoverVerifyResult {
   both_verified: boolean
-  verified_by_lost: boolean
-  verified_by_finder: boolean
+  /** 拾得者已正确输入失主码（lost_code 被验证通过） */
+  lost_code_verified: boolean
+  /** 失主已正确输入拾得者码（finder_code 被验证通过） */
+  finder_code_verified: boolean
 }
 
 // ---------------- P2-1：手动刷新候选（对齐 app/routers/match.py refresh_matches_for_lost） ----------------

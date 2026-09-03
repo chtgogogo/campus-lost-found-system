@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CHAR,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -50,12 +51,16 @@ class MatchRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     # v7 新增：完成时间（完成交接时置此字段，并据以重置关联双方的 expires_at）。
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 2026-08-27（CLIP 两阶段精排）：图片相似度（0-1），NULL=未精排/CLIP 不可用。
+    # 精排不改变 match_score（总分语义与阈值不变），仅作为列表**同分打破平局**的次排序键。
+    clip_sim: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
         Index("idx_match_lost", "lost_id"),
         Index("idx_match_found", "found_id"),
         Index("idx_match_status", "status"),
         Index("idx_match_completed", "completed_at"),
+        Index("idx_match_clip", "clip_sim"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover
@@ -63,7 +68,13 @@ class MatchRecord(Base):
 
 
 class HandoverCode(Base):
-    """动态交接码审计镜像表（§2.6，MVP 用 DB 存储 + expire_at 判定替代 Redis）。"""
+    """动态交接码审计镜像表（双码交叉验证模型，§2.6）。
+
+    失主生成 lost_code（4位数字，10s 过期）；拾得者生成 finder_code（4位数字，10s 过期）。
+    拾得者输入失主的码 → lost_code_verified=True（证明是授权领取人）；
+    失主输入拾得者的码 → finder_code_verified=True（确认物品已收到）。
+    双方交叉验证通过 → 交接完成。
+    """
 
     __tablename__ = "handover_code"
 
@@ -74,22 +85,35 @@ class HandoverCode(Base):
         nullable=False,
     )
     seq: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
-    code: Mapped[str] = mapped_column(String(12), nullable=False)
-    qr_token: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # ---- 双码（各自4位数字，独立生成、独立10s过期） ----
+    lost_code: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    finder_code: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    lost_code_expire: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finder_code_expire: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ---- 交叉验证标记 ----
+    # lost_code_verified = 拾得者已正确输入失主的码（证明自己是授权领取人）
+    lost_code_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # finder_code_verified = 失主已正确输入拾得者的码（确认物品已交到自己手中）
+    finder_code_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # ---- 行级状态 ----
     status: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)  # 0 有效/1 已验证/2 已过期
-    verified_by_lost: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    verified_by_finder: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    gps_lost: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    gps_finder: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # ---- GPS（验证时记录） ----
+    gps_lost: Mapped[str | None] = mapped_column(String(50), nullable=True)   # 失主验证时（输入拾得者码）的GPS
+    gps_finder: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 拾得者验证时（输入失主码）的GPS
+
+    # ---- 审计时间 ----
     generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
-    expire_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     __table_args__ = (
         Index("uq_handover_match_seq", "match_id", "seq", unique=True),
-        Index("idx_handover_code", "code"),
+        Index("idx_handover_lost_code", "lost_code"),
+        Index("idx_handover_finder_code", "finder_code"),
         Index("idx_handover_status", "status"),
-        Index("idx_handover_expire", "expire_at"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"<HandoverCode id={self.id} match_id={self.match_id} code={self.code!r}>"
+        return f"<HandoverCode id={self.id} match_id={self.match_id} seq={self.seq}>"

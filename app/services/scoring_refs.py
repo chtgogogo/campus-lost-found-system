@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.tagging_service import LOCATION_WORDS
+from app.services.tagging_service import LOCATION_WORDS, normalize_location_text
 
 # ===========================================================================
 # 一、量词（PRD §A.3.3）
@@ -312,7 +312,8 @@ def extract_place(text: str) -> tuple[dict[str, set[str]], str]:
         未命中的层级为空集合（键恒存在，调用方无需 `.get`）。
     """
     place: dict[str, set[str]] = {lvl: set() for lvl in PLACE_LEVELS}
-    remaining = str(text or "")
+    # 2026-08-27：地点归一化（三教→第三教学楼、3楼→三楼），口语表达也能命中词表
+    remaining = normalize_location_text(text)
     if not remaining:
         return place, remaining
 

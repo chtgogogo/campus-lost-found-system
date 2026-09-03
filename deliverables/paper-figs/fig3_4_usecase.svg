@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1180" height="1080" viewBox="0 0 1180 1080">
+  <rect x="0" y="0" width="1180" height="1080" fill="#FFFFFF"/>
+  <rect x="300.0" y="130.0" width="960.0" height="810.0" fill="none" stroke="#7F7F7F" stroke-width="2"/>
+  <text x="780.0" y="160.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="21" font-weight="bold" fill="#404040">校园失物招领系统</text>
+  <line x1="146.0" y1="290.0" x2="492.9" y2="216.4" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="290.0" x2="478.2" y2="282.2" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="290.0" x2="487.9" y2="346.4" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="290.0" x2="507.6" y2="417.9" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="290.0" x2="812.3" y2="489.7" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="605.0" x2="483.5" y2="565.2" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="605.0" x2="480.1" y2="628.6" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="605.0" x2="498.0" y2="696.3" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="605.0" x2="794.5" y2="521.1" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="850.0" x2="481.6" y2="818.3" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="850.0" x2="480.8" y2="877.6" stroke="#333333" stroke-width="1.5"/>
+  <line x1="146.0" y1="850.0" x2="748.0" y2="850.0" stroke="#333333" stroke-width="1.5"/>
+  <g stroke="#1F3864" stroke-width="2.4" fill="none" stroke-linecap="round">
+    <circle cx="120.0" cy="250.0" r="13.0" fill="#FFFFFF"/>
+    <line x1="120.0" y1="263.0" x2="120.0" y2="306.0"/>
+    <line x1="94.0" y1="282.0" x2="146.0" y2="282.0"/>
+    <line x1="120.0" y1="306.0" x2="100.0" y2="342.0"/>
+    <line x1="120.0" y1="306.0" x2="140.0" y2="342.0"/>
+  </g>
+  <text x="120.0" y="368.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="20" font-weight="bold" fill="#1F3864">失主</text>
+  <text x="120.0" y="388.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="13" fill="#666666">&#171;actor&#187;</text>
+  <g stroke="#1F3864" stroke-width="2.4" fill="none" stroke-linecap="round">
+    <circle cx="120.0" cy="565.0" r="13.0" fill="#FFFFFF"/>
+    <line x1="120.0" y1="578.0" x2="120.0" y2="621.0"/>
+    <line x1="94.0" y1="597.0" x2="146.0" y2="597.0"/>
+    <line x1="120.0" y1="621.0" x2="100.0" y2="657.0"/>
+    <line x1="120.0" y1="621.0" x2="140.0" y2="657.0"/>
+  </g>
+  <text x="120.0" y="683.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="20" font-weight="bold" fill="#1F3864">拾得者</text>
+  <text x="120.0" y="703.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="13" fill="#666666">&#171;actor&#187;</text>
+  <g stroke="#1F3864" stroke-width="2.4" fill="none" stroke-linecap="round">
+    <circle cx="120.0" cy="810.0" r="13.0" fill="#FFFFFF"/>
+    <line x1="120.0" y1="823.0" x2="120.0" y2="866.0"/>
+    <line x1="94.0" y1="842.0" x2="146.0" y2="842.0"/>
+    <line x1="120.0" y1="866.0" x2="100.0" y2="902.0"/>
+    <line x1="120.0" y1="866.0" x2="140.0" y2="902.0"/>
+  </g>
+  <text x="120.0" y="928.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="20" font-weight="bold" fill="#1F3864">管理员</text>
+  <text x="120.0" y="948.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="13" fill="#666666">&#171;actor&#187;</text>
+  <ellipse cx="570.0" cy="200.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="206.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">发布失物</text>
+  <ellipse cx="570.0" cy="280.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="286.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">查看匹配</text>
+  <ellipse cx="570.0" cy="360.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="366.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">认领</text>
+  <ellipse cx="570.0" cy="440.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="446.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">验证交接码</text>
+  <ellipse cx="570.0" cy="555.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="561.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">发布拾物</text>
+  <ellipse cx="570.0" cy="635.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="641.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">确认归还</text>
+  <ellipse cx="570.0" cy="715.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="721.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">生成交接码</text>
+  <ellipse cx="570.0" cy="810.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="816.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">审计时间线</text>
+  <ellipse cx="570.0" cy="885.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="570.0" y="891.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">封禁</text>
+  <ellipse cx="840.0" cy="850.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="840.0" y="856.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">分类管理</text>
+  <ellipse cx="880.0" cy="510.0" rx="92.0" ry="30.0" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+  <text x="880.0" y="516.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#1F3864">IM 沟通</text>
+  <ellipse cx="970.0" cy="240.0" rx="92.0" ry="30.0" fill="#FFF7E6" stroke="#C55A11" stroke-width="2" stroke-dasharray="7,4"/>
+  <text x="970.0" y="246.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="17" fill="#C55A11">浏览公示栏</text>
+  <text x="970.0" y="176.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="15" font-weight="bold" fill="#C55A11">&#171;公开用例&#187;</text>
+  <text x="970.0" y="196.0" text-anchor="middle" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="14" fill="#C55A11">未登录用户可访问，无需登录</text>
+  <g>
+    <ellipse cx="354.0" cy="1024.0" rx="30" ry="12" fill="#FFFFFF" stroke="#2F5597" stroke-width="2"/>
+    <text x="396.0" y="1029.0" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="14" fill="#404040">需登录用例</text>
+    <ellipse cx="544.0" cy="1024.0" rx="30" ry="12" fill="#FFF7E6" stroke="#C55A11" stroke-width="2" stroke-dasharray="7,4"/>
+    <text x="586.0" y="1029.0" font-family="'Microsoft YaHei','微软雅黑','SimHei',sans-serif" font-size="14" fill="#404040">公开用例（无需登录，不关联参与者）</text>
+  </g>
+</svg>

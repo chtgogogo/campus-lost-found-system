@@ -7,7 +7,6 @@ import type { ApiEnvelope } from '@/types'
 import { ApiError } from '@/types'
 import { API_BASE } from '@/api/constants'
 import { API_ORIGIN, getDemo } from '@/utils/demo'
-import { useDemoStore } from '@/stores/demo'
 import { mockAdapter } from '@/api/mockAdapter'
 
 const TOKEN_KEY = 'lf_token'
@@ -101,13 +100,16 @@ http.interceptors.response.use(
       }
       return Promise.reject(new ApiError(env.code, env.message, env.data))
     }
-    ElMessage.error(error?.message || '网络错误，已切换为演示模式')
-    // 网络级错误（后端不可达）：自动降级演示 + 显示 Banner
-    try {
-      useDemoStore().notifyNetworkFallback()
-    } catch {
-      /* Pinia 未就绪时忽略 */
-    }
+    const rawMsg = error?.message || ''
+    const isTimeout =
+      error?.code === 'ECONNABORTED' || /timeout/i.test(String(rawMsg))
+    ElMessage.error(
+      isTimeout
+        ? '请求超时：图片较大或网络较慢，请稍后重试'
+        : rawMsg || '请求失败，请检查网络后重试',
+    )
+    // 2026-08-20：演示模式已永久关闭，网络级错误（超时/断连）只提示，
+    // **不再自动切换演示模式**（否则公网下偶发超时会整站"变演示"，造成假故障）。
     return Promise.reject(error)
   },
 )

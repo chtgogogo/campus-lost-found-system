@@ -1,0 +1,57 @@
+# 本文件由失物招领系统自动生成，与审计黑匣子一致，可作为责任认定（追责）依据。时间均为 UTC（ISO8601）。
+记录ID,字段,值,说明
+34,id,34,审计记录自增主键
+34,user_id,2,操作人用户ID（空=系统/匿名）
+34,action,handover_complete,操作类型（publish_lost=发布失物；publish_found=发布拾物；claim=认领；confirm_return=确认归还；reject=拒绝认领；handover_generate=生成交接码；handover_complete=交接完成；handover_verify=验证交接码；ban=封禁；appeal=申诉；im_message=消息）
+34,target_type,match,操作对象类型（user=用户；item=物品；match=匹配；handover=交接码；im_session=会话）
+34,target_id,1,操作对象ID
+34,ip,127.0.0.1,操作者来源IP
+34,ua,,操作者浏览器/设备标识（User-Agent）
+34,session_id,,登录会话标识
+34,gps,,操作地理位置（如有）
+34,detail,code=UWX7K9,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+34,created_at,2026-08-20T11:39:00.859319,操作发生时间（ISO8601 UTC）
+33,id,33,审计记录自增主键
+33,user_id,1,操作人用户ID（空=系统/匿名）
+33,action,publish_lost,操作类型（publish_lost=发布失物；publish_found=发布拾物；claim=认领；confirm_return=确认归还；reject=拒绝认领；handover_generate=生成交接码；handover_complete=交接完成；handover_verify=验证交接码；ban=封禁；appeal=申诉；im_message=消息）
+33,target_type,lost_item,操作对象类型（user=用户；item=物品；match=匹配；handover=交接码；im_session=会话）
+33,target_id,1,操作对象ID
+33,ip,127.0.0.1,操作者来源IP
+33,ua,Mozilla/5.0,操作者浏览器/设备标识（User-Agent）
+33,session_id,,登录会话标识
+33,gps,,操作地理位置（如有）
+33,detail,title=一把黑伞;category=书包,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+33,created_at,2026-08-20T11:39:00.859319,操作发生时间（ISO8601 UTC）
+32,id,32,审计记录自增主键
+32,user_id,7,操作人用户ID（空=系统/匿名）
+32,action,admin_export,操作类型（publish_lost=发布失物；publish_found=发布拾物；claim=认领；confirm_return=确认归还；reject=拒绝认领；handover_generate=生成交接码；handover_complete=交接完成；handover_verify=验证交接码；ban=封禁；appeal=申诉；im_message=消息）
+32,target_type,match,操作对象类型（user=用户；item=物品；match=匹配；handover=交接码；im_session=会话）
+32,target_id,,操作对象ID
+32,ip,182.145.119.209,操作者来源IP
+32,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+32,session_id,,登录会话标识
+32,gps,,操作地理位置（如有）
+32,detail,scope=all;format=md;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+32,created_at,2026-08-20T11:20:21.116634,操作发生时间（ISO8601 UTC）
+31,id,31,审计记录自增主键
+31,user_id,7,操作人用户ID（空=系统/匿名）
+31,action,admin_export,操作类型（publish_lost=发布失物；publish_found=发布拾物；claim=认领；confirm_return=确认归还；reject=拒绝认领；handover_generate=生成交接码；handover_complete=交接完成；handover_verify=验证交接码；ban=封禁；appeal=申诉；im_message=消息）
+31,target_type,match,操作对象类型（user=用户；item=物品；match=匹配；handover=交接码；im_session=会话）
+31,target_id,,操作对象ID
+31,ip,182.145.119.209,操作者来源IP
+31,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+31,session_id,,登录会话标识
+31,gps,,操作地理位置（如有）
+31,detail,scope=all;format=md;ids=[2];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+31,created_at,2026-08-20T11:19:48.089929,操作发生时间（ISO8601 UTC）
+30,id,30,审计记录自增主键
+30,user_id,7,操作人用户ID（空=系统/匿名）
+30,action,admin_list_users,操作类型（publish_lost=发布失物；publish_found=发布拾物；claim=认领；confirm_return=确认归还；reject=拒绝认领；handover_generate=生成交接码；handover_complete=交接完成；handover_verify=验证交接码；ban=封禁；appeal=申诉；im_message=消息）
+30,target_type,user,操作对象类型（user=用户；item=物品；match=匹配；handover=交接码；im_session=会话）
+30,target_id,,操作对象ID
+30,ip,182.145.119.209,操作者来源IP
+30,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+30,session_id,,登录会话标识
+30,gps,,操作地理位置（如有）
+30,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+30,created_at,2026-08-20T11:19:26.897384,操作发生时间（ISO8601 UTC）

@@ -52,6 +52,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core.config import settings
+from app.services.brand_dict import expand_brand_tokens
 from app.services.clip_service import image_similarity as clip_image_similarity
 from app.services.color_family import (
     SIGNAL_COLOR_CONFLICT,
@@ -536,6 +537,9 @@ class MatchService:
         found_kw = found_f.keywords
         if not found_kw:
             return 0.0, []
+        # 2026-08-27：品牌归一化（iPhone/Apple → 苹果），让品牌别名互相命中
+        lost_kw = expand_brand_tokens(lost_kw)
+        found_kw = expand_brand_tokens(found_kw)
         hits = sorted(t for t in lost_kw if _token_hit(t, found_kw))
         if not hits:
             return 0.0, []
@@ -848,6 +852,11 @@ class MatchService:
         if not lost_attrs:
             return 0.0
         found_attrs = found_colors | found_ms
+        # 2026-08-27：品牌归一化（外观字段写「iPhone」vs「苹果」也能互相命中）
+        lost_attrs = expand_brand_tokens(lost_attrs)
+        found_attrs = expand_brand_tokens(found_attrs)
+        if not lost_attrs:
+            return 0.0
         # 语义命中计数：失物侧每个属性只要精确/同义命中候选任一属性即计 1。
         hit = sum(1 for t in lost_attrs if _token_hit(t, found_attrs))
         return hit / len(lost_attrs)
@@ -861,6 +870,11 @@ class MatchService:
         """
         lost_feat = MatchService._split_attrs(getattr(lost, "features", None))
         found_feat = MatchService._split_attrs(getattr(found, "features", None))
+        if not lost_feat:
+            return 0.0
+        # 2026-08-27：品牌归一化（features 写「iPhone 14」vs「苹果14」也能互相命中）
+        lost_feat = expand_brand_tokens(lost_feat)
+        found_feat = expand_brand_tokens(found_feat)
         if not lost_feat:
             return 0.0
         hit = sum(1 for t in lost_feat if _token_hit(t, found_feat))

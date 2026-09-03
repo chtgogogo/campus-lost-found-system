@@ -1,0 +1,409 @@
+# 本文件由失物招领系统自动生成，与审计黑匣子一致，可作为责任认定（追责）依据。时间均为 UTC（ISO8601）。
+记录ID,字段,值,说明
+37,id,37,审计记录自增主键
+37,user_id,5,操作人用户ID（空=系统/匿名）
+37,action,admin_export,操作类型：admin_export=管理员导出取证数据
+37,target_type,match,操作对象类型：match=匹配记录
+37,target_id,,操作对象ID
+37,ip,testclient,操作者来源IP
+37,ua,testclient,操作者浏览器/设备标识（User-Agent）
+37,session_id,,登录会话标识
+37,gps,,操作地理位置（如有）
+37,detail,scope=all;format=csv;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+37,created_at,2026-08-20T12:01:30.909099,操作发生时间（ISO8601 UTC）
+36,id,36,审计记录自增主键
+36,user_id,7,操作人用户ID（空=系统/匿名）
+36,action,admin_export,操作类型：admin_export=管理员导出取证数据
+36,target_type,match,操作对象类型：match=匹配记录
+36,target_id,,操作对象ID
+36,ip,182.145.119.209,操作者来源IP
+36,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+36,session_id,,登录会话标识
+36,gps,,操作地理位置（如有）
+36,detail,scope=all;format=md;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+36,created_at,2026-08-20T11:41:28.592677,操作发生时间（ISO8601 UTC）
+35,id,35,审计记录自增主键
+35,user_id,7,操作人用户ID（空=系统/匿名）
+35,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+35,target_type,user,操作对象类型：user=用户
+35,target_id,,操作对象ID
+35,ip,182.145.119.209,操作者来源IP
+35,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+35,session_id,,登录会话标识
+35,gps,,操作地理位置（如有）
+35,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+35,created_at,2026-08-20T11:41:22.875508,操作发生时间（ISO8601 UTC）
+34,id,34,审计记录自增主键
+34,user_id,2,操作人用户ID（空=系统/匿名）
+34,action,handover_complete,操作类型：handover_complete=交接完成
+34,target_type,match,操作对象类型：match=匹配记录
+34,target_id,1,操作对象ID
+34,ip,127.0.0.1,操作者来源IP
+34,ua,,操作者浏览器/设备标识（User-Agent）
+34,session_id,,登录会话标识
+34,gps,,操作地理位置（如有）
+34,detail,code=UWX7K9,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+34,created_at,2026-08-20T11:39:00.859319,操作发生时间（ISO8601 UTC）
+33,id,33,审计记录自增主键
+33,user_id,1,操作人用户ID（空=系统/匿名）
+33,action,publish_lost,操作类型：publish_lost=发布失物
+33,target_type,lost_item,操作对象类型：lost_item=失物条目
+33,target_id,1,操作对象ID
+33,ip,127.0.0.1,操作者来源IP
+33,ua,Mozilla/5.0,操作者浏览器/设备标识（User-Agent）
+33,session_id,,登录会话标识
+33,gps,,操作地理位置（如有）
+33,detail,title=一把黑伞;category=书包,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+33,created_at,2026-08-20T11:39:00.859319,操作发生时间（ISO8601 UTC）
+32,id,32,审计记录自增主键
+32,user_id,7,操作人用户ID（空=系统/匿名）
+32,action,admin_export,操作类型：admin_export=管理员导出取证数据
+32,target_type,match,操作对象类型：match=匹配记录
+32,target_id,,操作对象ID
+32,ip,182.145.119.209,操作者来源IP
+32,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+32,session_id,,登录会话标识
+32,gps,,操作地理位置（如有）
+32,detail,scope=all;format=md;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+32,created_at,2026-08-20T11:20:21.116634,操作发生时间（ISO8601 UTC）
+31,id,31,审计记录自增主键
+31,user_id,7,操作人用户ID（空=系统/匿名）
+31,action,admin_export,操作类型：admin_export=管理员导出取证数据
+31,target_type,match,操作对象类型：match=匹配记录
+31,target_id,,操作对象ID
+31,ip,182.145.119.209,操作者来源IP
+31,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+31,session_id,,登录会话标识
+31,gps,,操作地理位置（如有）
+31,detail,scope=all;format=md;ids=[2];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+31,created_at,2026-08-20T11:19:48.089929,操作发生时间（ISO8601 UTC）
+30,id,30,审计记录自增主键
+30,user_id,7,操作人用户ID（空=系统/匿名）
+30,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+30,target_type,user,操作对象类型：user=用户
+30,target_id,,操作对象ID
+30,ip,182.145.119.209,操作者来源IP
+30,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+30,session_id,,登录会话标识
+30,gps,,操作地理位置（如有）
+30,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+30,created_at,2026-08-20T11:19:26.897384,操作发生时间（ISO8601 UTC）
+29,id,29,审计记录自增主键
+29,user_id,7,操作人用户ID（空=系统/匿名）
+29,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+29,target_type,user,操作对象类型：user=用户
+29,target_id,,操作对象ID
+29,ip,182.145.119.209,操作者来源IP
+29,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+29,session_id,,登录会话标识
+29,gps,,操作地理位置（如有）
+29,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+29,created_at,2026-08-20T11:12:51.707366,操作发生时间（ISO8601 UTC）
+28,id,28,审计记录自增主键
+28,user_id,7,操作人用户ID（空=系统/匿名）
+28,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+28,target_type,user,操作对象类型：user=用户
+28,target_id,,操作对象ID
+28,ip,182.145.119.209,操作者来源IP
+28,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+28,session_id,,登录会话标识
+28,gps,,操作地理位置（如有）
+28,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+28,created_at,2026-08-20T11:12:42.054713,操作发生时间（ISO8601 UTC）
+27,id,27,审计记录自增主键
+27,user_id,7,操作人用户ID（空=系统/匿名）
+27,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+27,target_type,user,操作对象类型：user=用户
+27,target_id,,操作对象ID
+27,ip,182.145.119.209,操作者来源IP
+27,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+27,session_id,,登录会话标识
+27,gps,,操作地理位置（如有）
+27,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+27,created_at,2026-08-20T11:12:26.576307,操作发生时间（ISO8601 UTC）
+26,id,26,审计记录自增主键
+26,user_id,7,操作人用户ID（空=系统/匿名）
+26,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+26,target_type,user,操作对象类型：user=用户
+26,target_id,,操作对象ID
+26,ip,182.145.119.209,操作者来源IP
+26,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+26,session_id,,登录会话标识
+26,gps,,操作地理位置（如有）
+26,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+26,created_at,2026-08-20T11:12:20.001677,操作发生时间（ISO8601 UTC）
+25,id,25,审计记录自增主键
+25,user_id,7,操作人用户ID（空=系统/匿名）
+25,action,admin_export,操作类型：admin_export=管理员导出取证数据
+25,target_type,match,操作对象类型：match=匹配记录
+25,target_id,,操作对象ID
+25,ip,182.145.119.209,操作者来源IP
+25,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+25,session_id,,登录会话标识
+25,gps,,操作地理位置（如有）
+25,detail,scope=all;format=md;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+25,created_at,2026-08-20T11:05:34.998511,操作发生时间（ISO8601 UTC）
+24,id,24,审计记录自增主键
+24,user_id,7,操作人用户ID（空=系统/匿名）
+24,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+24,target_type,user,操作对象类型：user=用户
+24,target_id,,操作对象ID
+24,ip,182.145.119.209,操作者来源IP
+24,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+24,session_id,,登录会话标识
+24,gps,,操作地理位置（如有）
+24,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+24,created_at,2026-08-20T11:05:25.816978,操作发生时间（ISO8601 UTC）
+23,id,23,审计记录自增主键
+23,user_id,7,操作人用户ID（空=系统/匿名）
+23,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+23,target_type,user,操作对象类型：user=用户
+23,target_id,,操作对象ID
+23,ip,182.145.119.209,操作者来源IP
+23,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+23,session_id,,登录会话标识
+23,gps,,操作地理位置（如有）
+23,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+23,created_at,2026-08-20T11:04:52.854699,操作发生时间（ISO8601 UTC）
+22,id,22,审计记录自增主键
+22,user_id,7,操作人用户ID（空=系统/匿名）
+22,action,admin_export,操作类型：admin_export=管理员导出取证数据
+22,target_type,match,操作对象类型：match=匹配记录
+22,target_id,,操作对象ID
+22,ip,182.145.119.209,操作者来源IP
+22,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+22,session_id,,登录会话标识
+22,gps,,操作地理位置（如有）
+22,detail,scope=all;format=md;ids=[1];rows=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+22,created_at,2026-08-20T10:53:09.574756,操作发生时间（ISO8601 UTC）
+21,id,21,审计记录自增主键
+21,user_id,7,操作人用户ID（空=系统/匿名）
+21,action,admin_list_users,操作类型：admin_list_users=管理员查看用户列表
+21,target_type,user,操作对象类型：user=用户
+21,target_id,,操作对象ID
+21,ip,182.145.119.209,操作者来源IP
+21,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+21,session_id,,登录会话标识
+21,gps,,操作地理位置（如有）
+21,detail,keyword=;role=None;status=None;page=1;total=1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+21,created_at,2026-08-20T10:52:20.804338,操作发生时间（ISO8601 UTC）
+20,id,20,审计记录自增主键
+20,user_id,7,操作人用户ID（空=系统/匿名）
+20,action,register_admin,操作类型：register_admin=注册管理员
+20,target_type,user,操作对象类型：user=用户
+20,target_id,7,操作对象ID
+20,ip,,操作者来源IP
+20,ua,,操作者浏览器/设备标识（User-Agent）
+20,session_id,,登录会话标识
+20,gps,,操作地理位置（如有）
+20,detail,student_no=2016,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+20,created_at,2026-08-20T10:51:56.175823,操作发生时间（ISO8601 UTC）
+19,id,19,审计记录自增主键
+19,user_id,1,操作人用户ID（空=系统/匿名）
+19,action,publish_found,操作类型：publish_found=发布拾物
+19,target_type,found,操作对象类型：found=拾物条目
+19,target_id,9,操作对象ID
+19,ip,182.145.119.209,操作者来源IP
+19,ua,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",操作者浏览器/设备标识（User-Agent）
+19,session_id,,登录会话标识
+19,gps,,操作地理位置（如有）
+19,detail,"keep_status=0;category_id=4;category_name=书包;tags=['书包', '书', '玩偶', '白色', '内含:书']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+19,created_at,2026-08-20T10:34:49.774821,操作发生时间（ISO8601 UTC）
+18,id,18,审计记录自增主键
+18,user_id,1,操作人用户ID（空=系统/匿名）
+18,action,publish_found,操作类型：publish_found=发布拾物
+18,target_type,found,操作对象类型：found=拾物条目
+18,target_id,8,操作对象ID
+18,ip,182.145.118.248,操作者来源IP
+18,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+18,session_id,,登录会话标识
+18,gps,,操作地理位置（如有）
+18,detail,"keep_status=0;category_id=2;category_name=钱包;tags=['钱包', '白色']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+18,created_at,2026-08-12T12:17:46.366544,操作发生时间（ISO8601 UTC）
+17,id,17,审计记录自增主键
+17,user_id,1,操作人用户ID（空=系统/匿名）
+17,action,publish_found,操作类型：publish_found=发布拾物
+17,target_type,found,操作对象类型：found=拾物条目
+17,target_id,7,操作对象ID
+17,ip,240e:398:4280:f7d1:3930:7149:8bfb:a6ce,操作者来源IP
+17,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+17,session_id,,登录会话标识
+17,gps,,操作地理位置（如有）
+17,detail,keep_status=1;category_id=10;category_name=雨伞;tags=['雨伞'],操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+17,created_at,2026-08-12T10:57:59.273380,操作发生时间（ISO8601 UTC）
+16,id,16,审计记录自增主键
+16,user_id,1,操作人用户ID（空=系统/匿名）
+16,action,publish_found,操作类型：publish_found=发布拾物
+16,target_type,found,操作对象类型：found=拾物条目
+16,target_id,6,操作对象ID
+16,ip,240e:398:4280:f7d1:3930:7149:8bfb:a6ce,操作者来源IP
+16,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+16,session_id,,登录会话标识
+16,gps,,操作地理位置（如有）
+16,detail,"keep_status=0;category_id=11;category_name=水杯;tags=['水杯', '黑色']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+16,created_at,2026-08-12T10:53:29.464975,操作发生时间（ISO8601 UTC）
+15,id,15,审计记录自增主键
+15,user_id,5,操作人用户ID（空=系统/匿名）
+15,action,register_admin,操作类型：register_admin=注册管理员
+15,target_type,user,操作对象类型：user=用户
+15,target_id,5,操作对象ID
+15,ip,,操作者来源IP
+15,ua,,操作者浏览器/设备标识（User-Agent）
+15,session_id,,登录会话标识
+15,gps,,操作地理位置（如有）
+15,detail,student_no=BAD1786370596,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+15,created_at,2026-08-10T14:03:17.135644,操作发生时间（ISO8601 UTC）
+14,id,14,审计记录自增主键
+14,user_id,1,操作人用户ID（空=系统/匿名）
+14,action,publish_found,操作类型：publish_found=发布拾物
+14,target_type,found,操作对象类型：found=拾物条目
+14,target_id,5,操作对象ID
+14,ip,127.0.0.1,操作者来源IP
+14,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+14,session_id,,登录会话标识
+14,gps,,操作地理位置（如有）
+14,detail,"keep_status=0;category_id=3;category_name=钥匙;tags=['钥匙', '银色', '内含:钥匙']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+14,created_at,2026-08-05T11:42:52.315432,操作发生时间（ISO8601 UTC）
+13,id,13,审计记录自增主键
+13,user_id,1,操作人用户ID（空=系统/匿名）
+13,action,publish_found,操作类型：publish_found=发布拾物
+13,target_type,found,操作对象类型：found=拾物条目
+13,target_id,4,操作对象ID
+13,ip,127.0.0.1,操作者来源IP
+13,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+13,session_id,,登录会话标识
+13,gps,,操作地理位置（如有）
+13,detail,"keep_status=0;category_id=3;category_name=钥匙;tags=['钥匙', '黑色', '内含:钥匙']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+13,created_at,2026-08-05T11:40:10.999494,操作发生时间（ISO8601 UTC）
+12,id,12,审计记录自增主键
+12,user_id,1,操作人用户ID（空=系统/匿名）
+12,action,publish_found,操作类型：publish_found=发布拾物
+12,target_type,found,操作对象类型：found=拾物条目
+12,target_id,3,操作对象ID
+12,ip,127.0.0.1,操作者来源IP
+12,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+12,session_id,,登录会话标识
+12,gps,,操作地理位置（如有）
+12,detail,"keep_status=1;category_id=3;category_name=钥匙;tags=['钥匙', '银色', '内含:钥匙']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+12,created_at,2026-08-05T11:39:45.813924,操作发生时间（ISO8601 UTC）
+11,id,11,审计记录自增主键
+11,user_id,2,操作人用户ID（空=系统/匿名）
+11,action,publish_lost,操作类型：publish_lost=发布失物
+11,target_type,lost,操作对象类型：lost=失物条目
+11,target_id,4,操作对象ID
+11,ip,127.0.0.1,操作者来源IP
+11,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+11,session_id,,登录会话标识
+11,gps,,操作地理位置（如有）
+11,detail,"title=一把银色的钥匙;category_id=3;category_name=钥匙;tags=['钥匙', '银色', '内含:钥匙']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+11,created_at,2026-08-05T11:35:26.963319,操作发生时间（ISO8601 UTC）
+10,id,10,审计记录自增主键
+10,user_id,2,操作人用户ID（空=系统/匿名）
+10,action,keep1_claim_complete,操作类型：keep1_claim_complete=单边认领即完成（keep1）
+10,target_type,match,操作对象类型：match=匹配记录
+10,target_id,2,操作对象ID
+10,ip,127.0.0.1,操作者来源IP
+10,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+10,session_id,,登录会话标识
+10,gps,,操作地理位置（如有）
+10,detail,lost_id=2;found_id=1;score=40.0;flow=keep1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+10,created_at,2026-08-05T11:32:22.342938,操作发生时间（ISO8601 UTC）
+9,id,9,审计记录自增主键
+9,user_id,1,操作人用户ID（空=系统/匿名）
+9,action,handover_complete,操作类型：handover_complete=交接完成
+9,target_type,match,操作对象类型：match=匹配记录
+9,target_id,1,操作对象ID
+9,ip,,操作者来源IP
+9,ua,,操作者浏览器/设备标识（User-Agent）
+9,session_id,,登录会话标识
+9,gps,|,操作地理位置（如有）
+9,detail,code=UWX7K9,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+9,created_at,2026-08-05T11:32:00.715990,操作发生时间（ISO8601 UTC）
+8,id,8,审计记录自增主键
+8,user_id,1,操作人用户ID（空=系统/匿名）
+8,action,handover_generate,操作类型：handover_generate=生成交接码
+8,target_type,match,操作对象类型：match=匹配记录
+8,target_id,1,操作对象ID
+8,ip,,操作者来源IP
+8,ua,,操作者浏览器/设备标识（User-Agent）
+8,session_id,,登录会话标识
+8,gps,,操作地理位置（如有）
+8,detail,seq=2;code=UWX7K9,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+8,created_at,2026-08-05T11:31:35.371945,操作发生时间（ISO8601 UTC）
+7,id,7,审计记录自增主键
+7,user_id,1,操作人用户ID（空=系统/匿名）
+7,action,claim,操作类型：claim=认领
+7,target_type,match,操作对象类型：match=匹配记录
+7,target_id,1,操作对象ID
+7,ip,127.0.0.1,操作者来源IP
+7,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+7,session_id,,登录会话标识
+7,gps,,操作地理位置（如有）
+7,detail,1,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+7,created_at,2026-08-05T11:31:30.131760,操作发生时间（ISO8601 UTC）
+6,id,6,审计记录自增主键
+6,user_id,1,操作人用户ID（空=系统/匿名）
+6,action,im_message,操作类型：im_message=发送消息
+6,target_type,im_session,操作对象类型：im_session=会话
+6,target_id,2,操作对象ID
+6,ip,127.0.0.1,操作者来源IP
+6,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+6,session_id,,登录会话标识
+6,gps,,操作地理位置（如有）
+6,detail,[0] 你好，这是我的伞,操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+6,created_at,2026-08-05T11:31:21.518812,操作发生时间（ISO8601 UTC）
+5,id,5,审计记录自增主键
+5,user_id,1,操作人用户ID（空=系统/匿名）
+5,action,publish_lost,操作类型：publish_lost=发布失物
+5,target_type,lost,操作对象类型：lost=失物条目
+5,target_id,3,操作对象ID
+5,ip,127.0.0.1,操作者来源IP
+5,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+5,session_id,,登录会话标识
+5,gps,,操作地理位置（如有）
+5,detail,"title=一把黑色雨伞;category_id=10;category_name=雨伞;tags=['雨伞', '黑色']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+5,created_at,2026-08-05T11:30:25.914507,操作发生时间（ISO8601 UTC）
+4,id,4,审计记录自增主键
+4,user_id,2,操作人用户ID（空=系统/匿名）
+4,action,publish_found,操作类型：publish_found=发布拾物
+4,target_type,found,操作对象类型：found=拾物条目
+4,target_id,2,操作对象ID
+4,ip,127.0.0.1,操作者来源IP
+4,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+4,session_id,,登录会话标识
+4,gps,,操作地理位置（如有）
+4,detail,"keep_status=0;category_id=10;category_name=雨伞;tags=['雨伞', '黑色']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+4,created_at,2026-08-05T11:27:52.669395,操作发生时间（ISO8601 UTC）
+3,id,3,审计记录自增主键
+3,user_id,2,操作人用户ID（空=系统/匿名）
+3,action,publish_lost,操作类型：publish_lost=发布失物
+3,target_type,lost,操作对象类型：lost=失物条目
+3,target_id,2,操作对象ID
+3,ip,127.0.0.1,操作者来源IP
+3,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+3,session_id,,登录会话标识
+3,gps,,操作地理位置（如有）
+3,detail,"title=一个黑色水杯;category_id=11;category_name=水杯;tags=['水杯', '黑色']",操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+3,created_at,2026-08-05T11:27:02.169594,操作发生时间（ISO8601 UTC）
+2,id,2,审计记录自增主键
+2,user_id,1,操作人用户ID（空=系统/匿名）
+2,action,publish_lost,操作类型：publish_lost=发布失物
+2,target_type,lost,操作对象类型：lost=失物条目
+2,target_id,1,操作对象ID
+2,ip,127.0.0.1,操作者来源IP
+2,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+2,session_id,,登录会话标识
+2,gps,,操作地理位置（如有）
+2,detail,title=1;category_id=11;category_name=水杯;tags=['水杯'],操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+2,created_at,2026-08-05T11:26:01.974788,操作发生时间（ISO8601 UTC）
+1,id,1,审计记录自增主键
+1,user_id,1,操作人用户ID（空=系统/匿名）
+1,action,publish_found,操作类型：publish_found=发布拾物
+1,target_type,found,操作对象类型：found=拾物条目
+1,target_id,1,操作对象ID
+1,ip,127.0.0.1,操作者来源IP
+1,ua,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",操作者浏览器/设备标识（User-Agent）
+1,session_id,,登录会话标识
+1,gps,,操作地理位置（如有）
+1,detail,keep_status=1;category_id=11;category_name=水杯;tags=['水杯'],操作附加明细（如失物标题/类目/标签/交接码等 key=value 形式）
+1,created_at,2026-08-05T11:25:25.931501,操作发生时间（ISO8601 UTC）

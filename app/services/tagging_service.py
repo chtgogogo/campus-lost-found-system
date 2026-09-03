@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from app.core.attribute_extractor import AttributeExtractor
+from app.services.brand_dict import extract_brand, extract_brand_products
 
 # 颜色词表（中文规则抽取，可维护）
 COLOR_WORDS: list[str] = [
@@ -56,6 +57,47 @@ _NOUN_ORDER: list[str] = sorted(ITEM_NOUN_WORDS, key=len, reverse=True)
 
 # 名词集合（O(1) 判定某 tag 是否为物品名词，供匹配候选召回使用）
 NOUN_SET: set[str] = set(ITEM_NOUN_WORDS)
+
+# ===========================================================================
+# 地点归一化（2026-08-27 新增，⑥）：别名 → 标准表达，让地点四级抽取更稳。
+# 场景：校园口语「三教」vs 标准「第三教学楼」、「图书馆3楼」vs「图书馆三楼」。
+# 数字楼层归一：3楼/3层 → 三楼/三层（FLOOR_WORDS 只认中文数字楼层）。
+# ===========================================================================
+LOCATION_ALIASES: dict[str, str] = {
+    # 教学楼简称 → 标准表达（可被子串抽取「教学楼」）
+    "三教": "第三教学楼", "二教": "第二教学楼", "一教": "第一教学楼",
+    "四教": "第四教学楼", "五教": "第五教学楼",
+    # 数字楼层 → 中文楼层
+    "3楼": "三楼", "3层": "三层", "2楼": "二楼", "2层": "二层",
+    "4楼": "四楼", "4层": "四层", "5楼": "五楼", "5层": "五层",
+    "6楼": "六楼", "6层": "六层", "7楼": "七楼", "7层": "七层",
+    "8楼": "八楼", "8层": "八层", "9楼": "九楼", "9层": "九层",
+    "10楼": "十楼", "10层": "十层", "11楼": "十一楼", "11层": "十一层",
+    "12楼": "十二楼", "12层": "十二层",
+    # 图书馆数字楼层（先于数字楼层规则，避免拆成「图书馆」+「三楼」以外的形态）
+    "图书馆3楼": "图书馆三楼", "图书馆3层": "图书馆三层",
+    "图书馆2楼": "图书馆二楼", "图书馆2层": "图书馆二层",
+    "图书馆4楼": "图书馆四楼", "图书馆4层": "图书馆四层",
+}
+# 按长度降序替换，保证「图书馆3楼」先于「3楼」命中
+_LOCATION_ALIAS_ORDER: list[tuple[str, str]] = sorted(
+    LOCATION_ALIASES.items(), key=lambda kv: -len(kv[0])
+)
+
+
+def normalize_location_text(text: str | None) -> str:
+    """把地点别名替换为标准表达（长词优先，只替换仍保留原语义的形态）。
+
+    兼容性铁律：永不抛异常；None/空 → 原样返回。仅影响「本来抽不到或半命中」的
+    地点表达，已命中的标准表达不受影响。
+    """
+    if not text:
+        return text or ""
+    out = str(text)
+    for alias, standard in _LOCATION_ALIAS_ORDER:
+        if alias in out:
+            out = out.replace(alias, standard)
+    return out
 
 
 class TaggingService:
@@ -114,9 +156,23 @@ class TaggingService:
                     _add(color)
 
             # 3) 地点词（子串匹配，长词优先已在常量表中排列）
+            # 2026-08-27：先做地点归一化（三教→第三教学楼、3楼→三楼），
+            # 让口语表达也能命中词表；仅影响本环节，不改动 text_blob 供其它步骤使用。
+            loc_blob = normalize_location_text(text_blob)
             for loc in cls.LOCATION_WORDS:
-                if loc and loc in text_blob:
+                if loc and loc in loc_blob:
                     _add(loc)
+
+            # 3.5) 品牌/型号（2026-08-27 新增）：词典+正则归一为标准品牌词注入 tags。
+            #      使「iPhone」「Apple」与「苹果」互相可命中（词典方案，非向量化）。
+            for brand in sorted(extract_brand(text_blob)):
+                _add(brand)
+
+            # 3.6) 品牌→产品推断（2026-08-28 新增）：「苹果15」→ 注入「手机」。
+            #      使失主写品牌型号、拾主写物品通名（如「手机」）也能互相匹配，
+            #      且该产品词 ∈ NOUN_SET 时还能参与候选召回与类目解析兜底。
+            for prod in sorted(extract_brand_products(text_blob)):
+                _add(prod)
 
             # 4) 视觉 label（类目），放最后（名词阶段可能已含，去重）
             if vision_label and vision_label not in seen:

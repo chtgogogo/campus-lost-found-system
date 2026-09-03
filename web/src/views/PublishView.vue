@@ -245,6 +245,7 @@ import { ElMessage, type UploadUserFile } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { itemsApi } from '@/api/items'
 import { visionApi } from '@/api/vision'
+import { compressImages } from '@/utils/image'
 import type { VisionPredictResult } from '@/types'
 
 const tab = ref<'found' | 'lost'>('found')
@@ -287,6 +288,7 @@ watch(
 
 // 拾物上传后自动预识别（演示模式由 mockAdapter 返回占位结果），
 // 并将识别 label 预填到分类文本框（用户可改）
+// v9：识别前先压缩手机原图（visionApi.predict 内部压缩），上传与推理都快数倍
 watch(
   foundFiles,
   async (files) => {
@@ -327,11 +329,15 @@ function onPreview(file: UploadUserFile) {
   previewVisible.value = true
 }
 
-function buildFormWithImages(list: UploadUserFile[]): FormData {
+// v9：发布上传前压缩每张手机原图（几 MB → 几百 KB），公网小带宽下大幅减少上传耗时
+async function buildFormWithImages(list: UploadUserFile[]): Promise<FormData> {
   const fd = new FormData()
+  const raws: File[] = []
   list.forEach((f) => {
-    if (f.raw) fd.append('images', f.raw)
+    if (f.raw) raws.push(f.raw as File)
   })
+  const smalls = await compressImages(raws)
+  smalls.forEach((f) => fd.append('images', f))
   return fd
 }
 
@@ -344,7 +350,7 @@ async function onSubmitFound() {
     ElMessage.warning('请填写物品分类')
     return
   }
-  const fd = buildFormWithImages(foundFiles.value)
+  const fd = await buildFormWithImages(foundFiles.value)
   fd.append('keep_status', String(found.keep_status))
   fd.append('category_name', found.category_name.trim())
   if (found.description) fd.append('description', found.description)
@@ -388,7 +394,7 @@ async function onSubmitLost() {
     return
   }
 
-  const fd = buildFormWithImages(lostFiles.value)
+  const fd = await buildFormWithImages(lostFiles.value)
   fd.append('category_name', lost.category_name.trim())
   fd.append('title', lost.title)
   fd.append('description', lost.description)
