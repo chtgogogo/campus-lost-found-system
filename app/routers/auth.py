@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.ratelimit import check_rate_limit
 from app.models.user import User
 from app.routers.deps import get_current_user
 from app.schemas.common import StandardResponse, success
@@ -24,9 +25,15 @@ from app.services.auth_service import AuthService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _ip(request: Request) -> str:
+    """取客户端 IP（限流键；反向代理场景生产应改为取 X-Forwarded-For 首段）。"""
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/register", response_model=StandardResponse)
-def register(body: UserCreate, db: Session = Depends(get_db)):
+def register(request: Request, body: UserCreate, db: Session = Depends(get_db)):
     """注册（需短信 OTP）。返回用户信息与令牌。"""
+    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
     user, access, refresh = AuthService(db).register(body)
     return success(
         data={
@@ -37,8 +44,9 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=StandardResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     """登录（student_no + password）。返回令牌。"""
+    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
     _, access, refresh = AuthService(db).login(body.student_no, body.password)
     return success(data=Token(access_token=access, refresh_token=refresh))
 
@@ -51,8 +59,9 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/send-sms", response_model=StandardResponse)
-def send_sms(body: SendSmsRequest, db: Session = Depends(get_db)):
+def send_sms(request: Request, body: SendSmsRequest, db: Session = Depends(get_db)):
     """发送短信（Mock：控制台输出）。DEBUG 模式响应附带 dev_code 便于联调。"""
+    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
     code = AuthService(db).send_sms(body.phone, body.purpose)
     data: dict = {"sent": True}
     if settings.DEBUG:

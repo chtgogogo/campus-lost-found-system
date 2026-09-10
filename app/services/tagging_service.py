@@ -7,8 +7,8 @@
   作为「匹配主信号」优先抽取。
 - 视觉 label（即 `category.name`，来自 VisionService.predict）作为类目标签（仅真实识别时传入）。
 
-抽取顺序（v4）：**名词 → 颜色 → 地点 → 视觉 label**，保序去重（set 去重，保留首次出现顺序）。
-名词优先级最高：先抽 `category_name` 规范名词，再抽标题/描述中的名词子串（最长子串优先）。
+抽取顺序（v13）：**地点（消费式）→ 名词（消费式）→ 颜色 → 品牌 → 视觉 label → 属性**。
+地点先于名词：长词先消费，防止「图书馆」被名词层拆出假名词「书」（词边界修复）。
 
 降级铁律：`extract` 永不抛异常；任何输入缺失只返回已能抽取到的标签（可能为空数组）。
 """
@@ -43,12 +43,13 @@ LOCATION_WORDS: list[str] = [
 ]
 
 # 物品名词典（v4 新增）：与视觉 seed 类目名对齐的校园常见物品名词，可维护。
-# 抽取优先级：名词 > 颜色 > 地点 > 视觉 label；名词作为匹配主信号。
+# 抽取优先级：地点 > 名词 > 颜色 > 视觉 label；名词作为匹配主信号。
+# v13：补「笔记本电脑」——「笔记本」的子串关系靠长词优先 + 消费式抽取消解。
 ITEM_NOUN_WORDS: list[str] = [
     "钥匙", "校园卡", "玩偶", "本子", "水杯", "雨伞", "手机", "钱包",
     "书包", "书", "笔记本", "眼镜", "耳机", "充电宝", "饭卡", "学生证",
     "证件", "身份证", "衣物", "外套", "雨衣", "数据线", "雨靴", "钥匙串",
-    "卡套", "课本", "作业本",
+    "卡套", "课本", "作业本", "笔记本电脑",
 ]
 
 # 名词按长度降序，保证「最长子串优先」（如「钥匙串」优先于「钥匙」），
@@ -57,6 +58,9 @@ _NOUN_ORDER: list[str] = sorted(ITEM_NOUN_WORDS, key=len, reverse=True)
 
 # 名词集合（O(1) 判定某 tag 是否为物品名词，供匹配候选召回使用）
 NOUN_SET: set[str] = set(ITEM_NOUN_WORDS)
+
+# 地点词长词优先序（v13：抽取时按此序消费，防止「快递站」被拆出「快递」）
+_LOCATION_ORDER: list[str] = sorted(set(LOCATION_WORDS), key=len, reverse=True)
 
 # ===========================================================================
 # 地点归一化（2026-08-27 新增，⑥）：别名 → 标准表达，让地点四级抽取更稳。
@@ -140,51 +144,55 @@ class TaggingService:
                     seen.add(tag)
                     tags.append(tag)
 
-            # 1) 物品名词（优先级最高）：先抽 category_name 规范名词，再抽文本名词
-            noun_sources: list[str] = []
-            if category_name:
-                noun_sources.append(str(category_name))
-            noun_sources.append(text_blob)
-            for source in noun_sources:
-                for noun in cls._NOUN_ORDER:
-                    if noun and noun in source and noun not in seen:
-                        _add(noun)
+            # v13 词边界修复：地点**先抽并消费**（长词优先）。此前名词层先跑且不消费，
+            # 「图书馆」「快递站」会被子串匹配拆出假名词「书」「快递」，污染召回。
+            working = normalize_location_text(text_blob)
+            for loc in _LOCATION_ORDER:
+                if loc and loc in working:
+                    _add(loc)
+                    working = working.replace(loc, " ")
 
-            # 2) 颜色词（子串匹配）
+            # 2) 物品名词（v13 起消费式：命中长词后消掉原文，不再拆出嵌套短词；
+            #    如「钥匙串」命中后不再重复产出「钥匙」——同族召回由 category_service 家族表兜底）
+            if category_name:
+                for noun in cls._NOUN_ORDER:
+                    if noun and noun in str(category_name):
+                        _add(noun)
+            for noun in cls._NOUN_ORDER:
+                if noun and noun in working:
+                    _add(noun)
+                    working = working.replace(noun, " ")
+
+            # 3) 颜色词（子串匹配，维持原行为）
             for color in cls.COLOR_WORDS:
                 if color and color in text_blob:
                     _add(color)
 
-            # 3) 地点词（子串匹配，长词优先已在常量表中排列）
-            # 2026-08-27：先做地点归一化（三教→第三教学楼、3楼→三楼），
-            # 让口语表达也能命中词表；仅影响本环节，不改动 text_blob 供其它步骤使用。
-            loc_blob = normalize_location_text(text_blob)
-            for loc in cls.LOCATION_WORDS:
-                if loc and loc in loc_blob:
-                    _add(loc)
-
-            # 3.5) 品牌/型号（2026-08-27 新增）：词典+正则归一为标准品牌词注入 tags。
-            #      使「iPhone」「Apple」与「苹果」互相可命中（词典方案，非向量化）。
-            for brand in sorted(extract_brand(text_blob)):
+            # 4) 品牌/型号（词典+正则归一为标准品牌词注入 tags；基于已扣地点/名词的残余文本）
+            for brand in sorted(extract_brand(working)):
                 _add(brand)
 
-            # 3.6) 品牌→产品推断（2026-08-28 新增）：「苹果15」→ 注入「手机」。
-            #      使失主写品牌型号、拾主写物品通名（如「手机」）也能互相匹配，
-            #      且该产品词 ∈ NOUN_SET 时还能参与候选召回与类目解析兜底。
-            for prod in sorted(extract_brand_products(text_blob)):
+            # 5) 品牌→产品推断（「苹果15」→ 注入「手机」）：
+            #    使失主写品牌型号、拾主写物品通名（如「手机」）也能互相匹配，
+            #    且该产品词 ∈ NOUN_SET 时还能参与候选召回与类目解析兜底。
+            for prod in sorted(extract_brand_products(working)):
                 _add(prod)
 
-            # 4) 视觉 label（类目），放最后（名词阶段可能已含，去重）
+            # 6) 视觉 label（类目），放最后（名词阶段可能已含，去重）
             if vision_label and vision_label not in seen:
                 _add(str(vision_label))
 
-            # 5) 属性抽取（三重融合匹配）：图案/内含物/尺寸 + 颜色口语归一化
+            # 7) 属性抽取（三重融合匹配）：图案/内含物/尺寸 + 颜色口语归一化
             #    由 AttributeExtractor(jieba + 同义词) 抽成带前缀标签，汇入现有 tag 体系，
             #    由 MatchService 现有打分引擎自然完成"文本重合度"融合。
+            #    v13：跳过裸名词形态的属性标签（jieba 把「钥匙串」切出「钥匙」这类），
+            #    名词层已消费式抽取，裸名词只会是切分残留噪声。
             try:
                 for at in AttributeExtractor.to_tags(
                     AttributeExtractor.extract(description=description)
                 ):
+                    if at in NOUN_SET:
+                        continue
                     _add(at)
             except Exception:
                 pass  # 抽取失败不影响发布

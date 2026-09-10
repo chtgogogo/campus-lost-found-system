@@ -9,10 +9,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.ratelimit import check_rate_limit
 from app.models.category import Category
+from app.models.user import User
 from app.routers.deps import get_current_user
 from app.schemas.vision import VisionCategory, VisionPredictResponse
 from app.services.vision_service import get_vision_service
+from app.utils.image_validator import validate_images
 
 router = APIRouter(prefix="/vision", tags=["vision"])
 
@@ -21,12 +24,14 @@ router = APIRouter(prefix="/vision", tags=["vision"])
 async def predict(
     image: UploadFile = File(..., description="待识别图片"),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """发布前预识别：返回 AI 识别的类别 / 标签 / 置信度，及可选分类列表（供手动纠偏）。"""
+    check_rate_limit(f"user:{user.id}", 30)
     data = await image.read()
     if not data:
         raise HTTPException(status_code=400, detail="图片内容为空")
+    validate_images([(image.filename or "img.jpg", data)])
     result = get_vision_service().predict(data)
     # 活跃分类列表（供前端手动改类下拉）
     cats = (

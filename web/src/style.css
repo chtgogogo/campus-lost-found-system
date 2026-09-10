@@ -1,13 +1,25 @@
+/* ============================================================
+   全局设计令牌与基础样式（v12 视觉升级）
+   原则：高级、克制、不花哨——统一令牌、双层阴影、轻微交互
+   ============================================================ */
 :root {
-  --lf-primary: #2f6fed;
-  --lf-primary-dark: #1f56c4;
-  --lf-bg: #f4f6fb;
+  /* 主色：深青绿（teal）——信任、沉稳；刻意避开千篇一律的默认蓝 */
+  --lf-primary: #0f766e;
+  --lf-primary-dark: #115e59;
+  --lf-primary-light: #14b8a6;
+  /* 点缀色：琥珀——用于成色/拾物等暖语义，低饱和不抢戏 */
+  --lf-accent: #b45309;
+  --lf-bg: #f5f6f8;
   --lf-card: #ffffff;
-  --lf-text: #1f2733;
-  --lf-text-sub: #6b7785;
-  --lf-border: #e6eaf2;
-  --lf-radius: 14px;
-  --lf-shadow: 0 6px 20px rgba(31, 39, 51, 0.06);
+  --lf-text: #1a2332;
+  --lf-text-sub: #64748b;
+  --lf-border: #e7ebf0;
+  --lf-radius: 12px;
+  --lf-radius-sm: 8px;
+  /* 双层阴影：一层贴边 + 一层弥散，比单层重阴影更轻盈 */
+  --lf-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.05);
+  --lf-shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.05), 0 12px 28px rgba(16, 24, 40, 0.1);
+  --lf-gradient-brand: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
 }
 
 * {
@@ -22,11 +34,12 @@ body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: 'HarmonyOS Sans SC', 'MiSans', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   color: var(--lf-text);
   background: var(--lf-bg);
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums; /* 数字等宽：列表/分数对齐更整齐 */
 }
 
 #app {
@@ -38,29 +51,56 @@ a {
   text-decoration: none;
 }
 
-/* 通用容器 */
+/* 通用容器：入场轻动画（尊重系统减弱动效设置） */
 .lf-container {
   max-width: 1080px;
   margin: 0 auto;
   padding: 16px;
+  animation: lf-fade-in 0.3s ease-out;
+}
+
+@keyframes lf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-container,
+  .lf-card,
+  .el-button {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .lf-page-title {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 4px 0 16px;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  margin: 6px 0 16px;
 }
 
 .lf-muted {
   color: var(--lf-text-sub);
 }
 
-/* 卡片阴影统一 */
+/* 卡片：统一令牌 + 悬停轻抬升 */
 .lf-card {
   background: var(--lf-card);
   border-radius: var(--lf-radius);
   box-shadow: var(--lf-shadow);
   border: 1px solid var(--lf-border);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.lf-card:hover {
+  box-shadow: var(--lf-shadow-hover);
 }
 
 /* 图片占位统一圆角 */
@@ -69,15 +109,34 @@ a {
   height: 100%;
   object-fit: cover;
   border-radius: 10px;
-  background: #eef1f7;
+  background: #eef1f5;
 }
 
-/* 让 Element Plus 主色与主题一致 */
+/* ============================================================
+   Element Plus 主题对齐：主色 + 衍生色全套（hover/禁用/浅底），
+   不覆盖则按钮悬停、选中底色仍是旧蓝，观感割裂
+   ============================================================ */
 :root {
-  --el-color-primary: var(--lf-primary);
+  --el-color-primary: #0f766e;
+  --el-color-primary-dark-2: #0c5e58;
+  --el-color-primary-light-3: #4d958e;
+  --el-color-primary-light-5: #87bab4;
+  --el-color-primary-light-7: #bed8d4;
+  --el-color-primary-light-8: #d6e7e4;
+  --el-color-primary-light-9: #ebf3f2;
+  --el-border-radius-base: 8px;
+  --el-box-shadow-light: var(--lf-shadow);
 }
 
-/* 顶部栏 */
+/* 按钮过渡统一节奏 */
+.el-button {
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+/* ============================================================
+   顶部栏：毛玻璃（克制版），sticky 场景滚动时层次更干净
+   ============================================================ */
 .lf-header {
   position: sticky;
   top: 0;
@@ -87,17 +146,40 @@ a {
   justify-content: space-between;
   height: 56px;
   padding: 0 16px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
   border-bottom: 1px solid var(--lf-border);
 }
 
 .lf-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-weight: 700;
   font-size: 16px;
-  color: var(--lf-primary);
+  letter-spacing: 0.3px;
+  color: var(--lf-text);
+}
+
+/* 品牌标：渐变小方块 + 白点，替代单色圆点 */
+.lf-logo-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--lf-gradient-brand);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.35);
+}
+
+.lf-logo-mark::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 /* 底部移动端标签栏（默认隐藏，移动端显示） */
@@ -126,7 +208,9 @@ a {
     z-index: 60;
     display: flex;
     height: 58px;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--lf-border);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -141,10 +225,12 @@ a {
     font-size: 11px;
     color: var(--lf-text-sub);
     cursor: pointer;
+    transition: color 0.15s ease;
   }
 
   .lf-tabbar .tab.active {
     color: var(--lf-primary);
+    font-weight: 600;
   }
 
   .lf-tabbar .tab .el-icon {
@@ -175,6 +261,15 @@ a {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cdd4e0;
+  background: #c9d1dc;
   border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb9c7;
+}
+
+/* 键盘可达性：统一焦点环 */
+:focus-visible {
+  outline: 2px solid var(--lf-primary-light);
+  outline-offset: 2px;
 }

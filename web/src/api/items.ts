@@ -69,4 +69,13 @@ export const itemsApi = {
   myPublished(): Promise<MyPublished> {
     return apiGet<MyPublished>('/users/me/items')
   },
+  // 标签预览（v12）：发布页「智能确认卡片」——与正式发布共用后端抽取管线，
+  // 用户提交前即可看到描述会被抽成哪些标签。失败静默（演示模式无后端时不展示卡片）。
+  tagsPreview(payload: {
+    title?: string
+    description?: string
+    category_name?: string
+  }): Promise<{ tags: string[] }> {
+    return apiPost<{ tags: string[] }>('/tags-preview', payload, { timeout: 10000 })
+  },
 }

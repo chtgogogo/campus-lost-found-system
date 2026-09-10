@@ -47,6 +47,15 @@ class FoundItemPublishDTO:
     location: Optional[str] = None  # v8：地点描述
 
 
+# ---------------- 标签预览（v12：发布页「智能确认卡片」） ----------------
+class TagsPreviewDTO(BaseModel):
+    """发布前标签预览请求体：复用 TaggingService 与正式发布同一套抽取管线。"""
+
+    title: Optional[str] = Field(None, max_length=100, description="失物标题（拾物不传）")
+    description: Optional[str] = Field(None, max_length=2000, description="描述文本")
+    category_name: Optional[str] = Field(None, max_length=100, description="用户填写/识别预填的分类")
+
+
 # ---------------- 输出 ----------------
 class LostItemOut(BaseModel):
     """失物输出（含自由文本类目名）。"""

@@ -3,7 +3,7 @@
     <!-- 顶部栏 -->
     <header class="lf-header">
       <div class="lf-brand">
-        <span class="lf-logo-dot" />
+        <span class="lf-logo-mark" />
         校园失物招领
       </div>
 
@@ -34,7 +34,7 @@
 
         <el-dropdown trigger="click" @command="onCommand">
           <span class="lf-user">
-            <el-avatar :size="28" style="background: var(--lf-primary)">
+            <el-avatar :size="28" class="lf-avatar">
               {{ userInitial }}
             </el-avatar>
             <span class="lf-user-name">{{ auth.user?.real_name || auth.user?.student_no || '我' }}</span>
@@ -187,11 +187,18 @@ async function onCommand(command: string) {
   box-shadow: var(--lf-shadow);
   height: 100%;
 }
-.lf-logo-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--lf-primary);
-  display: inline-block;
+.lf-menu :deep(.el-menu-item) {
+  border-radius: 8px;
+  margin: 2px 0;
+  transition: all 0.15s ease;
+}
+.lf-menu :deep(.el-menu-item.is-active) {
+  background: var(--lf-primary-light-9);
+  font-weight: 600;
+}
+.lf-avatar {
+  background: var(--lf-gradient-brand);
+  color: #fff;
+  font-weight: 600;
 }
 </style>
