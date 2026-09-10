@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     SMS_RATE_LIMIT_PER_MIN: int = 5             # 每分钟上限
     SMS_RESEND_INTERVAL_SEC: int = 60           # 重发间隔
 
+    # ---------------- API 限流（v13：固定窗口，见 core/ratelimit.py） ----------------
+    # DEBUG=True 或本开关 False 时全部放行（开发/测试套件同 IP 高频注册会误伤）
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MIN: int = 10           # 登录/注册/发验证码（按 IP）
+    RATE_LIMIT_PUBLISH_PER_MIN: int = 10        # 发布失物/拾物（按用户）
+    RATE_LIMIT_PREVIEW_PER_MIN: int = 30        # 标签预览（按用户，轻量接口放宽）
+
     # ---------------- 匹配打分（2026-08-05 flow-v2 新公式，Q5 拍板） ----------------
     # 普通类五维公式（合计 100，阈值沿用 80）：
     #   score = 15·photo + 20·category + 50·text + 10·location + 5·time

@@ -127,9 +127,17 @@ def qty_score(lost_pairs, found_pairs) -> float:
 # 二、状态 / 形容词（PRD §A.3.5）
 # ===========================================================================
 # 反义词对：每组内**任意跨组配对**即视为冲突。词已归一到「标准词」形态。
+# v12：按成色分级思路扩充——「九成新/八成新/九五新」归入「新」侧（彼此命中，与旧侧冲突），
+# 「磨损/划痕/掉漆/褪色」归入「破损」侧（用户点选录入后可被抽取，PRD-v12 §2）。
 STATE_WORD_PAIRS: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
-    (frozenset({"新", "全新", "崭新"}), frozenset({"旧", "陈旧", "老旧"})),
-    (frozenset({"完好", "完整", "没坏"}), frozenset({"破损", "损坏", "开裂", "碎", "破裂", "摔坏"})),
+    (
+        frozenset({"新", "全新", "崭新", "九成新", "八成新", "九五新"}),
+        frozenset({"旧", "陈旧", "老旧", "破旧"}),
+    ),
+    (
+        frozenset({"完好", "完整", "没坏"}),
+        frozenset({"破损", "损坏", "开裂", "碎", "破裂", "摔坏", "磨损", "划痕", "掉漆", "褪色"}),
+    ),
     (frozenset({"干净", "整洁"}), frozenset({"脏", "污渍", "有污渍", "脏污"})),
     (frozenset({"大"}), frozenset({"小"})),
     (frozenset({"厚"}), frozenset({"薄"})),
@@ -158,6 +166,11 @@ STATE_SCORE_MISSING: float = 0.0      # 失主侧无状态词
 
 SIGNAL_STATE_CONFLICT: str = "state_conflict"
 
+# v13：品牌冲突（评测集 N03/N13 证据：双方品牌明确不同——iPhone vs 华为/小米——
+# 其余维度全对齐仍拿 86 分误配）。双方各自抽到品牌词且无交集 → raw 惩罚 + 信号。
+SIGNAL_BRAND_CONFLICT: str = "brand_conflict"
+BRAND_CONFLICT_PENALTY: float = 10.0
+
 # 单字状态词（新/旧/大/小/厚/薄/满/空/碎/脏）若做裸子串匹配极易误命中
 # （「新生」「空调」「大门」），故要求它们只能以「独立 token（可带程度副词/语气助词）」形态命中。
 _DEGREE_PREFIX = "很|挺|超|非常|特别|比较|有点|略"
@@ -172,6 +185,15 @@ def _single_char_state_re(word: str) -> re.Pattern[str]:
 _SINGLE_CHAR_STATE_RE: dict[str, re.Pattern[str]] = {
     w: _single_char_state_re(w) for w in STATE_WORDS if len(w) == 1
 }
+
+
+# v13：否定表达处理——「无划痕/没有任何破损」此前被当正面状态词抽出，
+# 与真实状态误判冲突（评测集 N05 根因）。否定词（可隔填充词）+ 状态词整体匹配：
+# 组 1 命中否定 → 不计入 hits；无论正负都整体消费，避免碎片流入后续 token 层。
+# ⚠️ 否定词长词在前（否则「没」会截断「没有」的匹配）。
+STATE_NEGATORS: tuple[str, ...] = ("没有", "不是", "毫无", "毫不", "并无", "无", "没", "非", "未")
+_STATE_NEG_CORE: str = "(?:" + "|".join(STATE_NEGATORS) + ")"
+_STATE_NEG_FILLER: str = r"(?:任何|明显|丝毫|一点|什么)?"
 
 
 def extract_states(text: str, tokens) -> tuple[set[str], str]:
@@ -192,9 +214,14 @@ def extract_states(text: str, tokens) -> tuple[set[str], str]:
     for word in STATE_WORDS:
         if len(word) == 1:
             continue
-        if word and word in remaining:
+        pat = re.compile(rf"({_STATE_NEG_CORE}{_STATE_NEG_FILLER})?({re.escape(word)})")
+        matches = list(pat.finditer(remaining))
+        if not matches:
+            continue
+        # 任一处出现「无否定前缀」的正面命中才算有效状态
+        if any(m.group(1) is None for m in matches):
             hits.add(word)
-            remaining = remaining.replace(word, " ")
+        remaining = pat.sub(" ", remaining)
     for word, pattern in _SINGLE_CHAR_STATE_RE.items():
         for tok in tokens or ():
             if pattern.match(str(tok)):
@@ -255,7 +282,13 @@ def state_score(lost_states, found_states) -> tuple[float, bool]:
 ROOM_RE = re.compile(r"(?<![0-9A-Za-z])([A-Za-z]?[0-9]{3,4})(?![0-9])")
 
 # 校区：`XX校区`（PRD 标注为「缺，需扩表」，此处用模式匹配而非枚举，避免维护 N 所学校的校区名）
-CAMPUS_RE = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9]{1,8}(?:校区|分校|校园))")
+# v13 修复：`(?!卡)` 排除「校园卡」——此前「捡到一张蓝色的校园卡」会被整段吞成假校区名，
+# 连带吃掉颜色/量词（评测集 P02 颜色维度误判 0 分的根因）。
+CAMPUS_RE = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9]{1,8}(?:校区|分校|校园))(?!卡)")
+
+# v13：校区命中前缀里的口语虚词黑名单——「捡到一张蓝色的校园」这类散文片段不是地名。
+# 只检查去掉尾部（校区/分校/校园）后的前缀部分。
+_CAMPUS_PROSE_CHARS: frozenset[str] = frozenset("的了在是到把被捡丢拾有张个只条去从和与跟说")
 
 # 楼层词：从既有 `LOCATION_WORDS` 中按「X楼 / X层」形态切出（一楼~十二楼、一层~十二层）
 _FLOOR_SUFFIXES = ("楼", "层")
@@ -322,9 +355,13 @@ def extract_place(text: str) -> tuple[dict[str, set[str]], str]:
         place["room"].add(m.group(1).upper())
     remaining = ROOM_RE.sub(" ", remaining)
 
-    # 2) 校区
+    # 2) 校区（v13：过滤含口语虚词的散文误命中，见 _CAMPUS_PROSE_CHARS）
     for m in CAMPUS_RE.finditer(remaining):
-        place["campus"].add(m.group(1))
+        name = m.group(1)
+        prefix = name[:-2]  # 去掉 校区/分校/校园 尾巴
+        if prefix and any(ch in _CAMPUS_PROSE_CHARS for ch in prefix):
+            continue
+        place["campus"].add(name)
     remaining = CAMPUS_RE.sub(" ", remaining)
 
     # 3) 楼 / 场所（长词优先）
@@ -361,7 +398,17 @@ def place_score(lost_place, found_place) -> float:
     if not provided_levels:
         return PLACE_SCORE_NONE
 
-    hit_levels = [lvl for lvl in provided_levels if lost.get(lvl, set()) & found.get(lvl, set())]
+    # v13：building 级增加跨侧包含判定——「学生食堂」vs「食堂」这类长短写法
+    # 此前集合交集判空直接 0 分（评测集 P14 漏配根因之一）。
+    def _level_hit(lvl: str) -> bool:
+        ls, fs = lost.get(lvl, set()), found.get(lvl, set())
+        if ls & fs:
+            return True
+        if lvl == "building":
+            return any(a in b or b in a for a in ls for b in fs)
+        return False
+
+    hit_levels = [lvl for lvl in provided_levels if _level_hit(lvl)]
     if not hit_levels:
         return PLACE_SCORE_NONE
     if len(hit_levels) == len(provided_levels):
@@ -377,6 +424,7 @@ def place_score(lost_place, found_place) -> float:
 # 四、照片 / 系统分类（PRD §A.3.2）与时间（PRD §A.3.8）档位
 # ===========================================================================
 PHOTO_CAT_SAME: float = 20.0        # 双方类目相同（category_id 相等或归一化 category_name 相等）
+PHOTO_CAT_FAMILY: float = 15.0      # v12：同家族类目（银行卡 ≈ 学生证，见 category_service.CATEGORY_FAMILIES）
 PHOTO_CAT_APPROX: float = 10.0      # 父子级 / 近似类目（沿用 category_hit(exact=False) 口径）
 PHOTO_CAT_DIFF: float = 0.0         # 类目不同
 PHOTO_CAT_NEUTRAL: float = 10.0     # 任一侧类目缺失，或双方均为「其他」类（类目无判别力，Q7）

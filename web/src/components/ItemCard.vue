@@ -296,7 +296,7 @@ const expiresInDays = computed<number | null>(() => {
   color: #6b7785;
 }
 .item-status.s1 {
-  color: #2f6fed;
+  color: var(--lf-primary);
 }
 .item-status.s2 {
   color: #f59e0b;

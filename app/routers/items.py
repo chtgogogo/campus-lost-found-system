@@ -15,6 +15,7 @@ from app.core.exceptions import (
     ParamError,
     PermissionError,
 )
+from app.core.ratelimit import check_rate_limit
 from app.models.item import FoundItem, LostItem
 from app.models.match import MatchRecord
 from app.models.user import User
@@ -27,11 +28,17 @@ from app.schemas.common import (
     StandardResponse,
     success,
 )
-from app.schemas.item import FoundItemOut, LostItemPublishDTO, LostItemOut
+from app.schemas.item import (
+    FoundItemOut,
+    LostItemPublishDTO,
+    LostItemOut,
+    TagsPreviewDTO,
+)
 from app.schemas.match import MatchOut
 from app.services.clip_reorder import reorder_match_ids
 from app.services.match_service import build_match_outs
 from app.services.publish_service import PublishService
+from app.services.tagging_service import TaggingService
 
 router = APIRouter(tags=["items"])
 
@@ -90,6 +97,7 @@ async def create_lost_item(
     """
     if len(images) > settings.IMG_MAX_COUNT:
         raise ParamError(f"图片数量不得超过 {settings.IMG_MAX_COUNT} 张")
+    check_rate_limit(f"user:{user.id}", settings.RATE_LIMIT_PUBLISH_PER_MIN)
     img_data = [(f.filename or "img.jpg", await f.read()) for f in images]
     dto = LostItemPublishDTO(
         title=title,
@@ -146,6 +154,7 @@ async def create_found_item(
         raise ParamError("暂为保管的物品必须开启联系（contact_allowed=1）")
     if len(images) > settings.IMG_MAX_COUNT:
         raise ParamError(f"图片数量不得超过 {settings.IMG_MAX_COUNT} 张")
+    check_rate_limit(f"user:{user.id}", settings.RATE_LIMIT_PUBLISH_PER_MIN)
     img_data = [(f.filename or "img.jpg", await f.read()) for f in images]
     if not img_data:
         raise ParamError("拾物需至少上传 1 张照片")
@@ -175,6 +184,27 @@ async def create_found_item(
     return success(
         data={"item": out, "suspected_matches": build_match_outs(db, matches)}
     )
+
+
+# ---------------- 标签预览（v12：发布页「智能确认卡片」） ----------------
+@router.post("/tags-preview", response_model=StandardResponse)
+def tags_preview(
+    payload: TagsPreviewDTO,
+    user: User = Depends(get_current_user),
+):
+    """发布前标签预览：与正式发布共用 TaggingService 抽取管线。
+
+    前端在用户填写描述时防抖调用，展示「系统识别到的标签」供确认/修改，
+    让用户在提交前就看到自己的描述会被如何理解（提升录入质量与信任感）。
+    纯只读接口，不落库、不写审计。
+    """
+    check_rate_limit(f"user:{user.id}", settings.RATE_LIMIT_PREVIEW_PER_MIN)
+    tags = TaggingService.extract(
+        title=payload.title,
+        description=payload.description,
+        category_name=payload.category_name,
+    )
+    return success(data={"tags": tags})
 
 
 # ---------------- 我的发布（v3 需求 E） ----------------

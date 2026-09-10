@@ -52,7 +52,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core.config import settings
-from app.services.brand_dict import expand_brand_tokens
+from app.services.brand_dict import expand_brand_tokens, extract_brand
+from app.services.category_service import same_family
 from app.services.clip_service import image_similarity as clip_image_similarity
 from app.services.color_family import (
     SIGNAL_COLOR_CONFLICT,
@@ -61,11 +62,14 @@ from app.services.color_family import (
 )
 from app.services.perceptual_hash import PerceptualHash
 from app.services.scoring_refs import (
+    BRAND_CONFLICT_PENALTY,
     PHOTO_CAT_APPROX,
     PHOTO_CAT_DIFF,
+    PHOTO_CAT_FAMILY,
     PHOTO_CAT_NEUTRAL,
     PHOTO_CAT_SAME,
     PLACE_LEVELS,
+    SIGNAL_BRAND_CONFLICT,
     SIGNAL_STATE_CONFLICT,
     STATE_WORDS,
     STOPWORDS_V2,
@@ -490,9 +494,10 @@ class MatchService:
     def _score_photo_category(
         lost_f: ItemFeatures, found_f: ItemFeatures, exact_category: bool = True
     ) -> float:
-        """照片 / 系统分类一致性（0–20，PRD §A.3.2）。
+        """照片 / 系统分类一致性（0–20，PRD §A.3.2 + v12 家族档）。
 
-        同类目 20；父子级或近似 10；不同 0；任一侧缺失或**双方均为「其他」** 10（中性，Q7）。
+        同类目 20；**同家族 15（v12：银行卡 ≈ 学生证，见 category_service）**；
+        父子级或近似 10；不同 0；任一侧缺失或**双方均为「其他」** 10（中性，Q7）。
         ``exact_category=False`` 时把「同类目」降档为近似，沿用 flow-v2
         ``category_hit(exact=False)`` 的调用口径。
         """
@@ -511,6 +516,10 @@ class MatchService:
             same = lost_f.category_name == found_f.category_name
         if same:
             return PHOTO_CAT_SAME if exact_category else PHOTO_CAT_APPROX
+
+        # v12：同家族（含歧义桥「笔记本 ↔ 笔记本电脑」）——同族不同词的邻近说法
+        if same_family(lost_f.category_name, found_f.category_name):
+            return PHOTO_CAT_FAMILY
 
         # 父子级 / 近似：一方类目名是另一方的子串（如「证件」vs「学生证件」）
         if lost_f.category_name and found_f.category_name and (
@@ -638,7 +647,17 @@ class MatchService:
         if state_conflict:
             signals.append(SIGNAL_STATE_CONFLICT)
 
+        # v13：品牌冲突检测——双方各自出现品牌词且无交集（iPhone vs 华为/小米），
+        # raw_total 直接扣罚并打信号（评测集证据：此类对全维度对齐仍误配）。
+        lost_brands = extract_brand(self._raw_text(lost, True))
+        found_brands = extract_brand(self._raw_text(found, False))
+        brand_conflict = bool(lost_brands) and bool(found_brands) and not (lost_brands & found_brands)
+        if brand_conflict:
+            signals.append(SIGNAL_BRAND_CONFLICT)
+
         raw_total = sum(dims[d] for d in V2_DIMENSIONS)
+        if brand_conflict:
+            raw_total -= BRAND_CONFLICT_PENALTY
         norm_factor = self._normalize_factor(self._provided_weight(provided))
         total = min(max(raw_total * norm_factor, 0.0), 100.0)
 

@@ -46,11 +46,13 @@ from app.schemas.common import (
 )
 from app.schemas.item import FoundItemPublishDTO, LostItemPublishDTO
 from app.services import audit_service
+from app.services.category_service import same_family
 from app.services.match_service import MatchService
 from app.services.perceptual_hash import PerceptualHash
 from app.services.tagging_service import NOUN_SET, TaggingService
 from app.services.vision_service import get_vision_service
 from app.utils import storage as storage_util
+from app.utils.image_validator import validate_images
 
 
 def _now() -> datetime:
@@ -191,6 +193,8 @@ class PublishService:
     ) -> tuple[LostItem, list[MatchRecord]]:
         if not dto.category_name or not dto.category_name.strip():
             raise ParamError("category_name 必填（纯自由文本分类）")
+        # v13：魔数+大小校验，拒收伪装成图片的文件（先于存储/推理）
+        validate_images(dto.images)
         image_urls = storage_util.save_images(dto.images)
         first_bytes = dto.images[0][1] if dto.images else b""
         vision_result = get_vision_service().predict(first_bytes)
@@ -268,6 +272,8 @@ class PublishService:
         if dto.keep_status == 0 and dto.contact_allowed == 0:
             raise ParamError("暂为保管的物品必须开启联系（contact_allowed=1）")
 
+        # v13：魔数+大小校验（先于存储/推理）
+        validate_images(dto.images)
         image_urls = storage_util.save_images(dto.images)
         first_bytes = dto.images[0][1] if dto.images else b""
         vision_result = get_vision_service().predict(first_bytes)
@@ -365,9 +371,11 @@ class PublishService:
         def _recalled(f: FoundItem) -> bool:
             if f.category_id == lost.category_id:
                 return True
-            if not noun_tags:
-                return False
-            return bool(noun_tags & set(f.tags or []))
+            if noun_tags and (noun_tags & set(f.tags or [])):
+                return True
+            # v12：同家族类目召回（失主「银行卡」↔ 拾主「校园卡」这类同族不同词兜底；
+            # 自定义类目名词标签常为空，故家族判定不依赖 noun_tags）
+            return same_family(lost.category_name, f.category_name)
 
         return [f for f in candidates if _recalled(f)]
 
@@ -388,9 +396,10 @@ class PublishService:
         def _recalled(l: LostItem) -> bool:
             if l.category_id == found.category_id:
                 return True
-            if not noun_tags:
-                return False
-            return bool(noun_tags & set(l.tags or []))
+            if noun_tags and (noun_tags & set(l.tags or [])):
+                return True
+            # v12：同家族类目召回（对称，见 _recall_lost_candidates）
+            return same_family(found.category_name, l.category_name)
 
         return [l for l in candidates if _recalled(l)]
 
