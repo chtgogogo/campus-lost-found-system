@@ -76,7 +76,7 @@ def test_metadata_registers_10_tables():
 
     即便本机 MySQL 因鉴权/未启动而跳过，也能保证“11 张表”这一目标本身被覆盖。
     """
-    assert len(Base.metadata.tables) == 11, (
+    assert len(Base.metadata.tables) == 12, (
         f"期望 11 张表，实际 {len(Base.metadata.tables)}: "
         f"{sorted(Base.metadata.tables.keys())}"
     )

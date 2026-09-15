@@ -4,7 +4,7 @@ from app.models.category import Category
 from app.models.correction import CorrectionSample
 from app.models.im import IMMessage, IMSession
 from app.models.item import FoundItem, LostItem
-from app.models.match import HandoverCode, MatchRecord
+from app.models.match import HandoverCode, MatchExclusion, MatchRecord
 from app.models.user import TrustScoreLog, User
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "FoundItem",
     "MatchRecord",
     "HandoverCode",
+    "MatchExclusion",
     "IMSession",
     "IMMessage",
     "AuditLog",

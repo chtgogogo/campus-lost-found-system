@@ -33,16 +33,18 @@ def _pairs(scores: list[float]) -> list[tuple[float, int]]:
 
 def test_b1_cut_keeps_base_n_when_no_suspects():
     """AC-B1：全部候选 <80 时，行为与旧版硬截断完全一致（只取前 base_n 条）。"""
-    scored = _pairs([70.0 - i for i in range(20)])
+    scored = _pairs([70.0 - i for i in range(TOP_N + 5)])  # v15: TOP_N 扩容后构造量同步
     assert len(_cut_with_suspects(scored, TOP_N)) == TOP_N
 
 
 def test_b2_cut_appends_all_suspects_beyond_base_n():
     """AC-B2：前 base_n 条之后仍 ≥80 的疑似必须全部追加。"""
-    # 15 条 ≥80 + 10 条 <80 → 期望 15 条（保底 10 被疑似撑到 15）
-    scored = _pairs([90.0 - i * 0.5 for i in range(15)] + [50.0 - i for i in range(10)])
+    # v15：TOP_N=50 后，疑似数量须 > TOP_N 才能观察到「base 外疑似追加」行为——
+    # 构造 TOP_N+5 条疑似（高分）+ TOP_N 条普通（低分）：base 取走疑似前 TOP_N 条，
+    # base 外仍剩 5 条疑似 ≥80 → 全部追加 → 共 TOP_N+5 条。
+    scored = _pairs([90.0 - i * 0.1 for i in range(TOP_N + 5)] + [50.0 - i * 0.1 for i in range(TOP_N)])
     out = _cut_with_suspects(scored, TOP_N)
-    assert len(out) == 15
+    assert len(out) == TOP_N + 5
     assert all(s >= THRESHOLD for s, _ in out)
 
 
@@ -207,8 +209,8 @@ def test_b10_refresh_no_longer_early_returns_when_full(client, db):
     token_owner, _, _, _, _ = register_and_login(client, "v10b3o")
     token_finder, _, _, _, _ = register_and_login(client, "v10b3f")
 
-    # 先造 10 件低分拾物填满保底位
-    for i in range(10):
+    # 先造 TOP_N 件低分拾物填满保底位（v15: TOP_N 扩容为 50）
+    for i in range(TOP_N):
         _publish_found(client, token_finder, "钥匙", f"捡到一把钥匙，编号{i}")
     data = _publish_lost(
         client, token_owner, "一串黑色钥匙", "钥匙", "一串黑色钥匙，教学楼四楼402掉落"

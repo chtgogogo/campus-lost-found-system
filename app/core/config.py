@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     MATCH_LOW_SCORE: float = 60.0
     # v10（变更 B）语义变更：**普通候选保底条数**，不再是硬上限。
     # ≥ MATCH_THRESHOLD 的疑似候选不受此限，可追加到 MATCH_SUSPECT_MAX 条（Q13：变量名不改）。
-    MATCH_TOP_N: int = 10
+    MATCH_TOP_N: int = 50   # v15：候选展示扩容（配合「不是我的」排除池，前50条供用户扫选）
     TIME_DECAY_TAU_DAYS: float = 3.0    # [deprecated for v2] flow-v2 时间衰减 τ（天）；v2 改用 MATCH_TIME_TAU_DAYS
     # 「其他」类枚举名（运行时按名称解析，避免硬编码 id 耦合；seed 中以同名行存在）
     OTHER_CATEGORY_NAME: str = "其他"
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     MATCH_NORMALIZE: bool = True          # kill switch：False 时 k≡1.0，退回纯 raw 分（可回滚/AB）
     MATCH_NORM_MIN_WEIGHT: float = 50.0   # 防爆下限：仅填类目的纯图失物封顶 40 分，避免满分误报
     # v10（变更 B）疑似候选追加总量护栏：单次发布最多生成 max(MATCH_TOP_N, MATCH_SUSPECT_MAX) 条候选。
-    MATCH_SUSPECT_MAX: int = 50
+    MATCH_SUSPECT_MAX: int = 60   # v15: 随 TOP_N=50 扩容（疑似追加护栏须大于保底，否则撑破能力失效）
 
     # ---------------- v10 管理员 ----------------
     # 注册邀请码：命中则静默升为管理员（role=1）；生产必须通过环境变量 ADMIN_APPLY_CODE 改为强口令。

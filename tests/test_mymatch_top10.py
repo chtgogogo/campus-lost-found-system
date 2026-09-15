@@ -30,7 +30,7 @@ from datetime import datetime
 from app.models import FoundItem
 from conftest import API, PNG, auth_header, register_and_login
 
-MATCH_TOP_N = 10
+MATCH_TOP_N = 50  # v15: 候选扩容
 THRESHOLD = 80.0
 
 
@@ -182,7 +182,7 @@ def test_ac2_cap_10_and_desc_order(client):
     token_owner, _, _, _, _ = register_and_login(client, "mtop2o")
     token_finder, _, _, _, _ = register_and_login(client, "mtop2f")
 
-    for _ in range(12):
+    for _ in range(MATCH_TOP_N + 12):
         _publish_found(client, token_finder, "钥匙", "捡到一把黑色钥匙")
 
     lost = _publish_lost(client, token_owner, "银色钥匙", "银色钥匙", with_image=True)
@@ -375,7 +375,7 @@ def test_matches_page_size_200_no_truncation(client):
     token_owner, _, _, _, _ = register_and_login(client, "mpg200o")
     token_finder, _, _, _, _ = register_and_login(client, "mpg200f")
 
-    for _ in range(10):
+    for _ in range(MATCH_TOP_N):
         _publish_found(client, token_finder, "钥匙", "捡到一把黑色钥匙")
     lost_ids = []
     for i in range(11):
@@ -390,8 +390,9 @@ def test_matches_page_size_200_no_truncation(client):
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert data["page_size"] == 200
-    assert data["total"] == 110, f"应 110 条候选（11×10），实际 {data['total']}"
-    assert len(data["items"]) == 110
+    assert data["total"] == 11 * MATCH_TOP_N, f"应 {11 * MATCH_TOP_N} 条候选（11×{MATCH_TOP_N}），实际 {data['total']}"
+    assert len(data["items"]) == 200  # v15: TOP_N=50 后总量 550 > 200，验证分页截断生效
+    assert data["total"] == 11 * MATCH_TOP_N  # 完整总量靠 total 字段表达
 
     # 超过 le=200 → 422
     r = client.get(
@@ -474,7 +475,7 @@ def test_symmetric_found_publish_respects_per_lost_cap(client):
     token_owner, _, _, _, _ = register_and_login(client, "mcapo")
     token_finder, _, _, _, _ = register_and_login(client, "mcapf")
 
-    for _ in range(10):
+    for _ in range(MATCH_TOP_N):
         _publish_found(client, token_finder, "钥匙", "捡到一把黑色钥匙")
     lost = _publish_lost(client, token_owner, "银色钥匙", "银色钥匙", with_image=True)
     lost_id = lost["item"]["id"]
