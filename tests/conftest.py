@@ -29,6 +29,7 @@ from app.models import (  # noqa: E402
     FoundItem,
     HandoverCode,
     LostItem,
+    MatchExclusion,
     MatchRecord,
     TrustScoreLog,
     User,
@@ -38,6 +39,7 @@ from app.models.im import IMMessage, IMSession  # noqa: E402
 
 API = "/api/v1"
 _BUSINESS_TABLES = (
+    MatchExclusion,  # v15：引用 user/lost/found，必须最先清（否则 FK/残留污染后续测试）
     HandoverCode,
     MatchRecord,
     AuditLog,

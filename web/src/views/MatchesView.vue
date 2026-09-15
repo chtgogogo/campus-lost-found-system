@@ -10,6 +10,9 @@
       <el-button size="small" plain :loading="rematchLoading" @click="onRematchBatch">
         重新匹配
       </el-button>
+      <el-button size="small" plain :loading="poolLoading" @click="openExcludePool">
+        排除池
+      </el-button>
     </div>
 
     <el-tabs v-model="tab" class="lf-tabs">
@@ -295,7 +298,53 @@
     <!-- v3 需求 D：联系对方对话框 -->
     <ContactDialog v-model="contactVisible" :match="contactMatch" />
   </div>
-</template>
+    <!-- v15「已排除池」：按失物查看被排除候选，可重返匹配池 -->
+    <el-dialog v-model="poolVisible" title="已排除池（不是我的）" width="640px">
+      <div v-if="poolLosts.length === 0">没有未解决的失物。</div>
+      <template v-else>
+        <el-select
+          v-model="poolLostId"
+          placeholder="选择失物"
+          style="width: 100%; margin-bottom: 12px"
+          @change="loadPool"
+        >
+          <el-option
+            v-for="l in poolLosts"
+            :key="l.id"
+            :label="l.title || l.description"
+            :value="l.id"
+          />
+        </el-select>
+        <el-empty
+          v-if="poolItems.length === 0"
+          description="该失物暂无排除记录"
+          :image-size="60"
+        />
+        <div
+          v-for="row in poolItems"
+          :key="row.exclusion_id"
+          class="lf-exclude-row"
+        >
+          <div class="lf-exclude-main">
+            <div>{{ row.title }}（{{ row.category_name }}）</div>
+            <div class="lf-muted">
+              分数 {{ row.match_score ?? '—' }} ｜ 排除于 {{ row.excluded_at }} ｜
+              {{ row.source === 'batch' ? '批量排除' : '单条排除' }}
+            </div>
+          </div>
+          <el-button size="small" type="primary" plain @click="onRestore(row)">
+            重返匹配池
+          </el-button>
+        </div>
+      </template>
+        <el-button @click="poolVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <template #footer>
+
+
+    <!-- v15「已排除池」弹窗已插入上方 --></template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
@@ -676,6 +725,64 @@ async function onExclude(m: MatchOut) {
 
 // v15「重新匹配」：当前一批（失主视角待处理）候选全部排除 → 逐失物刷新补位下一批
 const rematchLoading = ref(false)
+
+// v15「已排除池」：按失物查看/重返
+const poolVisible = ref(false)
+const poolLoading = ref(false)
+const poolLosts = ref<Array<{ id: number; title: string; description: string }>>([])
+const poolLostId = ref<number | null>(null)
+const poolItems = ref<
+  Array<{
+    exclusion_id: number
+    found_id: number
+    title: string
+    description: string
+    category_name: string
+    match_score: number | null
+    excluded_at: string
+    source: string
+  }>
+>([])
+
+async function openExcludePool() {
+  poolLoading.value = true
+  poolVisible.value = true
+  try {
+    const mine = await itemsApi.myPublished()
+    poolLosts.value = (mine.lost || [])
+      .filter((l) => l.status !== 3 && !l.deleted_at)
+      .map((l) => ({ id: l.id, title: l.title, description: l.description }))
+    poolLostId.value = poolLosts.value.length ? poolLosts.value[0].id : null
+    await loadPool()
+  } catch {
+    ElMessage.error('排除池加载失败')
+  } finally {
+    poolLoading.value = false
+  }
+}
+
+async function loadPool() {
+  if (!poolLostId.value) {
+    poolItems.value = []
+    return
+  }
+  try {
+    poolItems.value = await matchApi.listExcluded(poolLostId.value)
+  } catch {
+    poolItems.value = []
+  }
+}
+
+async function onRestore(row: { exclusion_id: number; found_id: number }) {
+  try {
+    await matchApi.restoreExcluded(poolLostId.value!, row.exclusion_id)
+    ElMessage.success('已重返匹配池')
+    await loadPool()
+    await load()
+  } catch {
+    ElMessage.error('重返失败，请稍后再试')
+  }
+}
 async function onRematchBatch() {
   const pending = visibleMatches.value.filter(
     (m) => myRole(m) === 'lost' && m.status === 0,
