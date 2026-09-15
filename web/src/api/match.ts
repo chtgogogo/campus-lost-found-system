@@ -1,5 +1,5 @@
 // 匹配 / 认领 / 交接相关接口（对齐 app/routers/match.py）
-import { apiGet, apiPost } from './request'
+import { apiDelete, apiGet, apiPost } from './request'
 import type {
   AuditLog,
   ClaimRequest,
@@ -27,6 +27,51 @@ export const matchApi = {
   // 2026-08-05 增量：P2-1 手动刷新候选（对单条失物重跑召回+打分，增量补充新发布拾物）
   refreshMatches(lostId: number): Promise<RefreshMatchesResult> {
     return apiPost<RefreshMatchesResult>(`/lost-items/${lostId}/refresh-matches`, {})
+  },
+  // v15「不是我的」：候选排除与重返
+  excludeMatch(lostId: number, matchId: number): Promise<{ excluded: boolean; match_id: number }> {
+    return apiPost<{ excluded: boolean; match_id: number }>(
+      `/lost-items/${lostId}/matches/${matchId}/exclude`,
+      {},
+    )
+  },
+  excludeBatch(lostId: number, matchIds: number[]): Promise<{ excluded: number; requested: number }> {
+    return apiPost<{ excluded: number; requested: number }>(
+      `/lost-items/${lostId}/matches/exclude-batch`,
+      { match_ids: matchIds },
+    )
+  },
+  listExcluded(
+    lostId: number,
+  ): Promise<
+    Array<{
+      exclusion_id: number
+      found_id: number
+      title: string
+      description: string
+      category_name: string
+      match_score: number | null
+      excluded_at: string
+      source: string
+    }>
+  > {
+    return apiGet<Array<Record<string, unknown>>>(`/lost-items/${lostId}/matches/excluded`) as unknown as Promise<
+      Array<{
+        exclusion_id: number
+        found_id: number
+        title: string
+        description: string
+        category_name: string
+        match_score: number | null
+        excluded_at: string
+        source: string
+      }>
+    >
+  },
+  restoreExcluded(lostId: number, exclusionId: number): Promise<{ restored: boolean; found_id: number }> {
+    return apiDelete<{ restored: boolean; found_id: number }>(
+      `/lost-items/${lostId}/matches/exclusions/${exclusionId}`,
+    )
   },
   claim(matchId: number, body: ClaimRequest): Promise<MatchOut> {
     return apiPost<MatchOut>(`/matches/${matchId}/claim`, body)
