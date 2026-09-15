@@ -171,6 +171,68 @@ SIGNAL_STATE_CONFLICT: str = "state_conflict"
 SIGNAL_BRAND_CONFLICT: str = "brand_conflict"
 BRAND_CONFLICT_PENALTY: float = 10.0
 
+# ===========================================================================
+# v14：三类强冲突信号（控制变量测试集 dataset_control.json 30 对证据）
+# ===========================================================================
+
+# —— 发现① 数量非对称（G4-C/D：丢1捡2/3 只扣7分仍92.9误配）——
+# 产品逻辑（曹灏天）：丢2捡1 不能否定同源（另一把可能没人交）→ 轻处理；
+# 捡到多于丢失 → 非唯一性冲突 → 数量档分 + raw 惩罚。
+SIGNAL_QTY_OVERSUPPLY: str = "qty_oversupply"
+QTY_OVERSUPPLY_PENALTY: float = 20.0
+
+
+def qty_oversupply(lost_pairs, found_pairs) -> bool:
+    """同类量词下，候选侧数量 > 失主侧数量 → 非唯一性冲突（真实验证 G4-C/D）。"""
+    for lnum, lcls in set(lost_pairs or ()):
+        for fnum, fcls in set(found_pairs or ()):
+            if lcls == fcls and fnum > lnum:
+                return True
+    return False
+
+
+# —— 发现② 新物 vs 破损跨组强冲突（G5-D：全新vs破损 89.9 仍误配）——
+# 根因：全新在「新旧」反义组、破损在「完好/破损」反义组，跨组不判冲突只扣维度10分。
+NEW_SIDE_WORDS: frozenset[str] = frozenset(
+    {"新", "全新", "崭新", "九成新", "八成新", "九五新", "完好", "完整", "没坏"}
+)
+DAMAGED_SIDE_WORDS: frozenset[str] = frozenset(
+    {"破损", "损坏", "坏了", "摔坏", "碎", "破裂", "磨损", "划痕", "掉漆", "褪色", "旧", "破旧"}
+)
+
+
+def new_vs_damaged_conflict(lost_states, found_states) -> bool:
+    """失主侧「新/完好系」对候选侧「破损系」（或反向）→ 强冲突。"""
+    lost = set(lost_states or ())
+    found = set(found_states or ())
+    if lost & NEW_SIDE_WORDS and found & DAMAGED_SIDE_WORDS:
+        return True
+    if lost & DAMAGED_SIDE_WORDS and found & NEW_SIDE_WORDS:
+        return True
+    return False
+
+
+STATE_CONFLICT_PENALTY: float = 15.0  # state_conflict / 新物破损冲突的额外 raw 惩罚
+
+# —— 发现③ 互斥属性（G6-C：长柄vs折叠 97.7 几乎不扣）——
+# 类型词是互斥属性不是普通关键词：双方提的类型词不同 → 冲突；一方未提 → 不罚。
+EXCLUSIVE_ATTR_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"长柄", "直柄", "直杆", "长把", "折叠", "三折", "五折"}),
+)
+SIGNAL_TYPE_CONFLICT: str = "type_conflict"
+MUTUAL_EXCLUSIVE_PENALTY: float = 15.0
+
+
+def mutual_exclusive_conflict(lost_text: str | None, found_text: str | None) -> bool:
+    """双方描述命中同一互斥组内「不同成员词」→ 类型冲突（一方未提不罚）。"""
+    lt, ft = lost_text or "", found_text or ""
+    for group in EXCLUSIVE_ATTR_GROUPS:
+        lw = {w for w in group if w in lt}
+        fw = {w for w in group if w in ft}
+        if lw and fw and lw != fw:
+            return True
+    return False
+
 # 单字状态词（新/旧/大/小/厚/薄/满/空/碎/脏）若做裸子串匹配极易误命中
 # （「新生」「空调」「大门」），故要求它们只能以「独立 token（可带程度副词/语气助词）」形态命中。
 _DEGREE_PREFIX = "很|挺|超|非常|特别|比较|有点|略"
