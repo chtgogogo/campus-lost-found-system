@@ -6,6 +6,10 @@
       <el-button size="small" plain :loading="refreshLoading" @click="onRefreshCandidates">
         刷新候选
       </el-button>
+      <!-- v15「重新匹配」：当前一批候选全部「不是我的」→ 排除并补位下一批 -->
+      <el-button size="small" plain :loading="rematchLoading" @click="onRematchBatch">
+        重新匹配
+      </el-button>
     </div>
 
     <el-tabs v-model="tab" class="lf-tabs">
@@ -221,6 +225,15 @@
               >
                 未能找回
               </el-button>
+              <!-- v15「不是我的」：排除误判候选（进入排除池，可随时重返），失主侧待处理候选可用 -->
+              <el-button
+                v-if="m.status === 0"
+                size="small"
+                plain
+                @click="onExclude(m)"
+              >
+                不是我的
+              </el-button>
             </template>
 
             <template v-else-if="myRole(m) === 'found'">
@@ -322,6 +335,7 @@ const contactMatch = ref<MatchOut | null>(null)
 
 // P2-1：刷新候选按钮 loading 态
 const refreshLoading = ref(false)
+// v15「不是我的」：排除/重新匹配 loading 态
 
 const myId = computed(() => auth.userId ?? -1)
 
@@ -633,6 +647,78 @@ async function onRefreshCandidates() {
     ElMessage.error('候选刷新失败')
   } finally {
     refreshLoading.value = false
+  }
+}
+
+// v15「不是我的」：单条排除（幂等；后端保留全部排除记录，误判可随时找回）
+const excludeLoading = ref(false)
+async function onExclude(m: MatchOut) {
+  try {
+    await ElMessageBox.confirm(
+      '确定这条不是你丢的吗？排除后将从匹配列表隐藏，可随时找回。',
+      '不是我的',
+      { type: 'warning', confirmButtonText: '排除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  excludeLoading.value = true
+  try {
+    await matchApi.excludeMatch(m.lost_id, m.id)
+    matches.value = matches.value.filter((x) => x.id !== m.id)
+    ElMessage.success('已排除。误判可在排除记录中找回。')
+  } catch {
+    ElMessage.error('排除失败，请稍后再试')
+  } finally {
+    excludeLoading.value = false
+  }
+}
+
+// v15「重新匹配」：当前一批（失主视角待处理）候选全部排除 → 逐失物刷新补位下一批
+const rematchLoading = ref(false)
+async function onRematchBatch() {
+  const pending = visibleMatches.value.filter(
+    (m) => myRole(m) === 'lost' && m.status === 0,
+  )
+  if (pending.length === 0) {
+    ElMessage.info('当前没有待处理的匹配候选')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将把当前展示的 ${pending.length} 条候选全部标记为「不是我的」，然后展示下一批候选。确认？`,
+      '重新匹配',
+      { type: 'warning', confirmButtonText: '排除并重新匹配', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  rematchLoading.value = true
+  try {
+    const byLost = new Map<number, number[]>()
+    for (const m of pending) {
+      const arr = byLost.get(m.lost_id) ?? []
+      arr.push(m.id)
+      byLost.set(m.lost_id, arr)
+    }
+    for (const [lostId, ids] of byLost) {
+      try {
+        await matchApi.excludeBatch(lostId, ids)
+      } catch {
+        /* 单失物失败不阻断其余 */
+      }
+    }
+    for (const lostId of byLost.keys()) {
+      try {
+        await matchApi.refreshMatches(lostId)
+      } catch {
+        /* 忽略 */
+      }
+    }
+    await load()
+    ElMessage.success('已排除当前一批，展示下一批候选')
+  } finally {
+    rematchLoading.value = false
   }
 }
 
