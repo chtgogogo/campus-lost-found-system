@@ -19,7 +19,7 @@ from app.core.exceptions import (
     PermissionError,
 )
 from app.models.item import FoundItem, LostItem
-from app.models.match import MatchRecord
+from app.models.match import MatchExclusion, MatchRecord
 from app.models.user import User
 from app.routers.deps import get_current_user
 from app.schemas.common import (
@@ -108,6 +108,9 @@ def list_matches_for_lost(
         .filter(MatchRecord.lost_id == item_id)
         .all()
     )
+    # v15「不是我的」：过滤该用户已排除的候选（排除池可随时「重返」）
+    excluded_found_ids = _excluded_found_ids(db, user.id, item_id)
+    matches = [m for m in matches if m.found_id not in excluded_found_ids]
     matches = [m for m in matches if not _counterpart_hidden(db, m)]
     outs = build_match_outs(db, matches)
     return success(data=outs)
@@ -202,9 +205,135 @@ def refresh_matches_for_lost(
         .filter(MatchRecord.lost_id == item_id)
         .all()
     )
+    # v15：排除池中的候选不进入刷新后的展示列表
+    excluded_found_ids = _excluded_found_ids(db, user.id, item_id)
+    matches = [m for m in matches if m.found_id not in excluded_found_ids]
     matches = [m for m in matches if not _counterpart_hidden(db, m)]
     outs = build_match_outs(db, matches)
     return success(data={"created": len(created), "matches": outs})
+
+
+# ---------------- v15「不是我的」：候选排除与重返 ----------------
+
+class ExcludeBatchIn(BaseModel):
+    """批量排除请求体（「重新匹配」按钮：当前展示的一批全部排除）。"""
+
+    match_ids: list[int]
+
+
+def _excluded_found_ids(db: Session, user_id: int, lost_id: int) -> set[int]:
+    """该用户对某失物已排除的候选物品 id 集合（列表过滤用）。"""
+    rows = (
+        db.query(MatchExclusion.found_id)
+        .filter(MatchExclusion.user_id == user_id, MatchExclusion.lost_id == lost_id)
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def _get_lost_owned_or_raise(db: Session, item_id: int, user: User) -> LostItem:
+    lost = db.get(LostItem, item_id)
+    if not lost:
+        raise NotFoundError("失物不存在")
+    if int(lost.publisher_id) != int(user.id):
+        raise PermissionError()
+    return lost
+
+
+@router.post("/lost-items/{item_id}/matches/{match_id}/exclude", response_model=StandardResponse)
+def exclude_match(item_id: int, match_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """单条排除（「不是我的」）：候选进入用户排除池，从匹配列表隐藏。幂等。"""
+    lost = _get_lost_owned_or_raise(db, item_id, user)
+    m = _get_match_or_404(db, match_id)
+    if int(m.lost_id) != int(lost.id):
+        raise ParamError("该匹配记录不属于此失物")
+    exists = (
+        db.query(MatchExclusion)
+        .filter(
+            MatchExclusion.user_id == user.id,
+            MatchExclusion.lost_id == m.lost_id,
+            MatchExclusion.found_id == m.found_id,
+        )
+        .first()
+    )
+    if not exists:
+        db.add(MatchExclusion(user_id=user.id, lost_id=m.lost_id, found_id=m.found_id, match_id=m.id, source="single"))
+        db.commit()
+    return success(message="已排除", data={"excluded": True, "match_id": match_id})
+
+
+@router.post("/lost-items/{item_id}/matches/exclude-batch", response_model=StandardResponse)
+def exclude_matches_batch(item_id: int, payload: ExcludeBatchIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """批量排除（「重新匹配」第一步）：当前展示的一批候选全部进入排除池。幂等。"""
+    lost = _get_lost_owned_or_raise(db, item_id, user)
+    if not payload.match_ids:
+        raise ParamError("match_ids 不能为空")
+    records = db.query(MatchRecord).filter(MatchRecord.id.in_(payload.match_ids), MatchRecord.lost_id == item_id).all()
+    added = 0
+    for m in records:
+        exists = (
+            db.query(MatchExclusion)
+            .filter(
+                MatchExclusion.user_id == user.id,
+                MatchExclusion.lost_id == m.lost_id,
+                MatchExclusion.found_id == m.found_id,
+            )
+            .first()
+        )
+        if not exists:
+            db.add(MatchExclusion(user_id=user.id, lost_id=m.lost_id, found_id=m.found_id, match_id=m.id, source="batch"))
+            added += 1
+    db.commit()
+    return success(message=f"已排除 {added} 条", data={"excluded": added, "requested": len(payload.match_ids)})
+
+
+@router.get("/lost-items/{item_id}/matches/excluded", response_model=StandardResponse)
+def list_excluded_matches(item_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """排除池列表：只显示仍有效的候选（对端已解决 / 软删 / 到期的自动消失）。"""
+    lost = _get_lost_owned_or_raise(db, item_id, user)
+    rows = (
+        db.query(MatchExclusion, FoundItem)
+        .join(FoundItem, MatchExclusion.found_id == FoundItem.id)
+        .filter(
+            MatchExclusion.user_id == user.id,
+            MatchExclusion.lost_id == item_id,
+            FoundItem.deleted_at.is_(None),
+            FoundItem.status == int(FoundItemStatus.PENDING),
+        )
+        .order_by(MatchExclusion.created_at.desc())
+        .all()
+    )
+    outs = [
+        {
+            "exclusion_id": exc.id,
+            "found_id": item.id,
+            "restored": False,
+            "title": (item.description or "")[:30] or "(无描述)",
+            "description": item.description,
+            "category_name": item.category_name,
+            "match_score": (
+                db.query(MatchRecord.match_score)
+                .filter(MatchRecord.lost_id == exc.lost_id, MatchRecord.found_id == exc.found_id)
+                .scalar()
+            ),
+            "excluded_at": exc.created_at.strftime("%Y-%m-%d %H:%M"),
+            "source": exc.source,
+        }
+        for exc, item in rows
+    ]
+    return success(data=outs)
+
+
+@router.delete("/lost-items/{item_id}/matches/exclusions/{exclusion_id}", response_model=StandardResponse)
+def restore_excluded_match(item_id: int, exclusion_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """重返匹配池：删除排除记录，该候选重新参与匹配排序。"""
+    lost = _get_lost_owned_or_raise(db, item_id, user)
+    exc = db.get(MatchExclusion, exclusion_id)
+    if not exc or int(exc.lost_id) != int(lost.id) or int(exc.user_id) != int(user.id):
+        raise NotFoundError("排除记录不存在")
+    db.delete(exc)
+    db.commit()
+    return success(message="已重返匹配池", data={"restored": True, "found_id": exc.found_id})
 
 
 # ---------------- 认领 ----------------

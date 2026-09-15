@@ -310,7 +310,8 @@ def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
     """
     token_finder, _, _, _, _ = register_and_login(client, "f309f")
     token_owner, _, _, _, _ = register_and_login(client, "f309o")
-    for i in range(12):
+    # v15：TOP_N 扩容为 50，构造量须覆盖保底条数
+    for i in range(settings.MATCH_TOP_N + 3):
         _publish_found(client, token_finder, "书包", f"捡到第{i}个黑色书包", keep_status="1")
 
     lost = _publish_lost(client, token_owner, "书包", "黑色书包", "图书馆丢失黑色书包")
@@ -374,7 +375,7 @@ def test_f3_11_low_score_and_threshold_constants_decoupled():
     assert settings.MATCH_THRESHOLD == 80.0, f"suspected 阈值应保持 80.0，实际 {settings.MATCH_THRESHOLD}"
     assert settings.MATCH_LOW_SCORE < settings.MATCH_THRESHOLD, "低分阈值须严格低于疑似阈值"
     # v10 变更 B：MATCH_TOP_N 语义由「候选硬上限」改为「普通候选保底条数」，取值仍为 10。
-    assert settings.MATCH_TOP_N == 10, "普通候选保底条数不变"
+    assert settings.MATCH_TOP_N == 50, "普通候选保底条数（v15 扩容）"
 
 
 def test_f3_11b_suspected_semantics_not_drifted_by_low_score(client, db):

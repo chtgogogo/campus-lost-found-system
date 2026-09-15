@@ -67,6 +67,48 @@ class MatchRecord(Base):
         return f"<MatchRecord id={self.id} score={self.match_score} status={self.status}>"
 
 
+class MatchExclusion(Base):
+    """匹配候选排除记录（v15「不是我的」机制）。
+
+    排除的是【候选物品对】而非匹配记录——重新匹配后 match_id 可能变化，
+    (lost_id, found_id) 物品对稳定。per-user 视图：只影响排除人的匹配列表，
+    不影响对端。对端物品被解决 / 软删 / 到期后，排除记录自然失效
+    （查询层过滤，不物理清理），保证误判可随时「重返匹配池」。
+    """
+
+    __tablename__ = "match_exclusion"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    lost_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("lost_item.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    found_id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("found_item.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    match_id: Mapped[int | None] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), nullable=True)
+    # 排除来源：single=逐条「不是我的」/ batch=「重新匹配」批量排除
+    source: Mapped[str] = mapped_column(String(8), nullable=False, default="single")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        # 同一用户对同一物品对只允许一条排除记录（重复点「不是我的」幂等）
+        Index("uq_exclusion_user_pair", "user_id", "lost_id", "found_id", unique=True),
+        Index("idx_exclusion_user_lost", "user_id", "lost_id"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<MatchExclusion id={self.id} user={self.user_id} lost={self.lost_id} found={self.found_id}>"
+
+
 class HandoverCode(Base):
     """动态交接码审计镜像表（双码交叉验证模型，§2.6）。
 
