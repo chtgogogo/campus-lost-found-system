@@ -162,7 +162,7 @@ for _gi, (_left, _right) in enumerate(STATE_WORD_PAIRS):
 
 STATE_SCORE_FULL: float = 10.0        # 失主状态词全部命中
 STATE_SCORE_CONFLICT: float = 0.0     # 存在反义冲突 → 0 + state_conflict
-STATE_SCORE_MISSING: float = 0.0      # 失主侧无状态词
+STATE_SCORE_MISSING: float = 3.0      # v15.1: 失主侧无状态词→中性分(候选未填≠状态不符)
 
 SIGNAL_STATE_CONFLICT: str = "state_conflict"
 
