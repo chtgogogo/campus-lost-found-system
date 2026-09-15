@@ -63,21 +63,30 @@ from app.services.color_family import (
 from app.services.perceptual_hash import PerceptualHash
 from app.services.scoring_refs import (
     BRAND_CONFLICT_PENALTY,
+    MUTUAL_EXCLUSIVE_PENALTY,
+    NEW_SIDE_WORDS,
     PHOTO_CAT_APPROX,
     PHOTO_CAT_DIFF,
     PHOTO_CAT_FAMILY,
     PHOTO_CAT_NEUTRAL,
     PHOTO_CAT_SAME,
     PLACE_LEVELS,
+    QTY_OVERSUPPLY_PENALTY,
     SIGNAL_BRAND_CONFLICT,
+    SIGNAL_QTY_OVERSUPPLY,
     SIGNAL_STATE_CONFLICT,
+    SIGNAL_TYPE_CONFLICT,
+    STATE_CONFLICT_PENALTY,
     STATE_WORDS,
     STOPWORDS_V2,
     TIME_SCORE_NEUTRAL,
     extract_place,
     extract_qty,
     extract_states,
+    mutual_exclusive_conflict,
+    new_vs_damaged_conflict,
     place_score,
+    qty_oversupply,
     qty_score,
     state_score,
 )
@@ -655,9 +664,34 @@ class MatchService:
         if brand_conflict:
             signals.append(SIGNAL_BRAND_CONFLICT)
 
+        # v14：三类强冲突（控制变量测试集 30 对证据）——沿用品牌冲突的
+        # 「信号 + raw 惩罚」模式，不新建架构。
+        # ① 数量非对称：捡到多于丢失 → 非唯一性冲突（丢2捡1 不能否定，轻处理）。
+        qty_over = qty_oversupply(lost_f.qty, found_f.qty)
+        if qty_over:
+            signals.append(SIGNAL_QTY_OVERSUPPLY)
+        # ② 新物 vs 破损跨反义组强冲突（state_score 的组结构判定不到跨组）。
+        new_damaged = new_vs_damaged_conflict(lost_f.states, found_f.states)
+        if new_damaged and SIGNAL_STATE_CONFLICT not in signals:
+            signals.append(SIGNAL_STATE_CONFLICT)
+        # ③ 互斥属性：双方提的类型词不同（长柄 vs 折叠），一方未提不罚。
+        type_conflict = mutual_exclusive_conflict(
+            self._raw_text(lost, True), self._raw_text(found, False)
+        )
+        if type_conflict:
+            signals.append(SIGNAL_TYPE_CONFLICT)
+
         raw_total = sum(dims[d] for d in V2_DIMENSIONS)
         if brand_conflict:
             raw_total -= BRAND_CONFLICT_PENALTY
+        penalty = 0.0
+        if state_conflict or new_damaged:
+            penalty += STATE_CONFLICT_PENALTY
+        if qty_over:
+            penalty += QTY_OVERSUPPLY_PENALTY
+        if type_conflict:
+            penalty += MUTUAL_EXCLUSIVE_PENALTY
+        raw_total -= penalty
         norm_factor = self._normalize_factor(self._provided_weight(provided))
         total = min(max(raw_total * norm_factor, 0.0), 100.0)
 

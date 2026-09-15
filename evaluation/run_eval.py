@@ -46,8 +46,8 @@ def _parse_dt(raw: str | None) -> datetime | None:
     return datetime.fromisoformat(raw) if raw else None
 
 
-def run(threshold: float) -> dict:
-    dataset = json.loads((_HERE / "dataset.json").read_text(encoding="utf-8"))
+def run(threshold: float, dataset_file: str = "dataset.json") -> dict:
+    dataset = json.loads((_HERE / dataset_file).read_text(encoding="utf-8"))
     matcher = MatchService()
     rows: list[dict] = []
     for pair in dataset["pairs"]:
@@ -118,10 +118,13 @@ def render(result: dict) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="匹配引擎评测")
     parser.add_argument("--threshold", type=float, default=float(settings.MATCH_THRESHOLD))
+    parser.add_argument("--dataset", type=str, default="dataset.json",
+                        help="评测集文件名（位于 evaluation/ 下，如 dataset_control.json）")
+    parser.add_argument("--out", type=str, default="results-v13.md", help="结果输出文件名")
     args = parser.parse_args()
-    result = run(args.threshold)
+    result = run(args.threshold, args.dataset)
     report = render(result)
-    out = _HERE / "results-v13.md"
+    out = _HERE / args.out
     out.write_text(report, encoding="utf-8")
     print(report)
     print(f"[已写入 {out.name}]")
