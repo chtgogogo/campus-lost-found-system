@@ -327,8 +327,14 @@ def _item(**kw):
     return SimpleNamespace(**defaults)
 
 
-def test_luggage_text_40_over_20_and_total_67_5_over_52_5():
-    """PRD §5.2 可测断言：失物词集 5 词；拾物2 text=40 > 拾物1 text=20；总分 67.5 > 52.5。"""
+def test_luggage_text_compat_view_and_normalized_total():
+    """PRD §5.2 语义守护：失主词集 5 词；拾物2 文本命中明显优于拾物1，且排序不被归一化翻转。
+
+    ⚠️ 用例名原为 `..._text_40_over_20_and_total_67_5_over_52_5`，那组数字是 v9 五维公式
+    的产物。v10 评分 v2 起 ``text`` 已改造为 **qty+color+state+place+keyword 的兼容视图**
+    （不再是「词集比率 × 40」）；v15.1 状态缺失中性分（state=3.0）再使两侧各 +3。
+    故数值已两度演进而用例名未跟上，此处一并订正为**语义化命名**，避免后续读者误判为回归。
+    """
     lost = _item(
         category_name="行李箱",
         title="两个行李箱",
@@ -356,14 +362,14 @@ def test_luggage_text_40_over_20_and_total_67_5_over_52_5():
     d1 = svc.score_detail(lost, f1)
     d2 = svc.score_detail(lost, f2)
     # v10 评分 v2：text 变成 qty+color+state+place+keyword 的兼容视图。
-    # f1：qty=3(拾物未给数量) + place=15(同为教学楼) → text=18；
-    # f2：qty=15(两个 vs 两个) + color=20(黄/粉全中) → text=35。
+    # f1：qty=3(拾物未给数量) + state=3(双方均未填状态 → v15.1 中性分) + place=15(同为教学楼) → text=21；
+    # f2：qty=15(两个 vs 两个) + color=20(黄/粉全中) + state=3(中性分) → text=38。
     # 两侧 k 相同（k 只由失主侧决定：W=photo_category+qty+color+place=70 → k=100/70≈1.4286），
     # 因此本用例真正要守护的「f2 明显优于 f1」仍然成立。
-    assert d1["text"] == pytest.approx(18.0, abs=0.01), f"实际 {d1['text']}"
-    assert d2["text"] == pytest.approx(35.0, abs=0.01), f"实际 {d2['text']}"
-    assert d1["total"] == pytest.approx(54.29, abs=0.01), f"实际 {d1['total']}"
-    assert d2["total"] == pytest.approx(78.57, abs=0.01), f"实际 {d2['total']}"
+    assert d1["text"] == pytest.approx(21.0, abs=0.01), f"实际 {d1['text']}"
+    assert d2["text"] == pytest.approx(38.0, abs=0.01), f"实际 {d2['text']}"
+    assert d1["total"] == pytest.approx(58.57, abs=0.01), f"实际 {d1['total']}"
+    assert d2["total"] == pytest.approx(82.86, abs=0.01), f"实际 {d2['total']}"
     assert d2["total"] > d1["total"], "数量+颜色全中的候选必须排在只命中地点的候选之前"
     # 可解释：shared_text 含命中词
     assert sorted(svc.shared_text_tokens(lost, f2)) == ["两个", "粉色", "行李箱", "黄色"]
@@ -392,23 +398,28 @@ def test_text_empty_lost_tokens_neutral_and_other_no_words():
 
     v10 语义变更：失主没给任何描述 → 各文本子维度都「未提供」，
     既不得分也不进 W_provided，避免「什么都没写反而拿中性分」。
+
+    v15.1 追加：``state`` 维度在**双方都未填状态**时给中性分 3.0（「候选没填 ≠ 状态不符」），
+    故即便此处失主侧全空，兼容视图 ``text`` 仍含这 3.0 分；该分**不进 W_provided**，
+    所以归一化系数不受影响。
     """
     svc = MatchService()
     lost = _item(tags=None, description="", title="")
     found = _item(tags=["钥匙"])
     # [deprecated] 旧比率函数行为保持不变（仍被前端/存量代码引用）
     assert svc.text_match_rate(lost, found) == 0.5, "失物侧空词集应中性 0.5"
-    # v10：空词集 → 五个文本子维度全部未提供 → text 兼容视图为 0
+    # v10：空词集 → 五个文本子维度全部未提供（不进分母）；v15.1 → state 中性分 3.0 仍计入 raw
     detail = svc.score_detail(lost, found)
-    assert detail["text"] == 0.0
+    assert detail["text"] == pytest.approx(3.0, abs=0.01), f"实际 {detail['text']}"
     assert detail["provided_dims"] == []
     assert detail["norm_factor"] == 1.0
 
     lost_other = _item(category_name="其他")
     found_other = _item(category_name="其他", tags=["雨伞"])
     assert svc.tag_match_rate(lost_other, found_other) == 0.5, "「其他」失物空词集应中性 0.5"
-    # v10：「其他」类无词 → 仅 photo_category=10；W=10 → k=100/max(10,50)=2.0 → 20
-    assert svc.score(lost_other, found_other) == pytest.approx(20.0, abs=0.01)
+    # v10：「其他」类无词 → photo_category=10；v15.1 再加 state 中性分 3.0；
+    # W=10 → k=100/max(10,50)=2.0 → (10+3)×2.0 = 26
+    assert svc.score(lost_other, found_other) == pytest.approx(26.0, abs=0.01)
 
 
 def test_score_detail_five_dimensions_and_deprecated_zeros():

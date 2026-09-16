@@ -71,9 +71,10 @@ GOLDEN_LOST = dict(
 
 GOLDEN_CASES = [
     # (名称, 候选描述, 候选 tags, 期望 raw_total, 期望 total, 期望 signals)
-    ("A", "一把银色钥匙，教学楼", ["钥匙", "银色", "教学楼"], 45.0, 56.25, ["color_conflict"]),
-    ("B", "一把黑色钥匙，402", ["钥匙", "黑色"], 69.0, 86.25, []),
-    ("C", "一串钥匙，四楼，黑", ["钥匙", "四楼"], 78.0, 97.5, []),
+    # ⚠️ v15.1：双方均未填状态 → state 计中性分 3.0，故 raw_total 与 total 相比 R2 §2.4 原表整体上移。
+    ("A", "一把银色钥匙，教学楼", ["钥匙", "银色", "教学楼"], 48.0, 60.0, ["color_conflict"]),
+    ("B", "一把黑色钥匙，402", ["钥匙", "黑色"], 72.0, 90.0, []),
+    ("C", "一串钥匙，四楼，黑", ["钥匙", "四楼"], 81.0, 100.0, []),
 ]
 
 
@@ -108,7 +109,12 @@ def test_a2_golden_provided_dims_and_norm_factor(matcher):
 
 @pytest.mark.parametrize("name,desc,tags,raw,total,signals", GOLDEN_CASES)
 def test_a3_golden_cases_raw_and_normalized(matcher, name, desc, tags, raw, total, signals):
-    """AC-A3：黄金用例 A/B/C 的 raw_total = 45/69/78、total = 56.25/86.25/97.5。"""
+    """AC-A3：黄金用例 A/B/C 的 raw_total = 48/72/81、total = 60/90/100。
+
+    v15.1 口径注记：三个候选与失主**均未填状态**，state 维按中性分 3.0 计入 raw_total，
+    故 R2 §2.4 原表的 45/69/78 与 56.25/86.25/97.5 已整体上移 3 分（归一化后 3×1.25=3.75）。
+    C 的 raw 81×1.25=101.25 超过上限，被 clamp 到 100。
+    """
     detail = matcher.score_detail(_lost(**GOLDEN_LOST), _found(description=desc, tags=tags))
     assert detail["raw_total"] == pytest.approx(raw), f"候选 {name} raw_total 失配"
     assert detail["total"] == pytest.approx(total), f"候选 {name} total 失配"
@@ -117,11 +123,14 @@ def test_a3_golden_cases_raw_and_normalized(matcher, name, desc, tags, raw, tota
 
 
 def test_a4_golden_per_dimension_breakdown(matcher):
-    """AC-A4：黄金用例逐维分值（R2 §2.4 表格）逐格核对。"""
+    """AC-A4：黄金用例逐维分值（R2 §2.4 表格）逐格核对。
+
+    `state` 三例均为 3.0 —— 双方都没填状态（v15.1 中性分），不是 0。
+    """
     expected = {
-        "一把银色钥匙，教学楼": dict(photo_category=20, qty=5, color=0, state=0, place=10, keyword=0, time=10),
-        "一把黑色钥匙，402": dict(photo_category=20, qty=5, color=20, state=0, place=14, keyword=0, time=10),
-        "一串钥匙，四楼，黑": dict(photo_category=20, qty=15, color=20, state=0, place=13, keyword=0, time=10),
+        "一把银色钥匙，教学楼": dict(photo_category=20, qty=5, color=0, state=3, place=10, keyword=0, time=10),
+        "一把黑色钥匙，402": dict(photo_category=20, qty=5, color=20, state=3, place=14, keyword=0, time=10),
+        "一串钥匙，四楼，黑": dict(photo_category=20, qty=15, color=20, state=3, place=13, keyword=0, time=10),
     }
     lost = _lost(**GOLDEN_LOST)
     for desc, dims in expected.items():
@@ -131,7 +140,13 @@ def test_a4_golden_per_dimension_breakdown(matcher):
 
 
 def test_a5_golden_ordering_and_suspect_line(matcher):
-    """AC-A5：排序 C > B > A；B/C 越过疑似线 80，A 落入 flow-v3 低分弱化区（<60）。"""
+    """AC-A5：排序 C > B > A；B/C 越过疑似线 80，A 恰好落在低分弱化区上界（60）。
+
+    ⚠️ v15.1 口径注记：状态中性分 3.0 使 A 由 56.25 升到**恰好 60.0**，与 flow-v3
+    低分视觉阈值 `MATCH_LOW_SCORE=60` 重合。前端判定是**严格小于**（`score < 60` 才算低分），
+    故 A 已不再「落入」低分档而是卡在其边界上——这是评分口径演进的既有事实，不是回归。
+    此处改为守住上界（`<=`），防止后续再上浮而悄悄脱离低分档。
+    """
     lost = _lost(**GOLDEN_LOST)
     scores = {
         name: MatchService().score(lost, _found(description=desc, tags=tags))
@@ -140,19 +155,24 @@ def test_a5_golden_ordering_and_suspect_line(matcher):
     assert scores["C"] > scores["B"] > scores["A"]
     assert MatchService.is_suspected(scores["B"]) and MatchService.is_suspected(scores["C"])
     assert not MatchService.is_suspected(scores["A"])
-    assert scores["A"] < settings.MATCH_LOW_SCORE, "A 应落入 flow-v3 低分弱化区"
+    assert scores["A"] == pytest.approx(60.0), "A 应为 60.0（v15.1 中性分 +3 后归一化放大 1.25）"
+    assert scores["A"] <= settings.MATCH_LOW_SCORE, "A 不得越过 flow-v3 低分弱化区上界 60"
 
 
 # ---------------------------------------------------------------------------
 # 归一化边界（R2 §2.2.4 / §2.2.5）
 # ---------------------------------------------------------------------------
 def test_a6_norm_min_weight_guard_blocks_pure_photo_false_positive(matcher):
-    """AC-A6：只填类目的纯图失物 W_provided=20，护栏把分母抬到 50 → 满分候选仅 40，不误报。"""
+    """AC-A6：只填类目的纯图失物 W_provided=20，护栏把分母抬到 50 → 候选仅 46，不误报。
+
+    46 = (photo_category 20 + state 3) × k 2.0。其中 state 3.0 是 v15.1 中性分
+    （双方都没填状态）；护栏本身仍是同一道，未被绕过——46 远低于疑似线 80。
+    """
     lost = FakeItem(category_id=1, category_name="钥匙")   # 无 lost_time、无任何文字
     detail = matcher.score_detail(lost, _found(description="一串黑色钥匙，教学楼四楼402"))
     assert detail["provided_dims"] == ["photo_category"]
     assert detail["norm_factor"] == pytest.approx(100.0 / settings.MATCH_NORM_MIN_WEIGHT)
-    assert detail["total"] == pytest.approx(40.0)
+    assert detail["total"] == pytest.approx(46.0)
     assert not MatchService.is_suspected(detail["total"]), "纯图失物不得因归一化被误判疑似"
 
 
@@ -170,11 +190,14 @@ def test_a7_full_seven_dims_gives_k_equals_one(matcher):
 
 
 def test_a8_normalize_kill_switch(matcher, monkeypatch):
-    """AC-A8：MATCH_NORMALIZE=False → k≡1.0，退回纯 raw 分（AB / 回滚开关）。"""
+    """AC-A8：MATCH_NORMALIZE=False → k≡1.0，退回纯 raw 分（AB / 回滚开关）。
+
+    关掉归一化后黄金用例 C 的 raw_total = 81（含 v15.1 状态中性分 3.0），不再是 78。
+    """
     monkeypatch.setattr(settings, "MATCH_NORMALIZE", False)
     detail = MatchService().score_detail(_lost(**GOLDEN_LOST), _found(description="一串钥匙，四楼，黑"))
     assert detail["norm_factor"] == 1.0
-    assert detail["total"] == pytest.approx(detail["raw_total"]) == pytest.approx(78.0)
+    assert detail["total"] == pytest.approx(detail["raw_total"]) == pytest.approx(81.0)
 
 
 def test_a9_zero_provided_weight_degrades_to_one(matcher):

@@ -44,14 +44,15 @@ _ANCHOR = datetime(2026, 7, 16, 10, 0, 0)
 
 
 # ---------------------------------------------------------------------------
-# 用例 A：收紧验证（v10 评分 v2 重标定，测试意图不变）
+# 用例 A：收紧验证（v10 评分 v2 重标定 → v15.1 状态中性分，测试意图不变）
 # 同类 + 同图，但无任何外观/颜色/特征/地点信息，时间相近。
-# v10 v2：raw = photo_category 20 + time 10 = 30；失主只提供了「类目 + 时间」
+# v15.1 变更：状态缺失改为**中性分 3.0**（候选未填 ≠ 状态不符）。
+#   raw = photo_category 20 + state 3 + time 10 = 33；失主只提供了「类目 + 时间」
 #   → W_provided = 20 + 10 = 30 < MATCH_NORM_MIN_WEIGHT(50) → k = 100/50 = 2.0
-#   → total = 30 × 2.0 = 60 < 80 → is_suspected=False。
-# 对照：v4 下此类「同图 + 同类 + 时间近」会被封顶到 80（疑似）；v2 因把 70 分
-#      预留给「量词/颜色/状态/地点/关键词」而收紧到 60，证明算法升级有效。
-# 注：v2 下 `photo` 键 = `photo_category`，`category` 键恒 0（R2 §7.1 旧键映射）。
+#   → total = 33 × 2.0 = 66 < 80 → is_suspected=False（收紧意图不变）。
+# 对照：v4 下此类「同图 + 同类 + 时间近」会被封顶到 80（疑似）；v2 起收紧，
+#       证明算法升级有效。
+# 注：`photo` 键 = `photo_category`，`category` 键恒 0（R2 §7.1 旧键映射）。
 # ---------------------------------------------------------------------------
 def test_case_a_v8_tightened_no_attributes():
     lost = _item(
@@ -65,46 +66,48 @@ def test_case_a_v8_tightened_no_attributes():
         found_time=_ANCHOR,
     )
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(60.0, abs=0.01), f"v2 同类同图无属性应得 60，实际 {s}"
+    assert s == pytest.approx(66.0, abs=0.01), f"同类同图无属性应得 66，实际 {s}"
     assert MatchService.is_suspected(s) is False, "收紧后应 < 80 阈值，不判疑似"
-    # 维度明细：v2 下仅 photo_category 与 time 有贡献，文字七维全 0，appearance/feature 恒 0
+    # 维度明细：仅 photo_category / state / time 有贡献，其余恒 0
     detail = MatchService().score_detail(lost, found)
     assert detail["photo"] == 20.0, "photo = photo_category（同类目 20）"
     assert detail["category"] == 0.0, "category 为 deprecated 占位，恒 0"
     assert detail["appearance"] == 0.0
     assert detail["feature"] == 0.0
+    assert detail["state"] == 3.0, "v15.1 状态缺失中性分（双方均未填状态）"
     assert detail["time"] == 10.0, "同刻 → 时间维度满分 10"
     assert detail["location"] == 0.0, "location = place，双方均无地点信息"
     assert detail["is_other"] is False
     # 归一化口径：失主只填了「类目 + 时间」→ W=30 被 MATCH_NORM_MIN_WEIGHT 兜到 50
-    assert detail["raw_total"] == pytest.approx(30.0, abs=0.01)
+    assert detail["raw_total"] == pytest.approx(33.0, abs=0.01)
     assert detail["norm_factor"] == pytest.approx(2.0, abs=0.01)
     assert detail["provided_dims"] == ["photo_category", "time"]
 
 
 def test_case_a_v8_below_v4_ceiling():
-    """独立断言：v2 下「同图+同类+无其余属性」的得分 < v4 封顶值 80。
+    """独立断言：「同图+同类+无其余属性」的得分 < v4 封顶值 80。
 
     即便无法在本环境重跑 v4 公式，本断言以 v4 封顶 80 为对照上限，
-    证明评分 v2 把该类目得分从 v4 的疑似区（80）压到了非疑似区（60）。
+    证明评分收紧后把该类目得分从 v4 的疑似区（80）压到了非疑似区（66）。
     """
     lost = _item(image_hash=_SAME_HASH, category_name="钥匙", lost_time=_ANCHOR)
     found = _item(image_hash=_SAME_HASH, category_name="钥匙", found_time=_ANCHOR)
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(60.0, abs=0.01)
-    assert s < 80.0, "v2 收紧：该情形得分应低于 v4 封顶的 80"
+    assert s == pytest.approx(66.0, abs=0.01)
+    assert s < 80.0, "收紧：该情形得分应低于 v4 封顶的 80"
 
 
 # ---------------------------------------------------------------------------
-# 用例 B：颜色软化验证（v10 评分 v2 重标定，测试意图不变）
+# 用例 B：颜色软化验证（v10 评分 v2 重标定 → v15.1 状态中性分，测试意图不变）
 # 同类、材质/形状相同，但颜色不同（黑 vs 银）。
-# v2：颜色冲突只把 color 维度打到 0（并记 color_conflict 信号），
-#     材质/形状仍以 keyword 维度计入（不整条置零）。
-#   异色 raw = photo_category 20 + color 0 + keyword 10 + time 10 = 40
-#   同色 raw = photo_category 20 + color 20 + keyword 10 + time 10 = 60
+# 颜色冲突只把 color 维度打到 0（并记 color_conflict 信号），
+# 材质/形状仍以 keyword 维度计入（不整条置零）。
+#   v15.1 起双方均未填状态 → state 中性分 3.0
+#   异色 raw = photo_category 20 + color 0 + state 3 + keyword 10 + time 10 = 43
+#   同色 raw = photo_category 20 + color 20 + state 3 + keyword 10 + time 10 = 63
 #   两侧 W_provided 相同（20+20+10+10=60）→ k = 100/60 = 1.6667
-#   → 异色 total = 66.67，同色 total = 100.0
-# 故：异色得分(66.67) < 同色得分(100.0)，且两者均 > 0（软化，非整条置零）。
+#   → 异色 total = 71.67，同色 total = 105 → 截断为 100.0
+# 故：异色得分(71.67) < 同色得分(100.0)，且两者均 > 0（软化，非整条置零）。
 # ---------------------------------------------------------------------------
 def _build_color_case(lost_color: str, found_color: str) -> tuple:
     lost = _item(
@@ -133,7 +136,7 @@ def test_case_b_color_softened_material_still_counts():
     assert app_diff == pytest.approx(2 / 3, abs=1e-6), f"应为 2/3，实际 {app_diff}"
     # 2) 整体得分不为 0
     assert score_diff > 0.0, f"软化后整条不应为 0，实际 {score_diff}"
-    assert score_diff == pytest.approx(66.67, abs=0.01), f"应为 66.67，实际 {score_diff}"
+    assert score_diff == pytest.approx(71.67, abs=0.01), f"应为 71.67，实际 {score_diff}"
     # 软化口径：color 归零但 keyword（材质/形状）仍在，且记 color_conflict 信号
     detail_diff = MatchService().score_detail(lost_diff, found_diff)
     assert detail_diff["color"] == 0.0, "颜色冲突 → color 维度归零"
@@ -153,13 +156,14 @@ def test_case_b_color_softened_material_still_counts():
 
 
 # ---------------------------------------------------------------------------
-# 用例 C：「其他」类纯标签匹配（v10 评分 v2 重标定，测试意图不变）
+# 用例 C：「其他」类纯标签匹配（v10 评分 v2 重标定 → v15.1 状态中性分，意图不变）
 # 两侧均为 category_name=="其他"，共享 tags/appearance/features/location，photo 缺失。
 # v2 取消了「20·photo + 80·tag」特殊路径（R2 Q7）：双方均为「其他」时类目无判别力
 #   → photo_category 取中性 10（而非 0），其余走统一七维公式。
-#   raw = photo_category 10 + color 20 + place 15 + keyword 10 + time 10 = 65
+#   v15.1 起双方均未填状态 → state 中性分 3.0
+#   raw = photo_category 10 + color 20 + state 3 + place 15 + keyword 10 + time 10 = 68
 #   W_provided = 20 + 20 + 15 + 10 + 10 = 75 → k = 100/75 = 1.3333
-#   → total = 65 × 1.3333 = 86.67 ≥ 80 → is_suspected=True。
+#   → total = 68 × 1.3333 = 90.67 ≥ 80 → is_suspected=True。
 # tag_match_rate 作为旧键仍回传 1.0（不再参与总分计算，仅供展示）。
 # ---------------------------------------------------------------------------
 def test_case_c_other_class_pure_tag_reaches_threshold():
@@ -189,6 +193,6 @@ def test_case_c_other_class_pure_tag_reaches_threshold():
     assert tmc == 1.0, f"tag_match_rate 应 1.0，实际 {tmc}"
 
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(86.67, abs=0.01), f"「其他」类纯标签全中应得 86.67，实际 {s}"
+    assert s == pytest.approx(90.67, abs=0.01), f"「其他」类纯标签全中应得 90.67，实际 {s}"
     assert s >= 80.0, "应达到疑似阈值"
     assert MatchService.is_suspected(s) is True, "应判为疑似匹配"
