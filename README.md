@@ -98,7 +98,7 @@ pytest
 
 ## 评测
 
-`evaluation/dataset.json` 是一份人工标注的标注集，40 对样本，正例和负例各 20 对。调参时拿它跑回归，匹配 F1 从 58.8% 提到 **78.0%**（v14 强冲突信号 + v15.1 状态缺失中性分与地点数字别名归一化，召回 55%→80%）。每轮改动前后都留了结果文件，见 `evaluation/results-v*.md`。
+`evaluation/dataset.json` 是一份人工标注的标注集，40 对样本，正例和负例各 20 对。调参时拿它跑回归，匹配 F1 从 62.9% 提到 **78.0%**（v13 安全加固与词边界修复 → v14 三类强冲突信号 → v15.1 状态缺失中性分与地点数字别名归一化；召回 55%→80%）。每轮改动前后都留了结果文件，见 `evaluation/results-v*.md`（更早的 58.8% 起点基线未单独留结果文件，指标见 `docs/prd/v13-安全加固与评测集.md`）。
 
 ## 项目结构
 
@@ -106,7 +106,7 @@ pytest
 ├── app/           # FastAPI 后端（core/models/schemas/routers/services/utils）
 ├── web/           # Vue3 前端（views/components/api/stores）
 ├── migrations/    # 数据库迁移
-├── tests/         # pytest 测试，389 个用例
+├── tests/         # pytest 测试，395 个用例
 ├── docs/          # 系统设计、流程图、迭代 PRD
 ├── deploy/        # 部署相关
 └── docker-compose.yml
@@ -114,7 +114,7 @@ pytest
 
 ## 关于开发方式
 
-代码由 AI Coding Agent 辅助生成，需求拆解、接口设计、数据结构和评测标准由我主导。项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v15。
+代码由 AI Coding Agent 辅助生成，需求拆解、接口设计、数据结构和评测标准由我主导。项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v15.1。
 
 ## 许可证
 
