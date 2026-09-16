@@ -163,6 +163,7 @@ for _gi, (_left, _right) in enumerate(STATE_WORD_PAIRS):
 STATE_SCORE_FULL: float = 10.0        # 失主状态词全部命中
 STATE_SCORE_CONFLICT: float = 0.0     # 存在反义冲突 → 0 + state_conflict
 STATE_SCORE_MISSING: float = 3.0      # v15.1: 失主侧无状态词→中性分(候选未填≠状态不符)
+STATE_SCORE_ZERO_HIT: float = 0.0     # v15.2: 双方均有状态词但零命中 → 明确不符，不给中性分
 
 SIGNAL_STATE_CONFLICT: str = "state_conflict"
 
@@ -211,7 +212,7 @@ NEW_SIDE_WORDS: frozenset[str] = frozenset(
     {"新", "全新", "崭新", "九成新", "八成新", "九五新", "完好", "完整", "没坏"}
 )
 DAMAGED_SIDE_WORDS: frozenset[str] = frozenset(
-    {"破损", "损坏", "坏了", "摔坏", "碎", "破裂", "磨损", "划痕", "掉漆", "褪色", "旧", "破旧"}
+    {"破损", "损坏", "坏了", "烂了", "摔坏", "碎", "破裂", "磨损", "划痕", "掉漆", "褪色", "开裂", "旧", "陈旧", "老旧", "破旧"}
 )
 
 
@@ -234,7 +235,7 @@ EXCLUSIVE_ATTR_GROUPS: tuple[frozenset[str], ...] = (
     frozenset({"长柄", "直柄", "直杆", "长把", "折叠", "三折", "五折"}),
 )
 SIGNAL_TYPE_CONFLICT: str = "type_conflict"
-MUTUAL_EXCLUSIVE_PENALTY: float = 15.0
+MUTUAL_EXCLUSIVE_PENALTY: float = 20.0  # v15.2: 强互斥加重（长柄vs折叠 84.4 仍误配）
 
 
 def mutual_exclusive_conflict(lost_text: str | None, found_text: str | None) -> bool:
@@ -346,7 +347,8 @@ def state_score(lost_states, found_states) -> tuple[float, bool]:
         if lg is not None and any(_STATE_GROUP.get(fw) == lg for fw in found):
             hit += 1
     if hit == 0:
-        return STATE_SCORE_MISSING, False
+        # v15.2：双方都填了状态词但零命中 → 明确不符，不给中性分（精确率回调）
+        return STATE_SCORE_ZERO_HIT, False
     return STATE_SCORE_FULL * hit / len(lost), False
 
 

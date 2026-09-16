@@ -250,18 +250,18 @@ class PublishService:
             "lost", lost.id, publisher.id, vision_result, category_name
         )
 
-        # v15.2：反向匹配失败不阻塞发布（评分引擎对脏历史数据应有容错，此处双保险）
+        # v15.2 修正（code-review 硬性问题）：主发布先提交落库，反向匹配失败只回滚
+        # 匹配记录——原兜底在未提交事务上 rollback+refresh 会自毁发布（InvalidRequestError）
+        self.db.commit()
         try:
             matches = self._reverse_match_lost(lost)
+            self.db.commit()
         except Exception as exc:  # pragma: no cover - 防御性兜底
             import logging
 
             logging.getLogger(__name__).exception("反向匹配(失物)失败，发布继续: %s", exc)
-            matches = []
             self.db.rollback()
-            self.db.refresh(lost)
-            self.db.add(lost)
-        self.db.commit()
+            matches = []
         self.db.refresh(lost)
         return lost, matches
 
@@ -354,18 +354,17 @@ class PublishService:
             "found", found.id, finder.id, vision_result, category_name
         )
 
-        # v15.2：同上，反向匹配失败不阻塞发布
+        # v15.2 修正：同上——主发布先落库，匹配失败只回滚匹配记录
+        self.db.commit()
         try:
             matches = self._reverse_match_found(found)
+            self.db.commit()
         except Exception as exc:  # pragma: no cover - 防御性兜底
             import logging
 
             logging.getLogger(__name__).exception("反向匹配(拾物)失败，发布继续: %s", exc)
-            matches = []
             self.db.rollback()
-            self.db.refresh(found)
-            self.db.add(found)
-        self.db.commit()
+            matches = []
         self.db.refresh(found)
         return found, matches
 
