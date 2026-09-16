@@ -337,14 +337,11 @@
           </el-button>
         </div>
       </template>
+      <template #footer>
         <el-button @click="poolVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-
-    <template #footer>
-
-
-    <!-- v15「已排除池」弹窗已插入上方 --></template>
+</template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'

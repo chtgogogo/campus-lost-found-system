@@ -91,3 +91,8 @@ tests/_tmp_migrate_*.db-journal
 .env
 .env.local
 
+pytest_*.txt
+pytest_full_output.txt
+pytest_r2.txt
+pytest_fail_round2.txt
+pytest_full_output.txt

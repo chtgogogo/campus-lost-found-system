@@ -168,3 +168,14 @@
 
 - 关键词子串部分命中（「星星」⊂「星星图案」当前 0 分）——需防短词滥匹配，单独设计
 - 精确率回调：FP 样本回流分析后考虑「图案语境颜色词不进颜色集合」（「金色星星」误抽物品色）
+
+## v15.1 补充 — 前端「不是我的」UI + conftest 清理修复
+
+- 前端 MatchesView：失主待处理候选「不是我的」按钮（确认弹窗）、页头「重新匹配」
+  （按失物分组批量排除+逐失物刷新补位）、「排除池」弹窗（按失物选择查看+重返按钮）
+- match.ts：excludeMatch / excludeBatch / listExcluded / restoreExcluded 四接口
+- conftest：_BUSINESS_TABLES 清理清单补 match_exclusion（v15 遗漏导致跨文件测试
+  顺序依赖——v5/v6/v7 组合跑时被残留数据污染，9 个失败）
+- 回滚说明：test_match/v10_scoring_v2/v8_qa_independent/flow_v2 四文件的 golden
+  断言期望值需按 v14/v15.1 新分数逐个精确更新（+3/+6 模式，STATE_MISSING 0→3 所致），
+  盲脚本更新有错位风险已回滚，待下轮人工精确处理
