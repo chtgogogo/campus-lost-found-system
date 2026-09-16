@@ -183,12 +183,26 @@ QTY_OVERSUPPLY_PENALTY: float = 20.0
 
 
 def qty_oversupply(lost_pairs, found_pairs) -> bool:
-    """同类量词下，候选侧数量 > 失主侧数量 → 非唯一性冲突（真实验证 G4-C/D）。"""
-    for lnum, lcls in set(lost_pairs or ()):
-        for fnum, fcls in set(found_pairs or ()):
-            if lcls == fcls and fnum > lnum:
-                return True
-    return False
+    """同类量词下，候选侧数量 > 失主侧数量 → 非唯一性冲突。
+
+    v15.2 口径修正（控制变量书包 case 证据：双方描述完全相同却触发冲突）：
+    与 ``qty_score`` 同用**最佳配对**口径——量词组合中存在「数量相等或更少」
+    的配对即视为同源可能，不判超供；仅当**所有同类配对都 fnum > lnum** 时才判。
+    """
+    lost = set(lost_pairs or ())
+    found = set(found_pairs or ())
+    has_same_cls_pair = False
+    best_surplus = None
+    for lnum, lcls in lost:
+        for fnum, fcls in found:
+            if lcls != fcls:
+                continue
+            has_same_cls_pair = True
+            surplus = fnum - lnum
+            best_surplus = surplus if best_surplus is None else min(best_surplus, surplus)
+    if not has_same_cls_pair:
+        return False
+    return best_surplus is not None and best_surplus > 0
 
 
 # —— 发现② 新物 vs 破损跨组强冲突（G5-D：全新vs破损 89.9 仍误配）——

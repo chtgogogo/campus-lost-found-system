@@ -169,4 +169,8 @@ export const MATCH_DIM_LABEL: Record<string, string> = {
 export const MATCH_SIGNAL_LABEL: Record<string, string> = {
   color_conflict: '颜色不符，大概率非同一物品',
   state_conflict: '新旧/完好度描述矛盾',
+  // v15.2：新增信号中文化（原英文信号名直接暴露给用户）
+  qty_oversupply: '物品数量可能不符，建议人工确认',
+  type_conflict: '物品类型特征矛盾（如长柄 vs 折叠）',
+  brand_conflict: '品牌描述不一致',
 }
