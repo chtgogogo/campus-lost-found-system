@@ -92,10 +92,14 @@
           </div>
 
           <!-- 三重融合：失物/拾物共享特征（可解释匹配依据） -->
-          <div v-if="m.shared_attributes && m.shared_attributes.length" class="match-shared">
+          <!-- v15.2：过滤单字噪声（「书」「卡」无信息量） -->
+          <div
+            v-if="m.shared_attributes && m.shared_attributes.some((t) => t.length >= 2)"
+            class="match-shared"
+          >
             <span class="lf-muted match-shared-label">共享特征：</span>
             <el-tag
-              v-for="tag in m.shared_attributes"
+              v-for="tag in m.shared_attributes.filter((t) => t.length >= 2)"
               :key="tag"
               size="small"
               type="info"
@@ -105,10 +109,14 @@
           </div>
 
           <!-- v2（2026-08-05）：共享文字词（R4 可解释：命中相似词越多分越高） -->
-          <div v-if="m.shared_text && m.shared_text.length" class="match-shared">
+          <!-- v15.2：过滤单字噪声 token（「一个」「书」对用户无信息量） -->
+          <div
+            v-if="m.shared_text && m.shared_text.some((w) => w.length >= 2)"
+            class="match-shared"
+          >
             <span class="lf-muted match-shared-label">共享文字：</span>
             <el-tag
-              v-for="w in m.shared_text"
+              v-for="w in m.shared_text.filter((w) => w.length >= 2)"
               :key="w"
               size="small"
               type="warning"
@@ -168,7 +176,6 @@
                 <span class="match-dim-val">{{ m[sub.key] }}/{{ sub.weight }}</span>
               </div>
             </template>
-            <div v-if="normHint(m)" class="match-dims-norm lf-muted">{{ normHint(m) }}</div>
           </div>
 
           <div v-if="m.claim_reason" class="match-reason lf-muted">

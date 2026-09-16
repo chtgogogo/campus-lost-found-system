@@ -8,16 +8,6 @@
       </div>
 
       <div class="lf-header-right">
-        <div class="lf-demo-switch">
-          <span class="lf-muted" style="font-size: 13px">演示数据</span>
-          <el-switch
-            :model-value="demo.enabled"
-            @change="(v: any) => demo.setEnabled(Boolean(v))"
-            inline-prompt
-            active-text="开"
-            inactive-text="关"
-          />
-        </div>
 
         <!-- v7：演示态身份切换（仅演示模式可见），用于进入管理后台 -->
         <div v-if="demo.enabled" class="lf-demo-role">

@@ -265,7 +265,7 @@ def exclude_match(item_id: int, match_id: int, db: Session = Depends(get_db), us
 @router.post("/lost-items/{item_id}/matches/exclude-batch", response_model=StandardResponse)
 def exclude_matches_batch(item_id: int, payload: ExcludeBatchIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """批量排除（「重新匹配」第一步）：当前展示的一批候选全部进入排除池。幂等。"""
-    lost = _get_lost_owned_or_raise(db, item_id, user)
+    _get_lost_owned_or_raise(db, item_id, user)  # 权限校验（404/403 副作用）
     if not payload.match_ids:
         raise ParamError("match_ids 不能为空")
     records = db.query(MatchRecord).filter(MatchRecord.id.in_(payload.match_ids), MatchRecord.lost_id == item_id).all()
