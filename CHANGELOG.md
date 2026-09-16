@@ -176,6 +176,49 @@
 - match.ts：excludeMatch / excludeBatch / listExcluded / restoreExcluded 四接口
 - conftest：_BUSINESS_TABLES 清理清单补 match_exclusion（v15 遗漏导致跨文件测试
   顺序依赖——v5/v6/v7 组合跑时被残留数据污染，9 个失败）
-- 回滚说明：test_match/v10_scoring_v2/v8_qa_independent/flow_v2 四文件的 golden
-  断言期望值需按 v14/v15.1 新分数逐个精确更新（+3/+6 模式，STATE_MISSING 0→3 所致），
-  盲脚本更新有错位风险已回滚，待下轮人工精确处理
+- 回滚说明（已由下一节取代）：test_match/v10_scoring_v2/v8_qa_independent/flow_v2 四文件的
+  golden 断言期望值需按 v14/v15.1 新分数逐个精确更新（+3/+6 模式，STATE_MISSING 0→3 所致），
+  盲脚本更新有错位风险已回滚
+
+## v15.1 测试对齐 — 27 处过期断言人工精确订正（2026-09-16）
+
+### 背景
+
+v14/v15.1 引入两类口径演进后，测试套件停在旧期望值上，实跑
+`27 failed / 366 passed / 2 skipped`（收集数 395 未变）。性质是**测试落后于代码**
+（断言过期）而非代码 bug，故一律改测试、不动打分逻辑。
+
+根因两条，均只影响期望值：
+1. `state` 维度在**双方均未填状态**时由 0 改给中性分 3.0 → `raw_total` 整体 +3，
+   归一化后表现为 +3.75 / +6（取决于该失物的 `k`）；
+2. 用例名与注释里仍写着 v9 五维公式的旧算式（`text = 词集比率 × 40`、"总分 52.5" 等）。
+
+### 订正清单（5 文件 27 处）
+
+- `test_match.py`（13）：40→46、60→66、60.03→66.03、80→86、86.67→90.67 等；
+  `test_score_detail_parent_category_dimension` 的 raw 明细补 `state == 3.0` 断言
+- `test_v8_qa_independent.py`（4）：用例 A 60→66（raw 30→33）+ 新增 `state==3.0` 断言、
+  对照 60→66、用例 B 66.67→71.67（raw 40→43）、用例 C 86.67→90.67（raw 65→68）
+- `test_v10_scoring_v2.py`（8）：黄金用例 A/B/C 的 raw 45/69/78→**48/72/81**、
+  total 56.25/86.25/97.5→**60/90/100**（C 的 81×1.25=101.25 被 clamp 到上限）；
+  逐维表 `state` 0→3；A6 纯图护栏 40→**46**；A8 kill switch 78→**81**
+- `test_flow_v2.py`（2）：`text` 18/35→**21/38**、`total` 54.29/78.57→**58.57/82.86**；
+  空词集 `text` 0→**3**、「其他」类 20→**26**
+- `test_flow_v3.py`（1）：F3-9 **按用例自身「前置条件失效则改语料」的既定约定改语料**，
+  而非放宽断言 —— 失主描述补一个候选侧不命中的区分性特征词（`带小熊挂件`），
+  `W_provided` 65→75、`k` 1.538→1.333，场景最高分 81.54→**71.28**，
+  重新满足「全部非疑似」前置条件，`len(matches)` 回到 `MATCH_TOP_N`=50
+
+### 顺带的语义订正
+
+- `test_flow_v2.py::test_luggage_text_40_over_20_and_total_67_5_over_52_5` 更名为
+  `test_luggage_text_compat_view_and_normalized_total`：原名里的 40/20、67.5/52.5 是 v9
+  产物，v10 起 `text` 已是兼容视图，旧名会让后来人把它当回归看
+- `test_v10_scoring_v2.py::test_a5`：`scores["A"] < MATCH_LOW_SCORE` 改为 `<=` 并加精确值
+  断言 —— A 由 56.25 升到**恰好 60.0**，与前端低分阈值重合（前端判定为严格小于
+  `score < 60`），A 已不在低分档内而是卡在其边界，属评分口径演进的既有事实，非回归
+
+### 验证
+
+`pytest -q` 全量：**393 passed, 2 skipped**（0 failed，耗时约 9m50s）。
+

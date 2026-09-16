@@ -129,9 +129,10 @@ def test_score_six_dimensions_all_full():
 
 
 def test_score_no_overlap_attributes():
-    # v10：两侧词集完全不重叠 → 只有 photo_category(10，同图但无类目) + time(10) 命中。
+    # v15.1：两侧词集完全不重叠 → photo_category(10，同图但无类目) + time(10)
+    # + state 中性分(3，双方均未填状态) 命中。
     # 失主侧仅提供 keyword/time → W_provided=20 → k=100/max(20,50)=2.0
-    # raw=20 → total=40（低于阈值，符合"毫无共同点"的语义）
+    # raw=23 → total=46（低于阈值，符合"毫无共同点"的语义）
     lost = _item(
         image_hash=_SAME_HASH,
         tags=["书包", "双肩"],
@@ -143,13 +144,14 @@ def test_score_no_overlap_attributes():
         found_time=datetime(2026, 7, 16, 10, 0, 0),
     )
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(40.0, abs=0.01)
+    assert s == pytest.approx(46.0, abs=0.01)
     assert MatchService.is_suspected(s) is False
 
 
 def test_score_no_attributes_below_threshold():
-    # v10：无图 + 两侧 tags 不重叠 → 仅 photo_category(10，同类目档) + time(10)。
-    # 失主侧只提供 time → W_provided=10 → k=100/max(10,50)=2.0 → total=40 < 80。
+    # v15.1：无图 + 两侧 tags 不重叠 → photo_category(10，同类目档) + time(10)
+    # + state 中性分(3)。
+    # 失主侧只提供 time → W_provided=10 → k=100/max(10,50)=2.0 → total=46 < 80。
     # 关键语义（本用例真正要守护的）：**无实质属性命中时不得达到疑似阈值**。
     lost = _item(
         tags=["书包"],
@@ -160,15 +162,16 @@ def test_score_no_attributes_below_threshold():
         found_time=datetime(2026, 7, 16, 10, 0, 0),
     )
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(40.0, abs=0.01)
+    assert s == pytest.approx(46.0, abs=0.01)
     assert s < settings.MATCH_THRESHOLD
     assert MatchService.is_suspected(s) is False
 
 
 def test_score_parent_category_weights_half():
-    # v10：同色命中 color=20 + photo_category=10（父级档）+ time≈0.01（相隔 100 天，
-    # 10·exp(-100/15) ≈ 0.01）→ raw≈30.01；失主侧提供 color/time → W=30 → k=2.0
-    # → total≈60.03，仍**远低于阈值**（时间衰减把跨度 100 天的候选压住）。
+    # v15.1：同色命中 color=20 + photo_category=10（父级档）+ state 中性分 3
+    # + time≈0.01（相隔 100 天，10·exp(-100/15) ≈ 0.01）→ raw≈33.01；
+    # 失主侧提供 color/time → W=30 → k=2.0
+    # → total≈66.03，仍**远低于阈值**（时间衰减把跨度 100 天的候选压住）。
     lost = _item(
         image_hash=_SAME_HASH,
         tags=["黑色", "书包"],
@@ -180,7 +183,7 @@ def test_score_parent_category_weights_half():
         found_time=datetime(2026, 7, 16, 10, 0, 0) - timedelta(days=100),
     )
     s = MatchService().score(lost, found, exact_category=False)
-    assert s == pytest.approx(60.03, abs=0.01)
+    assert s == pytest.approx(66.03, abs=0.01)
     assert MatchService.is_suspected(s) is False
 
 
@@ -204,11 +207,12 @@ def test_score_detail_parent_category_dimension():
     assert detail["photo"] == 10.0  # [deprecated] 兼容视图 = photo_category
     assert detail["appearance"] == 0.0  # [deprecated] flow-v2 起并入 text
     assert detail["color"] == 20.0  # 黑 vs 黑 同色满分
-    assert detail["text"] == 20.0  # [deprecated] = qty+color+state+place+keyword
+    assert detail["state"] == 3.0  # v15.1 状态缺失中性分（双方均未填状态）
+    assert detail["text"] == 23.0  # [deprecated] = qty+color+state+place+keyword
     assert detail["time"] == 10.0  # 同一时刻 → 无衰减
-    assert detail["raw_total"] == 40.0
+    assert detail["raw_total"] == 43.0
     assert detail["norm_factor"] == 2.0  # W_provided=color(20)+time(10)=30 → k=100/50
-    assert detail["total"] == pytest.approx(80.0, abs=0.01)
+    assert detail["total"] == pytest.approx(86.0, abs=0.01)
     assert detail["is_other"] is False
 
 
@@ -260,33 +264,34 @@ def test_color_conflict():
 
 
 def test_score_color_softened_not_zero():
-    # v10 颜色软化：银 vs 黑 仍**不整条置零**，只是 color 维记 0 并打 color_conflict 信号。
-    # photo_category=10 + color=0 + time=10 → raw=20；W=color(20)+time(10)=30 → k=2.0 → 40。
+    # v15.1 颜色软化：银 vs 黑 仍**不整条置零**，只是 color 维记 0 并打 color_conflict 信号。
+    # photo_category=10 + color=0 + state=3 + time=10 → raw=23；
+    # W=color(20)+time(10)=30 → k=2.0 → 46。
     lost = _item(tags=["银色", "钥匙"], lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(tags=["黑色", "钥匙"], found_time=datetime(2026, 7, 16, 10, 0, 0))
     svc = MatchService()
     s = svc.score(lost, found)
-    assert s == pytest.approx(40.0, abs=0.01)
+    assert s == pytest.approx(46.0, abs=0.01)
     assert s > 0.0, "颜色冲突不得把整条得分归零"
     assert "color_conflict" in svc.score_detail(lost, found)["signals"]
     assert MatchService.is_suspected(s) is False
 
-    # 同色（黑 vs 黑）→ color 拿满 20 → 80，显著高于颜色冲突的 40。
+    # 同色（黑 vs 黑）→ color 拿满 20 → 86，显著高于颜色冲突的 46。
     lost_same = _item(tags=["黑色", "钥匙"], lost_time=datetime(2026, 7, 16, 10, 0, 0))
     s_same = MatchService().score(lost_same, found)
-    assert s_same == pytest.approx(80.0, abs=0.01)
+    assert s_same == pytest.approx(86.0, abs=0.01)
     assert s_same > s  # 颜色冲突只扣 color 维，不归零整条
 
 
 def test_score_color_softened_material_still_counts():
-    # v10：颜色不同（黑 vs 银）但材质/形状相同（皮革/圆形）→ keyword 维仍命中。
-    # photo_category=10 + color=0(冲突) + keyword=10 + time=10 → raw=30；
-    # W=color(20)+keyword(10)+time(10)=40 → k=100/max(40,50)=2.0 → total=60。
+    # v15.1：颜色不同（黑 vs 银）但材质/形状相同（皮革/圆形）→ keyword 维仍命中。
+    # photo_category=10 + color=0(冲突) + state=3 + keyword=10 + time=10 → raw=33；
+    # W=color(20)+keyword(10)+time(10)=40 → k=100/max(40,50)=2.0 → total=66。
     lost = _item(tags=["黑色"], appearance="皮革,圆形", lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(tags=["银色"], appearance="皮革,圆形", found_time=datetime(2026, 7, 16, 10, 0, 0))
     svc = MatchService()
     s = svc.score(lost, found)
-    assert s == pytest.approx(60.0, abs=0.01)
+    assert s == pytest.approx(66.0, abs=0.01)
     assert s > 0
     detail = svc.score_detail(lost, found)
     assert detail["keyword"] == 10.0, "材质/形状应通过 keyword 维继续贡献"
@@ -295,20 +300,24 @@ def test_score_color_softened_material_still_counts():
 
 # ---------------- 「其他」类纯标签匹配（v8 特殊路径） ----------------
 def test_other_class_pure_tag_full_match_suspected():
-    # 两侧均为「其他」类，标签完全一致 → tag_match_rate=1.0 → 20*0 + 80*1.0 = 80（疑似）。
+    # 两侧均为「其他」类，标签完全一致 → 走统一七维公式（v10 起取消 20·photo + 80·tag 特殊路径）。
+    # photo_category=10(中性) + color=20 + state=3 + time=10 → raw=43；
+    # W=photo_category(10)+color(20)+time(10)=40 → k=2.0 → total=86（疑似）。
     lost = _item(category_name="其他", tags=["雨伞", "黑色"], lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(category_name="其他", tags=["雨伞", "黑色"], found_time=datetime(2026, 7, 16, 10, 0, 0))
     s = MatchService().score(lost, found)
-    assert s == 80.0
+    assert s == pytest.approx(86.0, abs=0.01)
     assert MatchService.is_suspected(s) is True
 
 
 def test_other_class_pure_tag_partial_match_not_suspected():
-    # 「其他」类标签部分命中（失物 2 个 / 候选命中 1 个）→ tag_match_rate=0.5 → 40（非疑似）。
+    # 「其他」类标签部分命中（失物 2 个 / 候选命中 1 个）→ 走七维公式。
+    # photo_category=10 + state=3 + time=10 → raw=23；W=photo_category(10)+time(10)=20
+    # → k=2.0 → total=46（非疑似）。
     lost = _item(category_name="其他", tags=["雨伞", "黑色"], lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(category_name="其他", tags=["雨伞"], found_time=datetime(2026, 7, 16, 10, 0, 0))
     s = MatchService().score(lost, found)
-    assert s == 40.0
+    assert s == pytest.approx(46.0, abs=0.01)
     assert MatchService.is_suspected(s) is False
 
 
@@ -332,20 +341,21 @@ def test_other_class_tag_match_rate_with_appearance_features_location():
     )
     assert MatchService.tag_match_rate(lost, found) == 1.0
     s = MatchService().score(lost, found)
-    # v10：photo_category=10 + color=20 + place=15(图书馆三楼 全层级命中) + keyword=10
-    # + time=10 → raw=65；W=photo_category+color+place+keyword+time=75 → k=100/75≈1.3333
-    # → total≈86.67（四字段全中，理应比 flow-v2 的 80 更高）。
-    assert s == pytest.approx(86.67, abs=0.01)
+    # v15.1：photo_category=10 + color=20 + state=3 + place=15(图书馆三楼 全层级命中)
+    # + keyword=10 + time=10 → raw=68；W=photo_category+color+place+keyword+time=75
+    # → k=100/75≈1.3333 → total≈90.67（四字段全中，理应比 flow-v2 的 80 更高）。
+    assert s == pytest.approx(90.67, abs=0.01)
     assert MatchService.is_suspected(s) is True
 
 
 def test_other_class_no_tags_degrades_to_neutral():
-    # 「其他」类失物无任何标签/外观/特征/地点信息 → 词集为空 → tag_match_rate=0.5（中性，Q6）→ score=40。
+    # 「其他」类失物无任何标签/外观/特征/地点信息 → 词集为空 → tag_match_rate=0.5（中性，Q6）。
+    # 七维下：photo_category=10 + state=3 + time=10 → raw=23；W=10+10=20 → k=2.0 → total=46。
     lost = _item(category_name="其他", lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(category_name="其他", tags=["雨伞"], found_time=datetime(2026, 7, 16, 10, 0, 0))
     assert MatchService.tag_match_rate(lost, found) == 0.5
     s = MatchService().score(lost, found)
-    assert s == 40.0
+    assert s == pytest.approx(46.0, abs=0.01)
     assert MatchService.is_suspected(s) is False
 
 
@@ -362,16 +372,16 @@ def test_other_class_score_detail_fields():
     assert detail["time"] == 10.0
     assert detail["location"] == 0.0  # 两侧均无地点 → place 维 0
     assert round(detail["tag_match_rate"], 4) == 1.0
-    # photo_category=10 + color=20 + time=10 → raw=40；W=10+20+10=40 → k=2.0 → 80
-    assert detail["total"] == pytest.approx(80.0, abs=0.01)
+    # photo_category=10 + color=20 + state=3 + time=10 → raw=43；W=10+20+10=40 → k=2.0 → 86
+    assert detail["total"] == pytest.approx(86.0, abs=0.01)
 
 
 # ---------------- 存量兼容（appearance/features/location 为空时降级不报错） ----------------
 def test_legacy_empty_fields_degrade_without_error():
     # 存量物品仅有旧字段（tags/image_hash/category），三个新字段为空 → 不报错。
-    # v10：同图同类目 → photo_category=20；无颜色/数量/状态/地点信息；
+    # v15.1：同图同类目 → photo_category=20；无颜色/数量/地点信息；state 中性分 3；
     # 「钥匙」是类目词已被 photo_category 吸收，不再重复计入 keyword → keyword=0；
-    # time=10 → raw=30；W=photo_category(20)+time(10)=30 → k=2.0 → total=60。
+    # time=10 → raw=33；W=photo_category(20)+time(10)=30 → k=2.0 → total=66。
     lost = _item(
         image_hash=_SAME_HASH,
         category_name="钥匙",
@@ -389,10 +399,10 @@ def test_legacy_empty_fields_degrade_without_error():
     del found.appearance, found.features, found.location
     s = MatchService().score(lost, found)
     # 本用例的核心意图是「存量对象缺列时**不抛异常**且给出可用分数」，
-    # 具体数值随评分版本演进：v10 下为 60.0（仅同图同类目 + 时间，属性信息为空）。
-    assert s == pytest.approx(60.0, abs=0.01)
+    # 具体数值随评分版本演进：v15.1 下为 66.0（同图同类目 + 时间 + 状态中性分，属性信息为空）。
+    assert s == pytest.approx(66.0, abs=0.01)
     assert 0.0 <= s <= 100.0
-    # v10 下 60 < 80：信息量太少不应被判疑似（避免"只要同图就自动疑似"的误报）。
+    # 66 < 80：信息量太少不应被判疑似（避免"只要同图就自动疑似"的误报）。
     assert MatchService.is_suspected(s) is False
 
 
@@ -445,8 +455,8 @@ def test_location_factor_all_empty_returns_neutral():
 
 
 def test_legacy_other_class_photo_only_path():
-    # v10：「其他」类同图 + 标签全中 → photo_category=10（"其他"不算精确类目命中）
-    # + color=20（蓝 vs 蓝）+ time=10 → raw=40；W=10+20+10=40 → k=2.0 → total=80。
+    # v15.1：「其他」类同图 + 标签全中 → photo_category=10（"其他"不算精确类目命中）
+    # + color=20（蓝 vs 蓝）+ state=3 + time=10 → raw=43；W=10+20+10=40 → k=2.0 → total=86。
     lost = _item(
         image_hash=_SAME_HASH,
         category_name="其他",
@@ -460,5 +470,5 @@ def test_legacy_other_class_photo_only_path():
         found_time=datetime(2026, 7, 16, 10, 0, 0),
     )
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(80.0, abs=0.01)
+    assert s == pytest.approx(86.0, abs=0.01)
     assert 0.0 <= s <= 100.0, "上限封顶，不溢出"

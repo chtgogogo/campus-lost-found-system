@@ -307,6 +307,12 @@ def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
     本用例的 flow-v3 关注点始终是：keep1 拾物即使大量进入**失主侧**匹配池，也只走正常
     切片配额、不产生越权或重复候选。疑似溢出分支由 `test_v10_suspect_all.py::test_b9`
     专项覆盖，此处不重复。
+
+    ⚠️ v15.1 语料订正（依本用例上述「前置条件失效则改语料」的既定约定）：状态缺失中性分
+    （state=3.0）使本场景最高分由 76.92 上浮到 81.54，**越过**疑似阈值 80，触发「疑似追加」
+    分支而返回 53 条。因该上浮属评分口径演进而非回归，此处按约定改语料——给失主描述补一个
+    候选侧不命中的区分性特征词（关键词维 provided 但 0 命中），W_provided 由 65 升到 75，
+    k 由 1.538 降到 1.333，最高分回落到 71.28，重新满足「全部非疑似」前置条件。
     """
     token_finder, _, _, _, _ = register_and_login(client, "f309f")
     token_owner, _, _, _, _ = register_and_login(client, "f309o")
@@ -314,11 +320,11 @@ def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
     for i in range(settings.MATCH_TOP_N + 3):
         _publish_found(client, token_finder, "书包", f"捡到第{i}个黑色书包", keep_status="1")
 
-    lost = _publish_lost(client, token_owner, "书包", "黑色书包", "图书馆丢失黑色书包")
+    lost = _publish_lost(client, token_owner, "书包", "黑色书包", "图书馆丢失黑色书包，带小熊挂件")
     lost_id = lost["item"]["id"]
     matches = lost["suspected_matches"]
 
-    # 前置条件：本场景应全部为非疑似（实测约 76.92 分）。若评分口径上移越过 80，
+    # 前置条件：本场景应全部为非疑似（实测 71.28 分）。若评分口径上移越过 80，
     # 则 v10 语义下追加疑似是**正确行为**，届时应调整本场景语料而非把它当回归。
     top = max((m["match_score"] for m in matches), default=0.0)
     assert top < settings.MATCH_THRESHOLD, (
