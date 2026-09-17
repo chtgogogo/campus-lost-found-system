@@ -133,6 +133,11 @@ def list_my_matches(
     flow-v3 U2=完全隐藏（方案 2）：as_found 分支过滤掉 keep1（留在原地未挪动）拾物的
     全部候选，拾得者侧不再看到任何 keep1 匹配记录（无论状态），单向性由列表层过滤保证。
     """
+    # v15.2：过滤「不是我的」排除项——排除永不参与该用户的任何匹配视图
+    excluded_pairs = {
+        (e.lost_id, e.found_id)
+        for e in db.query(MatchExclusion).filter(MatchExclusion.user_id == user.id).all()
+    }
     as_lost = (
         db.query(MatchRecord)
         .join(LostItem, MatchRecord.lost_id == LostItem.id)
@@ -156,7 +161,8 @@ def list_my_matches(
     for m in matches:
         if m.id not in seen:
             seen.add(m.id)
-            unique.append(m)
+            if (m.lost_id, m.found_id) not in excluded_pairs:
+                unique.append(m)
     # v11（2026-08-27）：CLIP 精排次排序——同分时照片相似度高的排前；
     # clip_sim 为 NULL（未精排/不可用）排在后面（COALESCE -1），行为与激活前一致。
     unique.sort(

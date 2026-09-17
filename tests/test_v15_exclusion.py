@@ -100,6 +100,19 @@ class TestExclusion:
         r = client.get(f"{API}/lost-items/{lost_id}/matches/excluded", headers=h)
         assert len(r.json()["data"]) >= 2
 
+    def test_excluded_hidden_in_my_matches_aggregate(self, client):
+        """防回归：排除项在「我的匹配」聚合接口同样隐藏（v15.2 修复的泄露点）。"""
+        token_a, token_b, lost_id, match_id = publish_pair(client)
+        h = auth_header(token_a)
+        client.post(f"{API}/lost-items/{lost_id}/matches/{match_id}/exclude", headers=h)
+        # 聚合接口：排除项不得出现
+        r = client.get(f"{API}/matches", headers=h)
+        assert r.status_code == 200
+        assert all(m["id"] != match_id for m in r.json()["data"]["items"])
+        # 排除池仍可见（可重返）
+        r = client.get(f"{API}/lost-items/{lost_id}/matches/excluded", headers=h)
+        assert len(r.json()["data"]) == 1
+
     def test_non_owner_cannot_exclude(self, client):
         token_a, token_b, lost_id, match_id = publish_pair(client)
         # 拾主（非失主）尝试排除 → 拒绝
