@@ -96,3 +96,10 @@ pytest_full_output.txt
 pytest_r2.txt
 pytest_fail_round2.txt
 pytest_full_output.txt
+
+# AOCI 本地认知索引（本机 AI 工具产物）
+aoci.txt
+aoci.code.txt
+aoci.meta.txt
+.aoci/
+AGENTS.md
