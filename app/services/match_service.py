@@ -681,8 +681,8 @@ class MatchService:
             signals.append(SIGNAL_TYPE_CONFLICT)
 
         raw_total = sum(dims[d] for d in V2_DIMENSIONS)
-        if brand_conflict:
-            raw_total -= BRAND_CONFLICT_PENALTY
+        brand_pen = BRAND_CONFLICT_PENALTY if brand_conflict else 0.0
+        raw_total -= brand_pen
         penalty = 0.0
         if state_conflict or new_damaged:
             penalty += STATE_CONFLICT_PENALTY
@@ -692,7 +692,16 @@ class MatchService:
             penalty += MUTUAL_EXCLUSIVE_PENALTY
         raw_total -= penalty
         norm_factor = self._normalize_factor(self._provided_weight(provided))
-        total = min(max(raw_total * norm_factor, 0.0), 100.0)
+        # 归一化分子的口径必须与分母一致：只累计失主**已提供**的维度。
+        # 未提供维度返回的 *_MISSING/TIME 中性分是展示用的缺省值，若计入分子，
+        # 会在 k=100/max(W_provided,50) 的放大下制造"类目+颜色=86 分"这类假阳性。
+        # 各类扣罚（品牌冲突/状态冲突/数量超供/互斥属性）必须全额跟随。
+        # MATCH_NORMALIZE=False（回滚开关）时保持旧行为（raw 含缺省分，k=1）。
+        if settings.MATCH_NORMALIZE:
+            normalized_raw = sum(dims[d] for d in V2_DIMENSIONS if provided.get(d)) - brand_pen - penalty
+        else:
+            normalized_raw = raw_total
+        total = min(max(normalized_raw * norm_factor, 0.0), 100.0)
 
         return {
             "dims": dims,

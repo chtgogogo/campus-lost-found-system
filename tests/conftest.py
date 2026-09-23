@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import atexit
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -14,7 +15,12 @@ from datetime import datetime, timedelta
 import pytest
 
 # ---- 必须在导入 app 前设置环境 ----
-_TEST_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "_mvp_qa.db"))
+# 测试库按进程 PID 隔离：此前固定共享 tests/_mvp_qa.db 且 import 时先删后建，
+# 两个 pytest 进程并发会互删对方的库（实测并发 37 failed / 隔离 0 failed）。
+# PID 隔离后并发互不干扰；进程退出时自清理本进程的库文件，不在磁盘留垃圾。
+_TEST_DB = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), f"_mvp_qa_{os.getpid()}.db")
+)
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
 os.environ["REDIS_ENABLED"] = "false"
 os.environ["DEBUG"] = "true"
@@ -208,3 +214,16 @@ def _initial_cleanup() -> None:
 
 
 _initial_cleanup()
+
+
+def _final_cleanup() -> None:
+    # 进程退出时清掉本 PID 的测试库文件（engine.dispose 先释放 Windows 文件句柄）。
+    try:
+        engine.dispose()
+        if os.path.exists(_TEST_DB):
+            os.remove(_TEST_DB)
+    except OSError:
+        pass
+
+
+atexit.register(_final_cleanup)

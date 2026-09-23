@@ -71,10 +71,10 @@ GOLDEN_LOST = dict(
 
 GOLDEN_CASES = [
     # (名称, 候选描述, 候选 tags, 期望 raw_total, 期望 total, 期望 signals)
-    # ⚠️ v15.1：双方均未填状态 → state 计中性分 3.0，故 raw_total 与 total 相比 R2 §2.4 原表整体上移。
-    ("A", "一把银色钥匙，教学楼", ["钥匙", "银色", "教学楼"], 48.0, 60.0, ["color_conflict"]),
-    ("B", "一把黑色钥匙，402", ["钥匙", "黑色"], 72.0, 90.0, []),
-    ("C", "一串钥匙，四楼，黑", ["钥匙", "四楼"], 81.0, 100.0, []),
+    # ⚠️ v15.1：双方均未填状态 → state 计中性分 3.0，raw_total 曾整体上移；2026-09-23 口径修复后中性分不进分子，total 回落（60→56.25 / 90→86.25 / 100→97.5）。
+    ("A", "一把银色钥匙，教学楼", ["钥匙", "银色", "教学楼"], 48.0, 56.25, ["color_conflict"]),
+    ("B", "一把黑色钥匙，402", ["钥匙", "黑色"], 72.0, 86.25, []),
+    ("C", "一串钥匙，四楼，黑", ["钥匙", "四楼"], 81.0, 97.5, []),
 ]
 
 
@@ -155,7 +155,7 @@ def test_a5_golden_ordering_and_suspect_line(matcher):
     assert scores["C"] > scores["B"] > scores["A"]
     assert MatchService.is_suspected(scores["B"]) and MatchService.is_suspected(scores["C"])
     assert not MatchService.is_suspected(scores["A"])
-    assert scores["A"] == pytest.approx(60.0), "A 应为 60.0（v15.1 中性分 +3 后归一化放大 1.25）"
+    assert scores["A"] == pytest.approx(56.25), "A 应为 56.25（2026-09-23 口径修复：中性分不进分子，48−3=45 ×1.25）"
     assert scores["A"] <= settings.MATCH_LOW_SCORE, "A 不得越过 flow-v3 低分弱化区上界 60"
 
 
@@ -165,14 +165,14 @@ def test_a5_golden_ordering_and_suspect_line(matcher):
 def test_a6_norm_min_weight_guard_blocks_pure_photo_false_positive(matcher):
     """AC-A6：只填类目的纯图失物 W_provided=20，护栏把分母抬到 50 → 候选仅 46，不误报。
 
-    46 = (photo_category 20 + state 3) × k 2.0。其中 state 3.0 是 v15.1 中性分
-    （双方都没填状态）；护栏本身仍是同一道，未被绕过——46 远低于疑似线 80。
+    2026-09-23 口径修复后：40 = photo_category 20 × k 2.0（state 中性分不再进分子）。
+    护栏本身仍是同一道，未被绕过——40 远低于疑似线 80。
     """
     lost = FakeItem(category_id=1, category_name="钥匙")   # 无 lost_time、无任何文字
     detail = matcher.score_detail(lost, _found(description="一串黑色钥匙，教学楼四楼402"))
     assert detail["provided_dims"] == ["photo_category"]
     assert detail["norm_factor"] == pytest.approx(100.0 / settings.MATCH_NORM_MIN_WEIGHT)
-    assert detail["total"] == pytest.approx(46.0)
+    assert detail["total"] == pytest.approx(40.0)
     assert not MatchService.is_suspected(detail["total"]), "纯图失物不得因归一化被误判疑似"
 
 

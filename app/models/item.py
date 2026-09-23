@@ -2,7 +2,7 @@
 
 v3 增量变更（增量设计 v3）：
 - 删除 `lost_location` / `found_location`（地点语义并入 `description`，见迁移 0002）。
-- 新增 `tags`（JSON 数组，发布时由 TaggingService 写入）与 `image_hash`（16-hex 感知哈希，发布时由 PerceptualHash 计算）。
+- 新增 `tags`（JSON 数组，发布时由 TaggingService 写入）与 `image_hash`（16-hex 预留列，2026-09-23 起发布链路不再计算/写入）。
 - 保留 `contact_allowed`（拾物，D 需求「联系对方」唯一门控）。
 """
 from __future__ import annotations

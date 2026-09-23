@@ -368,8 +368,8 @@ def test_luggage_text_compat_view_and_normalized_total():
     # 因此本用例真正要守护的「f2 明显优于 f1」仍然成立。
     assert d1["text"] == pytest.approx(21.0, abs=0.01), f"实际 {d1['text']}"
     assert d2["text"] == pytest.approx(38.0, abs=0.01), f"实际 {d2['text']}"
-    assert d1["total"] == pytest.approx(58.57, abs=0.01), f"实际 {d1['total']}"
-    assert d2["total"] == pytest.approx(82.86, abs=0.01), f"实际 {d2['total']}"
+    assert d1["total"] == pytest.approx(54.29, abs=0.01), f"实际 {d1['total']}"
+    assert d2["total"] == pytest.approx(78.57, abs=0.01), f"实际 {d2['total']}"
     assert d2["total"] > d1["total"], "数量+颜色全中的候选必须排在只命中地点的候选之前"
     # 可解释：shared_text 含命中词
     assert sorted(svc.shared_text_tokens(lost, f2)) == ["两个", "粉色", "行李箱", "黄色"]
@@ -417,9 +417,9 @@ def test_text_empty_lost_tokens_neutral_and_other_no_words():
     lost_other = _item(category_name="其他")
     found_other = _item(category_name="其他", tags=["雨伞"])
     assert svc.tag_match_rate(lost_other, found_other) == 0.5, "「其他」失物空词集应中性 0.5"
-    # v10：「其他」类无词 → photo_category=10；v15.1 再加 state 中性分 3.0；
-    # W=10 → k=100/max(10,50)=2.0 → (10+3)×2.0 = 26
-    assert svc.score(lost_other, found_other) == pytest.approx(26.0, abs=0.01)
+    # 「其他」类无词 → photo_category=10；W=10 → k=2.0。
+    # 2026-09-23 口径修复：state 中性分 3.0 只留展示，不再进归一化分子 → 10×2.0 = 20
+    assert svc.score(lost_other, found_other) == pytest.approx(20.0, abs=0.01)
 
 
 def test_score_detail_five_dimensions_and_deprecated_zeros():

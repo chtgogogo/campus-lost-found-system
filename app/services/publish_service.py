@@ -2,7 +2,7 @@
 
 - 上传图片 → 本地存储返回 URL。
 - 类目解析（v4）：优先按 `category_name` / 提取名词命中种子类目；否则调用视觉降级。
-- **v4 挂载**：发布时由 `TaggingService` 抽取结构化标签（名词优先）、由 `PerceptualHash` 计算首图感知哈希。
+- **v4 挂载**：发布时由 `TaggingService` 抽取结构化标签（名词优先）、
 - 写入 lost_item / found_item（地点语义已并入 description，不再存独立 location 列）。
 - 反向主动匹配（v4 名词召回）：召回「同类目 ∪ 共享物品名词 tag」的候选，按新公式打分后
   以 (-score, id) 降序，**无论分数**均生成 status=0 候选（Q1/P0-1 拍板）。
@@ -48,7 +48,6 @@ from app.schemas.item import FoundItemPublishDTO, LostItemPublishDTO
 from app.services import audit_service
 from app.services.category_service import same_family
 from app.services.match_service import MatchService
-from app.services.perceptual_hash import PerceptualHash
 from app.services.tagging_service import NOUN_SET, TaggingService
 from app.services.vision_service import get_vision_service
 from app.utils import storage as storage_util
@@ -214,8 +213,6 @@ class PublishService:
             if (resolved_cat is not None and resolved_cat.name == settings.OTHER_CATEGORY_NAME)
             else dto.category_name.strip()
         )
-        image_hash = PerceptualHash.compute(first_bytes) or None
-
         lost = LostItem(
             publisher_id=publisher.id,
             category_id=category_id,
@@ -225,7 +222,6 @@ class PublishService:
             images=image_urls,
             color=dto.color,
             tags=tags,
-            image_hash=image_hash,
             appearance=dto.appearance,
             features=dto.features,
             location=dto.location,
@@ -302,8 +298,6 @@ class PublishService:
             if (resolved_cat is not None and resolved_cat.name == settings.OTHER_CATEGORY_NAME)
             else dto.category_name.strip()
         )
-        image_hash = PerceptualHash.compute(first_bytes) or None
-
         # 暂为保管（keep_status=0）强制 contact_allowed=1（后端二次兜底，不信任前端）
         contact_allowed = 1 if dto.keep_status == 0 else dto.contact_allowed
 
@@ -314,7 +308,6 @@ class PublishService:
             description=dto.description,
             images=image_urls,
             tags=tags,
-            image_hash=image_hash,
             appearance=dto.appearance,
             features=dto.features,
             location=dto.location,

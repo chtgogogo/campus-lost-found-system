@@ -419,7 +419,8 @@ def test_f3_12_score_detail_five_dimensions_on_keep1_candidate(client):
     断言 photo/category/text/location/time 五维均非 None，total 与 match_score 一致。
 
     ⚠️ v10 评分 v2 重标定（R2 §7.1）：**不能再断言 `total == 五维之和**，原因有二——
-      1. 子维度键回传的是**归一化前的原始分**，只有 `total` 是 `raw_total × norm_factor`；
+      1. 子维度键回传的是**归一化前的原始分**，`total` 是（已提供维度分子）× norm_factor
+         （2026-09-23 口径修复：分子不含未提供维度的缺省中性分，故 ≤ raw_total × norm_factor）；
       2. 旧键 `location` = 新键 `place`，而 `place` 已被计入旧键 `text`（text = qty +
          color + state + place + keyword），直接相加会把地点分**重复计一次**。
     v2 下的恒等式是 `raw_total == photo + text + time`（category 为 deprecated 占位恒 0），
@@ -446,11 +447,13 @@ def test_f3_12_score_detail_five_dimensions_on_keep1_candidate(client):
         f"raw_total 应等于 photo+text+time，实际 raw_total={out['raw_total']} "
         f"photo={out['photo']} text={out['text']} time={out['time']}"
     )
-    # 归一化关系：total == clamp(raw_total × norm_factor, 0, 100)
-    expected_total = min(100.0, max(0.0, out["raw_total"] * out["norm_factor"]))
-    assert abs(out["total"] - expected_total) < 0.05, (
-        f"total 应等于 raw_total×norm_factor 并截断到 [0,100]，"
-        f"实际 total={out['total']} 期望={expected_total}"
+    # 归一化关系（2026-09-23 口径修复后）：total == clamp(已提供维度分子 × norm_factor, 0, 100)，
+    # 分子只计失主已提供维度（raw_total 展示口径仍含缺省中性分），
+    # 故恒等式弱化为上界关系：total ≤ clamp(raw_total × norm_factor, 0, 100)。
+    raw_ceiling = min(100.0, max(0.0, out["raw_total"] * out["norm_factor"]))
+    assert out["total"] <= raw_ceiling + 0.05, (
+        f"total 不应超过 raw_total×norm_factor 上界，"
+        f"实际 total={out['total']} 上界={raw_ceiling}"
     )
     # location 是 place 的旧键别名，且已被计入 text
     assert out["location"] <= out["text"] + 1e-6, "location(=place) 应已含在 text 内"

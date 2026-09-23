@@ -178,10 +178,15 @@ class HandoverService:
 
         # 卡#4（安检 L1-9）：查当前轮次最新行（不过滤 status），
         # 以便在入口区分「无码」「已锁定」两种情形（验证入口先查行是否已失效）。
+        # with_for_update 行锁把「读-判-写」变成临界区：无锁时双方并发 verify 会各自
+        # 读到「对方未验证」的旧状态、各自置位、both 双 False、status 停在 VALID，
+        # 此后双方永远命中「你已验证，请等待对方确认」——交接永久卡死。
+        # （SQLite 测试库下该锁为 no-op；MySQL 生产为 SELECT ... FOR UPDATE 行级互斥。）
         hc = (
             self.db.query(HandoverCode)
             .filter(HandoverCode.match_id == match_id)
             .order_by(HandoverCode.seq.desc())
+            .with_for_update()
             .first()
         )
         if not hc:

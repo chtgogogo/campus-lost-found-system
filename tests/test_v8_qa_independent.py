@@ -66,7 +66,7 @@ def test_case_a_v8_tightened_no_attributes():
         found_time=_ANCHOR,
     )
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(66.0, abs=0.01), f"同类同图无属性应得 66，实际 {s}"
+    assert s == pytest.approx(60.0, abs=0.01), f"同类同图无属性应得 60（口径修复后），实际 {s}"
     assert MatchService.is_suspected(s) is False, "收紧后应 < 80 阈值，不判疑似"
     # 维度明细：仅 photo_category / state / time 有贡献，其余恒 0
     detail = MatchService().score_detail(lost, found)
@@ -88,12 +88,12 @@ def test_case_a_v8_below_v4_ceiling():
     """独立断言：「同图+同类+无其余属性」的得分 < v4 封顶值 80。
 
     即便无法在本环境重跑 v4 公式，本断言以 v4 封顶 80 为对照上限，
-    证明评分收紧后把该类目得分从 v4 的疑似区（80）压到了非疑似区（66）。
+    证明评分收紧后把该类目得分从 v4 的疑似区（80）压到了非疑似区（口径修复后 60）。
     """
     lost = _item(image_hash=_SAME_HASH, category_name="钥匙", lost_time=_ANCHOR)
     found = _item(image_hash=_SAME_HASH, category_name="钥匙", found_time=_ANCHOR)
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(66.0, abs=0.01)
+    assert s == pytest.approx(60.0, abs=0.01)
     assert s < 80.0, "收紧：该情形得分应低于 v4 封顶的 80"
 
 
@@ -136,7 +136,7 @@ def test_case_b_color_softened_material_still_counts():
     assert app_diff == pytest.approx(2 / 3, abs=1e-6), f"应为 2/3，实际 {app_diff}"
     # 2) 整体得分不为 0
     assert score_diff > 0.0, f"软化后整条不应为 0，实际 {score_diff}"
-    assert score_diff == pytest.approx(71.67, abs=0.01), f"应为 71.67，实际 {score_diff}"
+    assert score_diff == pytest.approx(66.67, abs=0.01), f"应为 66.67（口径修复后），实际 {score_diff}"
     # 软化口径：color 归零但 keyword（材质/形状）仍在，且记 color_conflict 信号
     detail_diff = MatchService().score_detail(lost_diff, found_diff)
     assert detail_diff["color"] == 0.0, "颜色冲突 → color 维度归零"
@@ -193,6 +193,6 @@ def test_case_c_other_class_pure_tag_reaches_threshold():
     assert tmc == 1.0, f"tag_match_rate 应 1.0，实际 {tmc}"
 
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(90.67, abs=0.01), f"「其他」类纯标签全中应得 90.67，实际 {s}"
+    assert s == pytest.approx(86.67, abs=0.01), f"「其他」类纯标签全中应得 86.67（口径修复后），实际 {s}"
     assert s >= 80.0, "应达到疑似阈值"
     assert MatchService.is_suspected(s) is True, "应判为疑似匹配"
