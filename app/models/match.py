@@ -142,6 +142,10 @@ class HandoverCode(Base):
 
     # ---- 行级状态 ----
     status: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)  # 0 有效/1 已验证/2 已过期
+    # ---- 卡#4 安检 L1-9：验证码错误尝试计数 ----
+    # 比对失败 +1，达 5 次（HANDOVER_MAX_ATTEMPTS）该行 status 置 2（EXPIRED，复用现有状态）锁定；
+    # 重新 generate 产生新 seq 行（attempts 归零），天然解锁。迁移：0009_handover_attempts。
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # ---- GPS（验证时记录） ----
     gps_lost: Mapped[str | None] = mapped_column(String(50), nullable=True)   # 失主验证时（输入拾得者码）的GPS

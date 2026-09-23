@@ -69,8 +69,6 @@ class Settings(BaseSettings):
     YOLO_CONF_THRESHOLD: float = 0.12  # 降低门槛以提升弱类（钥匙/钱包/水杯）召回，代价是偶发误识别
 
     # ---------------- 交接码 ----------------
-    # [deprecated] 旧单码模型 TTL（30 分钟），保留定义避免外部引用断裂；新代码改用 HANDOVER_TTL_SEC
-    HANDOVER_TTL_MIN: int = 30
     HANDOVER_TTL_SEC: int = 10                 # 双码交叉验证模型 TTL（10 秒）
 
     # ---------------- 短信 ----------------
@@ -96,23 +94,11 @@ class Settings(BaseSettings):
     # 默认按上传能力上限取整：IMG_MAX_COUNT(9) × IMG_MAX_SIZE_MB(10) = 90MB + multipart 开销。
     REQUEST_BODY_MAX_MB: int = 100
 
-    # ---------------- 匹配打分（2026-08-05 flow-v2 新公式，Q5 拍板） ----------------
-    # 普通类五维公式（合计 100，阈值沿用 80）：
-    #   score = 15·photo + 20·category + 50·text + 10·location + 5·time
-    # text 为动态文字词覆盖率（失物侧词集 containment，description 首次进打分，见 match_service.text_match_rate）。
-    # 「其他」类（category_name == OTHER_CATEGORY_NAME）特殊路径：
-    #   score = 20·photo + 80·tag_match_rate   （类目权重外移，tag_match_rate 与 text_match_rate 同口径）
-    # 空值规则（Q6）：location / time 任一缺失 → 中性 0.5；text 失物侧空词集 → 0.5；photo 无图 → 0.0。
-    # ⚠️ v10 起以下五个 MATCH_W_* 全部 [deprecated]：评分主路径改用下方 v2 七子维度权重
-    #    （MATCH_W2_*）。保留定义仅为不破坏外部引用与存量测试，score/score_detail 不再调用。
-    MATCH_W_PHOTO: float = 15.0   # [deprecated] 照片相似度（感知哈希 Hamming → 相似度）
-    MATCH_W_CAT: float = 20.0     # [deprecated] 类目命中（精确 1.0 / 父级 0.5）
-    MATCH_W_TEXT: float = 50.0    # [deprecated] 文字动态词覆盖率（失物侧词集 containment）
-    MATCH_W_LOC: float = 10.0     # [deprecated] 地点相似度（包含 + 编辑距离阈值双判）
-    MATCH_W_TIME: float = 5.0     # [deprecated] 时间衰减（任一缺失 → 0.5）
-    MATCH_W_APP: float = 20.0     # [deprecated] 外观权重：flow-v2 起并入 text 词集，不再被 score 调用
-    MATCH_W_FEAT: float = 15.0    # [deprecated] 特征权重：flow-v2 起并入 text 词集，不再被 score 调用
-    MATCH_W_OTHER: float = 80.0   # [deprecated] 「其他」类特殊路径权重；v10 Q7 起「其他」统一走 v2 公式
+    # ---------------- 匹配打分 · 阈值与展示口径 ----------------
+    # 现行评分公式为下方「v10 评分引擎 v2 七子维度权重」（raw_total 合计 100 + Q10 归一化）；
+    # 历史遗留的 flow-v2 五维权重（MATCH_W_PHOTO/CAT/TEXT/LOC/TIME/APP/FEAT/OTHER）、
+    # v4 MATCH_W_TAG、v2 MATCH_W1..W4 已于卡#6（2026-09-23）整体下线：业务代码零引用，
+    # 仅存 tests/test_match.py 的存续断言随字段一并删除。git 历史可查旧值。
     MATCH_THRESHOLD: float = 80.0   # 疑似匹配阈值：判定对象为**归一化后**的 total（v10 维持 80 不变）
     # flow-v3：低分「视觉」阈值。仅供前端（失主侧）弱化展示对齐口径 —— 弱化标签、虚线卡片、
     # 低分二次确认文案；与 suspected 判定（MATCH_THRESHOLD=80）完全解耦。
@@ -121,7 +107,7 @@ class Settings(BaseSettings):
     # v10（变更 B）语义变更：**普通候选保底条数**，不再是硬上限。
     # ≥ MATCH_THRESHOLD 的疑似候选不受此限，可追加到 MATCH_SUSPECT_MAX 条（Q13：变量名不改）。
     MATCH_TOP_N: int = 50   # v15：候选展示扩容（配合「不是我的」排除池，前50条供用户扫选）
-    TIME_DECAY_TAU_DAYS: float = 3.0    # [deprecated for v2] flow-v2 时间衰减 τ（天）；v2 改用 MATCH_TIME_TAU_DAYS
+    TIME_DECAY_TAU_DAYS: float = 3.0    # legacy 兼容：仅 match_service.time_decay_factor（存量测试引用）使用；v2 评分用 MATCH_TIME_TAU_DAYS
     # 「其他」类枚举名（运行时按名称解析，避免硬编码 id 耦合；seed 中以同名行存在）
     OTHER_CATEGORY_NAME: str = "其他"
 
@@ -155,14 +141,8 @@ class Settings(BaseSettings):
     # 管理员留存窗（天）：物品 expires_at + 本值之后才进入 CleanupService 物理清理范围。
     ADMIN_RETENTION_DAYS: int = 270
 
-    # v4 旧标签命中率权重（保留并标 deprecated：不再被 score 调用，避免外部引用断裂）
-    MATCH_W_TAG: float = 40.0     # [deprecated] v4 containment 权重，v8 已拆分为 appearance/feature/location
-
-    # v2 旧权重（Q3 拍板：保留并标 deprecated，避免外部引用断裂；新代码改用上方 W_PHOTO/W_CAT/W_TEXT/W_LOC/W_TIME）
-    MATCH_W1: float = 40.0    # [deprecated] 原类目命中权重
-    MATCH_W2: float = 25.0    # [deprecated] 原时间衰减权重
-    MATCH_W3: float = 20.0    # [deprecated] 原地点文本相似度权重（v3 已移除地点因子）
-    MATCH_W4: float = 15.0    # [deprecated] 原关键词 Jaccard 权重（v3 由 W_TAG 标签 Jaccard 取代）
+    # v4/v2 旧权重（MATCH_W_TAG、MATCH_W1..W4）已于卡#6（2026-09-23）下线：
+    # 业务代码零引用，仅 tests/test_match.py 的存续断言随字段一并删除；git 历史可查旧值。
 
     # ---------------- 图片 / 存储 ----------------
     IMG_MAX_COUNT: int = 9

@@ -29,8 +29,9 @@
 ## 相对 flow-v2 的行为变更
 
 - 五维标量公式（15·photo + 20·category + 50·text + 10·location + 5·time）**下线**；
-  `photo_sim_factor*` / `location_factor` / `text_match_rate` 等保留为 deprecated 工具方法，
-  不再参与总分（感知哈希 / CLIP 降级为 P2 同分 tie-breaker，见需求池）。
+  `location_factor` / `text_match_rate` 等保留为兼容工具方法，不再参与总分
+  （感知哈希打分因子已随卡#6 删除；CLIP 不进打分路径，仅由 clip_reorder 后台精排
+  写 ``clip_sim`` 作列表同分 tie-break，见需求池）。
 - 「其他」类特殊路径（20·photo + 80·tag_match_rate）**取消**（Q7）：统一走 v2 公式，
   双方均为「其他」时 ``photo_category=10``（中性，类目无判别力）。
 - ``score_detail`` 新增 10 个键（7 子维度 + signals + raw_total/norm_factor/provided_dims），
@@ -54,13 +55,11 @@ from typing import Optional
 from app.core.config import settings
 from app.services.brand_dict import expand_brand_tokens, extract_brand
 from app.services.category_service import same_family
-from app.services.clip_service import image_similarity as clip_image_similarity
 from app.services.color_family import (
     SIGNAL_COLOR_CONFLICT,
     color_score,
     extract_color_words,
 )
-from app.services.perceptual_hash import PerceptualHash
 from app.services.scoring_refs import (
     BRAND_CONFLICT_PENALTY,
     MUTUAL_EXCLUSIVE_PENALTY,
@@ -859,31 +858,9 @@ class MatchService:
         dt = delta_days(lost_time, found_time)
         return time_decay(dt, settings.TIME_DECAY_TAU_DAYS)
 
-    @staticmethod
-    def photo_sim_factor(image_hash_a: str | None, image_hash_b: str | None) -> float:
-        """照片相似度因子（v3）：感知哈希 Hamming 相似度 ∈ [0,1]；任一缺失降级 0.0。"""
-        return PerceptualHash.hamming_sim(image_hash_a, image_hash_b)
-
-    @staticmethod
-    def photo_sim_factor_with_bytes(
-        image_hash_a: str | None,
-        image_hash_b: str | None,
-        bytes_a: bytes | None = None,
-        bytes_b: bytes | None = None,
-    ) -> float:
-        """照片相似度因子（P0-③）：感知哈希 + CLIP 跨模态混合。
-
-        - 基础值 phash_sim = 感知哈希 Hamming 相似度。
-        - 若双方均提供图片字节且 CLIP 返回非 None：
-              photo = clamp(0.5·phash_sim + 0.5·clip_sim, 0, 1)
-          否则（CLIP 缺失 / 字节缺失 / 异常）沿用 phash_sim，保持确定性。
-        """
-        phash_sim = PerceptualHash.hamming_sim(image_hash_a, image_hash_b)
-        clip_sim = clip_image_similarity(bytes_a, bytes_b) if (bytes_a and bytes_b) else None
-        if clip_sim is not None:
-            blended = 0.5 * phash_sim + 0.5 * clip_sim
-            return max(0.0, min(1.0, blended))
-        return phash_sim
+    # 卡#6（2026-09-23）：photo_sim_factor / photo_sim_factor_with_bytes 整函数下线——
+    # v10 起打分走 photo_category 维，两函数全仓零引用；感知哈希工具保留在
+    # app/services/perceptual_hash.py，CLIP 精排见 clip_reorder.py，git 历史可查原实现。
 
     # ---- v8 新增原子因子（P0-② 已升级为语义命中） ----
 
@@ -983,12 +960,9 @@ class MatchService:
         """
         return MatchService.semantic_tag_match_rate(lost, found)
 
-    # ---------------- deprecated 兼容方法（不被 score 调用，仅保留以保持引用兼容） ----------------
-    @staticmethod
-    def tag_jaccard_factor(tags_a, tags_b) -> float:
-        """标签 Jaccard 因子（v3 deprecated）：仅保留兼容，不被 score 调用。"""
-        return text_util.tag_jaccard(tags_a, tags_b)
-
+    # ---------------- 兼容方法（不被 score 调用，仅保留以保持引用兼容） ----------------
+    # 卡#6（2026-09-23）：tag_jaccard_factor 全仓零引用，整函数下线；其余方法均有
+    # 存量测试行为断言引用（tests/test_match.py 等），保留不动。
     @staticmethod
     def tag_containment_factor(lost_tags, found_tags) -> float:
         """标签 containment 因子（v4）：失物查询命中率。

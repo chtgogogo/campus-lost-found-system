@@ -5,7 +5,8 @@
 - `POST /matches/{id}/self-complete`：失主单边归档（不调 handover）；双端置已解决。
 - `POST /found-items`：keep_status=0 且 contact_allowed=0 → 拒绝（v4 强制联系）。
 - `POST /im/sessions`：found_id 无 match 建会话（match_id=null, found_id 绑定）；
-  contact_allowed==0 → 403（强溯源 + 门控）。
+  contact_allowed==0 → 403（强溯源 + 门控）；
+  卡#5 串线修复：第二联系者得独立会话、双方互不可见、A 旧会话复用回归。
 """
 from __future__ import annotations
 
@@ -186,3 +187,48 @@ def test_v4_no_match_contact_found_id_gated(client):
 
     r = client.post(f"{API}/im/sessions", headers=auth_header(token_owner), json={"found_id": found_id})
     assert r.status_code == 403, r.text
+
+
+def test_v4_contact_second_user_gets_independent_session(client):
+    """卡#5 串线修复：第二个联系者不再拿到他人的活跃会话。
+
+    用户 A、B 先后联系同一件拾物 → 各自获得独立会话（同一拾物允许多条一对一
+    私聊线）；双方各自发消息 200；B 不可读 A 的会话（403）；A 旧会话复用回归
+    （A 再次发起仍返回自己的原会话）。
+    """
+    token_a, _, _, _, user_a = register_and_login(client, "ca")
+    token_b, _, _, _, user_b = register_and_login(client, "cb")
+    token_finder, _, _, _, finder_id = register_and_login(client, "cf")
+
+    found_id = _publish_found(client, token_finder, "钥匙", "捡到钥匙", keep_status="1", contact_allowed="1")
+
+    # A 先联系 → 会话 S1（A 为失主侧）
+    r = client.post(f"{API}/im/sessions", headers=auth_header(token_a), json={"found_id": found_id})
+    assert r.status_code == 200, r.text
+    s1 = r.json()["data"]
+    assert s1["lost_user_id"] == user_a and s1["finder_user_id"] == finder_id
+
+    # B 后联系 → 必须得到自己的新会话（修复前：复用 A 的 S1 → B 后续 403 死会话）
+    r = client.post(f"{API}/im/sessions", headers=auth_header(token_b), json={"found_id": found_id})
+    assert r.status_code == 200, r.text
+    s2 = r.json()["data"]
+    assert s2["id"] != s1["id"], "B 不应复用 A 的会话"
+    assert s2["found_id"] == found_id
+    assert s2["lost_user_id"] == user_b and s2["finder_user_id"] == finder_id
+
+    # 双方各自在自己的会话里发消息，均 200
+    r = client.post(f"{API}/im/sessions/{s1['id']}/messages", headers=auth_header(token_a), json={"content": "同学你好，那是我丢的钥匙"})
+    assert r.status_code == 200, r.text
+    r = client.post(f"{API}/im/sessions/{s2['id']}/messages", headers=auth_header(token_b), json={"content": "拾物者您好，我也想认领"})
+    assert r.status_code == 200, r.text
+
+    # 互不可见：B 读 A 的会话 → 403；A 读 B 的会话 → 403
+    r = client.get(f"{API}/im/sessions/{s1['id']}/messages", headers=auth_header(token_b))
+    assert r.status_code == 403, r.text
+    r = client.get(f"{API}/im/sessions/{s2['id']}/messages", headers=auth_header(token_a))
+    assert r.status_code == 403, r.text
+
+    # A 旧会话复用回归：A 再次发起 → 仍返回自己的原会话 S1
+    r = client.post(f"{API}/im/sessions", headers=auth_header(token_a), json={"found_id": found_id})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["id"] == s1["id"]

@@ -1,6 +1,8 @@
 """物品路由（§3.3）：失物 / 拾物发布、列表、详情、撤销、我的发布。"""
 from __future__ import annotations
 
+import asyncio
+
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -110,8 +112,14 @@ async def create_lost_item(
         location=location,
         images=img_data,
     )
-    lost, matches = PublishService(db).publish_lost(
-        user, dto, ip=_client_ip(request), ua=request.headers.get("user-agent")
+    # 卡7（安检 P3）：publish_lost 内含 YOLO 推理 + 感知哈希等秒级同步重活，
+    # 移出事件循环（线程池执行）；Session 跨线程仅顺序使用（check_same_thread=False）。
+    lost, matches = await asyncio.to_thread(
+        PublishService(db).publish_lost,
+        user,
+        dto,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent"),
     )
     if matches:
         background_tasks.add_task(
@@ -173,8 +181,14 @@ async def create_found_item(
         features=features,
         location=location,
     )
-    found, matches = PublishService(db).publish_found(
-        user, dto, ip=_client_ip(request), ua=request.headers.get("user-agent")
+    # 卡7（安检 P3）：publish_found 内含 YOLO 推理 + 感知哈希等秒级同步重活，
+    # 移出事件循环（线程池执行）；Session 跨线程仅顺序使用（check_same_thread=False）。
+    found, matches = await asyncio.to_thread(
+        PublishService(db).publish_found,
+        user,
+        dto,
+        ip=_client_ip(request),
+        ua=request.headers.get("user-agent"),
     )
     if matches:
         background_tasks.add_task(

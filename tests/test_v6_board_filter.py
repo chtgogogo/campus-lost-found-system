@@ -311,9 +311,11 @@ def test_v6_migration_head_is_0004():
     # flow-v2 增量在 0005 之上追加 0006_flow_v2（flow_type + lost_time nullable）。
     assert "0006_flow_v2" in revs, "flow-v2 应存在 0006_flow_v2 迁移"
     # 双码交接码重构在 0006 之上追加 0007_dual_handover_code；
-    # v11（2026-08-27）在 0007 之上追加 0008_clip_reorder_and_correction，head 现为 0008。
+    # v11（2026-08-27）在 0007 之上追加 0008_clip_reorder_and_correction。
     assert "0007_dual_handover_code" in revs, "应存在 0007_dual_handover_code 迁移"
     assert "0008_clip_reorder_and_correction" in revs, "应存在 0008_clip_reorder_and_correction 迁移"
-    assert heads == ["0008_clip_reorder_and_correction"], (
-        f"迁移 head 应为 0008_clip_reorder_and_correction，实际 {heads}"
+    # 卡#4 安检 L1-9（2026-09-23）在 0008 之上追加 0009_handover_attempts，head 现为 0009。
+    assert "0009_handover_attempts" in revs, "应存在 0009_handover_attempts 迁移"
+    assert heads == ["0009_handover_attempts"], (
+        f"迁移 head 应为 0009_handover_attempts，实际 {heads}"
     )

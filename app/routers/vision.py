@@ -5,6 +5,8 @@ POST /api/v1/vision/predict：读取首图字节 → `get_vision_service().predi
 """
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -32,7 +34,9 @@ async def predict(
     if not data:
         raise HTTPException(status_code=400, detail="图片内容为空")
     validate_images([(image.filename or "img.jpg", data)])
-    result = get_vision_service().predict(data)
+    # 卡7（安检 P3）：YOLO 推理为秒级同步重活，移出事件循环（线程池执行），
+    # 避免阻塞整个 asyncio loop（期间登录等所有请求排队）。
+    result = await asyncio.to_thread(get_vision_service().predict, data)
     # 活跃分类列表（供前端手动改类下拉）
     cats = (
         db.query(Category.id, Category.name)

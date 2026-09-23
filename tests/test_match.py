@@ -49,21 +49,9 @@ _SAME_HASH = "abcdef0123456789"
 _NO_HASH = None
 
 
-def test_weights_and_threshold_config():
-    assert settings.MATCH_W1 == 40.0  # [deprecated] 保留兼容
-    assert settings.MATCH_W2 == 25.0  # [deprecated]
-    assert settings.MATCH_W3 == 20.0  # [deprecated]
-    assert settings.MATCH_W4 == 15.0  # [deprecated]
-    # flow-v2 五维权重合计 100；阈值沿用 80
-    assert settings.MATCH_W_PHOTO == 15.0
-    assert settings.MATCH_W_CAT == 20.0
-    assert settings.MATCH_W_TEXT == 50.0
-    assert settings.MATCH_W_LOC == 10.0
-    assert settings.MATCH_W_TIME == 5.0
-    # [deprecated] 旧六维权重保留值但不再被 score 调用
-    assert settings.MATCH_W_APP == 20.0
-    assert settings.MATCH_W_FEAT == 15.0
-    assert settings.MATCH_W_OTHER == 80.0
+def test_threshold_config():
+    # 卡#6（2026-09-23）：历史权重（MATCH_W1..W4 / MATCH_W_TAG / flow-v2 MATCH_W_*）已随
+    # config 下线，本用例只守护仍生效的阈值与展示口径常量。
     assert settings.MATCH_THRESHOLD == 80.0
     # flow-v3：低分「视觉」阈值 60 —— 仅供前端失主侧弱化展示，与 suspected(80) 完全解耦；
     # 后端业务代码不得引用（不参与召回/打分/落库），此处断言仅守护前后端常量单一事实源不漂移。

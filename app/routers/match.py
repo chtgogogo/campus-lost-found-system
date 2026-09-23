@@ -468,10 +468,17 @@ def handover_verify(
     if int(user.id) not in (int(lost.publisher_id), int(found.finder_id)):
         raise PermissionError("仅失主或拾得者可验证交接码")
 
+    # 卡#4（安检 L1-9）：role 由服务端按登录身份推导——角色是身份的属性，不是请求的可声明字段。
+    # body.role 仅作对账：失主自报 role="finder" 输入自己屏幕上的码即可冒充拾得者
+    # 单方刷满双方 verified（原攻击路径），现一律 422 拒绝；传给 service 的一律是真实角色。
+    real_role = "lost" if int(user.id) == int(lost.publisher_id) else "finder"
+    if body.role != real_role:
+        raise ParamError("角色与身份不符")
+
     result = HandoverService(db).verify(
         match_id=match_id,
         code=body.code,
-        role=body.role,
+        role=real_role,
         gps=body.gps,
         operator_id=user.id,
     )

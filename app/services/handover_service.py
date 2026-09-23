@@ -11,6 +11,7 @@ DB 表 handover_code 为权威存储（Redis 默认关闭，仅做活性加速�
 """
 from __future__ import annotations
 
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -36,6 +37,11 @@ from app.services import audit_service
 def _gen_code() -> str:
     """生成4位随机数字码（0000-9999）。"""
     return f"{secrets.randbelow(10000):04d}"
+
+
+# 卡#4（安检 L1-9）：单行交接码允许的最大错误尝试次数。
+# 4 位码共 1 万组合，无限尝试可穷举；错满即整行失效锁定，重新 generate 新 seq 行天然解锁。
+HANDOVER_MAX_ATTEMPTS = 5
 
 
 def _now() -> datetime:
@@ -161,23 +167,29 @@ class HandoverService:
         role="lost"  → 失主在验证，输入的是 finder_code（确认物品已收到）
         role="finder" → 拾得者在验证，输入的是 lost_code（证明是授权领取人）
 
+        卡#4（安检 L1-9）语义变更：路由层已按登录身份推导真实角色后传入，
+        本参数必然是真实角色（自报 role 在路由层对账，不一致 422）；签名保持不变。
+
         Returns:
             {both_verified, lost_code_verified, finder_code_verified}
         """
         if role not in ("lost", "finder"):
             raise ParamError("role 必须为 lost 或 finder")
 
-        # 通过 match_id + status=VALID 查找当前有效行
+        # 卡#4（安检 L1-9）：查当前轮次最新行（不过滤 status），
+        # 以便在入口区分「无码」「已锁定」两种情形（验证入口先查行是否已失效）。
         hc = (
             self.db.query(HandoverCode)
-            .filter(
-                HandoverCode.match_id == match_id,
-                HandoverCode.status == int(HandoverStatus.VALID),
-            )
+            .filter(HandoverCode.match_id == match_id)
             .order_by(HandoverCode.seq.desc())
             .first()
         )
         if not hc:
+            raise HandoverInvalidError()
+        if int(hc.status) != int(HandoverStatus.VALID):
+            # EXPIRED=错满锁定（或既往过期）；VERIFIED=已完成——均不再泄露码比对信号
+            if int(hc.status) == int(HandoverStatus.EXPIRED):
+                raise HandoverInvalidError("验证码错误次数过多已锁定，请双方重新生成交接码")
             raise HandoverInvalidError()
 
         now = _now()
@@ -199,13 +211,24 @@ class HandoverService:
         if target_code is None:
             raise HandoverInvalidError("对方尚未生成交接码")
 
-        # 检查码是否正确
-        if target_code != code:
-            raise HandoverInvalidError()
-
-        # 检查是否过期
+        # 卡#4（安检 L1-9）：先查过期、再比对码——错误信息不区分「码对但过期」，
+        # 避免向试探者泄露「码正确」信号。
         if target_expire and target_expire < now:
             raise HandoverExpiredError()
+
+        # 卡#4（安检 L1-9）：恒时比较（与邀请码 compare_digest 同标准，消除时序侧信道），
+        # 错码累计 attempts；错满 HANDOVER_MAX_ATTEMPTS 整行置 EXPIRED 锁定，
+        # 重新 generate 产生新 seq 行（attempts 归零）天然解锁。
+        if not hmac.compare_digest(
+            target_code.encode("utf-8"), str(code).encode("utf-8")
+        ):
+            hc.attempts = int(hc.attempts or 0) + 1
+            if hc.attempts >= HANDOVER_MAX_ATTEMPTS:
+                hc.status = int(HandoverStatus.EXPIRED)
+            self.db.commit()  # 计数/锁定立即落库，防跨请求穷举
+            if int(hc.status) == int(HandoverStatus.EXPIRED):
+                raise HandoverInvalidError("验证码错误次数过多已锁定，请双方重新生成交接码")
+            raise HandoverInvalidError()
 
         # 标记验证通过
         if role == "lost":

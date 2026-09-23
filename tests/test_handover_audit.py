@@ -241,3 +241,151 @@ def test_handover_service_conflict(db):
 def test_handover_service_invalid_code(db):
     with pytest.raises(HandoverInvalidError):
         HandoverService(db).verify(match_id=99999, code="9999", role="lost")
+
+
+# ---------------- 卡#4 安检 L1-9：role 服务端推导 + 错 5 次锁定 ----------------
+def test_handover_verify_role_spoof_rejected_422(client, db):
+    """攻击路径：失主自报 role="finder" 并输入自己屏幕上的 lost_code → 422 拒绝。
+
+    role 由服务端按登录身份推导，body.role 仅对账；伪造角色不得单方刷满
+    双方 verified，也不得把匹配打成已完成；对账失败不计入锁定尝试次数。
+    """
+    token_a, token_b, lost_id, match_id = publish_pair(client)
+
+    # 进入认领中：失主认领 + 拾得者确认归还
+    r = client.post(
+        f"{API}/matches/{match_id}/claim",
+        headers=auth_header(token_a),
+        json={"claim_reason": "特征吻合"},
+    )
+    assert r.status_code == 200, r.text
+    r = client.post(f"{API}/matches/{match_id}/confirm-return", headers=auth_header(token_b))
+    assert r.status_code == 200, r.text
+
+    # 失主生成 lost_code（自己屏幕上可见的码）
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_a))
+    assert r.status_code == 200, r.text
+    lost_code = r.json()["data"]["code"]
+
+    # 攻击：失主传 role="finder" + 自己的码，试图冒充拾得者完成验证
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/verify",
+        headers=auth_header(token_a),
+        json={"code": lost_code, "role": "finder"},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["code"] == 9001
+    assert "身份不符" in r.json()["message"], r.text
+
+    # 匹配未被单方打成已完成（仍为认领中 1）
+    r = client.get(f"{API}/matches", headers=auth_header(token_a))
+    ids = {m["id"]: m["status"] for m in r.json()["data"]["items"]}
+    assert ids.get(match_id) == 1
+
+    # 双 verified 标记均未置位；伪造 role 不计入尝试次数（attempts=0）
+    db.expire_all()
+    hc = (
+        db.query(HandoverCode)
+        .filter(HandoverCode.match_id == match_id)
+        .order_by(HandoverCode.seq.desc())
+        .first()
+    )
+    assert hc is not None
+    assert hc.lost_code_verified is False
+    assert hc.finder_code_verified is False
+    assert int(hc.attempts) == 0
+
+    # role 与身份一致的正向流程不受影响：拾得者用真实角色、输入对方的 lost_code 验证成功
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/verify",
+        headers=auth_header(token_b),
+        json={"code": lost_code, "role": "finder"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["lost_code_verified"] is True
+    assert r.json()["data"]["both_verified"] is False
+
+
+def test_handover_verify_lockout_after_five_wrong_attempts(client, db):
+    """连续错 5 次 → 该行失效锁定，第 6 次即使码正确也拒；双方重新 generate 后天然解锁。"""
+    token_a, token_b, _, match_id = publish_pair(client)
+    r = client.post(
+        f"{API}/matches/{match_id}/claim",
+        headers=auth_header(token_a),
+        json={"claim_reason": "特征吻合"},
+    )
+    assert r.status_code == 200, r.text
+    r = client.post(f"{API}/matches/{match_id}/confirm-return", headers=auth_header(token_b))
+    assert r.status_code == 200, r.text
+
+    # 双方各自生成
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_a))
+    lost_code = r.json()["data"]["code"]
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_b))
+    finder_code = r.json()["data"]["code"]
+
+    # 拾得者验证失主的码（role="finder"，目标 lost_code）：连续输错 5 次
+    wrong = "0000" if lost_code != "0000" else "0001"  # 保证与真码不同
+    for i in range(5):
+        r = client.post(
+            f"{API}/matches/{match_id}/handover/verify",
+            headers=auth_header(token_b),
+            json={"code": wrong, "role": "finder"},
+        )
+        assert r.status_code == 400, r.text
+        assert r.json()["code"] == 4001
+        if i == 4:
+            assert "锁定" in r.json()["message"], r.text
+
+    # 第 6 次：即使输入正确码也被锁
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/verify",
+        headers=auth_header(token_b),
+        json={"code": lost_code, "role": "finder"},
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["code"] == 4001
+    assert "锁定" in r.json()["message"], r.text
+
+    # DB：该行已失效（复用 EXPIRED=2），attempts=5；对方 verified 标记不受污染
+    db.expire_all()
+    hc = (
+        db.query(HandoverCode)
+        .filter(HandoverCode.match_id == match_id)
+        .order_by(HandoverCode.seq.desc())
+        .first()
+    )
+    assert int(hc.status) == int(HandoverStatus.EXPIRED)
+    assert int(hc.attempts) == 5
+    assert hc.lost_code_verified is False
+    assert hc.finder_code_verified is False
+
+    # 重新 generate（仅双方可调）→ 新 seq 行，attempts 归零，天然解锁
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_a))
+    assert r.status_code == 200, r.text
+    lost_code2 = r.json()["data"]["code"]
+    r = client.post(f"{API}/matches/{match_id}/handover/generate", headers=auth_header(token_b))
+    assert r.status_code == 200, r.text
+    finder_code2 = r.json()["data"]["code"]
+
+    db.expire_all()
+    hc2 = (
+        db.query(HandoverCode)
+        .filter(HandoverCode.match_id == match_id)
+        .order_by(HandoverCode.seq.desc())
+        .first()
+    )
+    assert hc2.id != hc.id
+    assert int(hc2.seq) == int(hc.seq) + 1
+    assert int(hc2.attempts) == 0
+    assert int(hc2.status) == int(HandoverStatus.VALID)
+
+    # 解锁后正向验证恢复：失主输入新的拾得者码 → finder_code_verified=True
+    assert lost_code2  # 新一轮码已生成
+    r = client.post(
+        f"{API}/matches/{match_id}/handover/verify",
+        headers=auth_header(token_a),
+        json={"code": finder_code2, "role": "lost"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["finder_code_verified"] is True

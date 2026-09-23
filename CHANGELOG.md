@@ -2,6 +2,160 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 同步推理移出事件循环 — 三个 async 路由 to_thread 化（2026-09-23，卡#7）
+
+### 改了什么
+1. **`app/routers/vision.py`（POST /vision/predict）**：`get_vision_service().predict(data)`
+   改为 `await asyncio.to_thread(get_vision_service().predict, data)`——YOLO 推理移入线程池。
+2. **`app/routers/items.py`（POST /lost-items、POST /found-items）**：
+   `PublishService(db).publish_lost/publish_found` 两个调用点分别包 `asyncio.to_thread(...)`
+   ——发布编排内部的 YOLO 推理 + 感知哈希随之移出事件循环（调用点包裹，符合卡#7 第④条：
+   推理入口在 service 且被多处 async 调用时优先调用点 to_thread）。
+3. 不动项：CLIP 精排 `reorder_match_ids` 本就是同步 BackgroundTask（Starlette 自动
+   run_in_threadpool，已在循环外）；限流/魔数校验等轻量 IO 不动；其余路由本就是同步
+   `def`（FastAPI 自动线程池），无需改。
+
+### 为什么
+安检 P3 架构：`async def` 路由跑在单线程事件循环上，内部同步执行秒级 YOLO 推理会
+阻塞整个循环——期间所有请求（包括登录）都在排队。三处命中点（视觉预识别 1 + 发布 2）
+是仅有的 async 路由重活。Session 跨线程安全性：SQLite 已配 `check_same_thread=False`
+（database.py），且 to_thread 期间事件循环侧不触碰同一 Session（顺序使用，无并发）。
+
+### 怎么验证的
+- 全量 grep `async def`：仅 3 条路由命中重活（vision/predict、lost-items、found-items）；
+  其余 async（异常处理器 ×3、body_limit 中间件、lifespan）均为轻量路径，不动；
+- py_compile 两文件 EXIT=0；视觉接口回归 22 passed（vision_tests + 白名单 + 发布打标）EXIT=0；
+- `pytest` 全量串行单进程：**397 passed, 2 skipped, 0 failed**（7m43s），EXIT=0；
+- 不改推理模型与阈值、不动业务逻辑、零 git 写操作；变更仅限 vision.py / items.py / 本 CHANGELOG。
+
+## 考古清理 — 废弃权重/旧公式/配置文档三方对齐（2026-09-23，卡#6）
+
+### 改了什么
+1. **config.py 下线三套历史权重 + 旧交接码 TTL（共 14 个字段）**：
+   `MATCH_W1/W2/W3/W4`（v2 旧公式）、`MATCH_W_TAG`（v4 containment）、
+   `MATCH_W_PHOTO/CAT/TEXT/LOC/TIME/APP/FEAT/OTHER`（flow-v2 五维+旧六维+「其他」特殊路径）、
+   `HANDOVER_TTL_MIN`（旧单码模型 30 分钟）。同步把 flow-v2 旧公式注释块改写为
+   现行 v2 七维口径的段头说明；`TIME_DECAY_TAU_DAYS` 注释由 [deprecated] 改为
+   legacy 兼容说明（它仍被保留的 `time_decay_factor` 使用，见下「为什么」）。
+2. **match_service.py 整函数下线 3 个零引用方法**：`photo_sim_factor`、
+   `photo_sim_factor_with_bytes`（打分已走 photo_category 维，两函数全仓零调用）、
+   `tag_jaccard_factor`（零调用）；随之移除仅为它们服务的两个 import
+   （`PerceptualHash`、`clip_service.image_similarity`），并更新模块 docstring 的
+   旧公式说明。功能级删除合计约 50 行。
+3. **tests/test_match.py**：`test_weights_and_threshold_config` 中 14 行对已删字段的
+   存续断言移除（它们本身就是 [deprecated] 兼容墓碑，不是行为测试），
+   用例更名 `test_threshold_config`，继续守护 MATCH_THRESHOLD/MATCH_LOW_SCORE/OTHER_CATEGORY_NAME。
+4. **`.env.example` 对照 `app/core/config.py` 逐项重写**：删掉 config 不存在或已下线的
+   `MATCH_W1..W4`、`TIME_DECAY_TAU_DAYS`、`HANDOVER_TTL_MIN`、`DEFAULT_REGION_CODE`
+   （幽灵项：Settings 无此字段，extra=ignore 静默吞掉）；修正语义漂移项
+   （`YOLO_COCO_MODEL` yolov8n.pt→best.pt、`YOLO_CONF_THRESHOLD` 0.25→0.12、
+   `IM_RETENTION_DAYS` 7→30、`ADMIN_APPLY_CODE` 示例值→留空禁用）；
+   补全用户可调对外项（`HANDOVER_TTL_SEC`、三档 `RATE_LIMIT_*_PER_MIN`、
+   `REQUEST_BODY_MAX_MB`，卡#3 新增的 `SHOW_SMS_CODE`/`SEED_DEMO`/`JWT_SECRET` 已在，
+   另补 `MATCH_LOW_SCORE`/`MATCH_TOP_N`/`MATCH_SUSPECT_MAX`/`MATCH_NORMALIZE`/
+   `MATCH_NORM_MIN_WEIGHT`/`MATCH_TIME_TAU_DAYS`/七项 `MATCH_W2_*`、`ADMIN_RETENTION_DAYS`、
+   `IM_POLL_INTERVAL_MS`、`UPLOAD_DIR` 注释项）。全部占位符，无真实密钥。
+5. **README 算法宣称以代码为准修正**：七维权重表（20/20/15/15/10/10/10）与
+   `MATCH_W2_*` 一致，不动；CLIP 表述三处修正——CLIP 不参与打分，仅在发布后台对候选
+   做图像相似度精排（写 `clip_sim` 作列表同分 tie-break，见 clip_reorder.py /
+   routers/match.py 次排序），避免读者误以为 CLIP 相似度进了匹配分。
+
+### 为什么
+安检 P2「AI 尸体现场」：配置里同时躺着五套打分权重（三套已废 + 现行 + 兼容残留）
+全标 deprecated 没人敢删；match_service 里旧打分因子与 .env.example 教用户配的参数
+一半不存在或语义已变——照 README+example 配出来的行为与文档宣称的不是同一个版本。
+git 历史可查所有旧值，旧代码不需要躺在生产里陪葬。删除边界：仅删**全仓零引用**的
+字段/整函数；凡有存量测试行为断言引用的（`time_decay_factor`、`tag_containment_factor`、
+`color_conflict`、`location_hit_factor`、`keyword_jaccard_factor`、`category_hit`、
+`text_match_rate`、`appearance/feature/location_factor` 及 score_detail 旧键映射契约）
+一律保留，见卡#6 盘点清单。
+
+### 怎么验证的
+- 盘点先行：grep `deprecated|废弃|旧版|legacy` 全量定位 + 每个字段/方法逐个 grep 调用点
+  确认零引用才删（清单落 `docs/pipeline/cards/卡6_考古清理.md`）；
+- `pytest` 全量串行单进程 0 failed（统计与 EXIT 码见卡#6 验收记录）；
+- `grep -rn deprecated app/` 仅剩合理残留（score_detail 旧键映射注释、
+  schemas/match.py 契约字段注释），逐条说明见卡#6；
+- `.env.example` 每行与 config.py 字段对照表见卡#6；py_compile 通过；
+  git status 变更仅限本卡清单；全程零 git 写操作；现行匹配算法零改动。
+
+## IM 会话串线修复 — 第二联系者获得独立会话（2026-09-23，卡#5）
+
+### 改了什么
+1. **复用查询加参与者维度（核心，最小修复）**：`app/routers/im.py` `create_session`
+   的 found_id「联系」路径，复用条件由「`found_id==X AND status==0`」收紧为
+   「`found_id==X AND status==0 AND (lost_user_id==当前用户 OR finder_user_id==当前用户)`」
+   （SQLAlchemy `or_`，全程 ORM 参数绑定）。查到**别人的**活跃会话时不复用，为当前用户
+   新建独立会话——同一拾物允许多条一对一私聊线（每个失主候选与拾得者各一条）；
+   自己与自己历史会话的复用行为不变（回归覆盖）。
+2. **参与者字段核实**：`IMSession` 双方参与者为 `lost_user_id` / `finder_user_id`
+   （`app/models/im.py`）。match_id 路径不受影响：进入复用查询前已有
+   「当前用户 ∈ {lost.publisher_id, found.finder_id}」校验（im.py 既有逻辑），不存在串线。
+3. **唯一约束核实**：`im_session.found_id` 仅有普通索引（模型 `idx_im_found` +
+   迁移 0003 的 `ix_im_found`），**无唯一约束** → 同一 found_id 多会话本就允许，
+   无需迁移，修复直接生效。
+4. **测试**：`tests/test_v4_manual_match.py` 新增
+   `test_v4_contact_second_user_gets_independent_session`（用户 A、B 先后联系同一拾物 →
+   各得独立会话、双方各自发消息 200、互不可见（B 读 A 会话 403 / A 读 B 会话 403）、
+   A 再次发起仍复用自己的原会话）。
+
+### 为什么
+安检 P1 功能缺陷：发起联系时「复用同一拾物下仍开启的会话」只按 `found_id + status==0`
+查询，没有过滤当前用户是否为会话参与者——第二个用户联系同一件拾物时会拿到第一个用户
+的会话，随后参与者权限校验永远拒绝（403 死会话），且第二人的联系入口被彻底堵死。
+
+### 怎么验证的
+- 双用户场景实测（新增用例，TestClient 全 HTTP 栈）：B 得独立新会话（id 不同、
+  lost_user_id=B）；A/B 各自发消息均 200；B→A 会话 403、A→B 会话 403；
+  A 复用回归返回原会话 id —— 全部断言通过；
+- 既有 IM 回归：`tests/test_v4_manual_match.py` + `tests/test_v3_incremental.py`
+  共 18 passed（含门控 403、禁链接 422、审计镜像、增量轮询、非参与者拒绝、双保险）；
+- `pytest` 全量：`397 passed, 2 skipped, 0 failed in 458.92s`，PYTEST_EXIT=0
+  （串行单进程；较上版 +1 = 本卡新增用例）；
+- py_compile（im.py / test_v4_manual_match.py）通过；git status 变更仅限本卡清单；
+  全程零 git 写操作。
+
+## 交接码加固 — role 服务端推导 + 错 5 次锁定 + 恒时比较（2026-09-23，卡#4）
+
+### 改了什么
+1. **role 服务端推导（核心）**：`app/routers/match.py` `handover_verify` 在既有身份校验
+   （user.id ∈ {lost.publisher_id, found.finder_id}）基础上推导 `real_role`，请求体 `body.role`
+   降级为对账字段——不一致一律 422（"角色与身份不符"，code 9001）；传给 service 的一律是
+   推导出的真实角色。`handover_service.verify` 签名不动（最小改动），语义变为"必然是真实角色"。
+2. **错 5 次锁定**：`HandoverCode` 模型新增 `attempts`（Integer NOT NULL DEFAULT 0）列 +
+   新迁移 `migrations/versions/0009_handover_attempts.py`（接续 0008，inspector 幂等，
+   手写 upgrade/downgrade，server_default 0 兜底存量行）；verify 错码时 attempts+1 并立即
+   commit 落库，达 5 次（`HANDOVER_MAX_ATTEMPTS=5`）整行 status 置 2（复用现有 EXPIRED，
+   不新增枚举值）；验证入口先查行是否已失效，锁定后明确报"验证码错误次数过多已锁定，
+   请双方重新生成交接码"；重新 generate 产生新 seq 行（attempts 归零）天然解锁。
+3. **恒时比较 + 顺序**：码比对由 `!=` 改 `hmac.compare_digest`（与同文件邀请码同标准，
+   消除时序侧信道双标准）；调整为先查过期、再比对码，错误信息不区分"码对但过期"。
+4. **测试正向修正（非凑绿）**：`tests/test_handover_audit.py` 新增
+   `test_handover_verify_role_spoof_rejected_422`（攻击路径 422 + 不计尝试次数 +
+   不污染 verified 标记 + role 一致正向不受影响）与
+   `test_handover_verify_lockout_after_five_wrong_attempts`（错 5 次锁定 + 第 6 次正确码
+   亦拒 + DB 断言 status/attempts + 重新 generate 天然解锁）；既有迁移链断言
+   （`test_v6_board_filter.py` head、`test_v7_migration.py` 两处 version_num）随链前移
+   0008→0009 正向修正。
+5. 回填 `docs/pipeline/安检报告.md` L1-9 为已修复（含三项安全验证证据）。
+
+### 为什么
+安检 L1 第 9 项阻断（卡#3 移交）：① role 由请求体自报，失主可自报 role="finder" 输入
+自己屏幕上的码冒充拾得者，单方刷满双方 verified 把匹配打成 COMPLETED（越权完成交接）；
+② 4 位码 1 万组合且无尝试限制，可在线穷举；③ 普通字符串比较存在时序侧信道（双标准）；
+④ 先比对后查过期会泄露"码对但过期"信号。原则：角色是身份的属性不是请求的可声明字段、
+防穷举上限落在权威存储（DB 行）而非内存、错误信息只给处置指引不给码正确性信号。
+
+### 怎么验证的
+- 三项安全验证（独立临时库实跑，等价 curl 证据）：攻击路径 `HTTP 422 {"code":9001,
+  "message":"角色与身份不符"}` 且匹配仍认领中；错 5 次后第 6 次正确码 `HTTP 400` 报锁定
+  （DB：status=2、attempts=5），双方重新 generate 后验证恢复 200；正向双验证
+  both_verified→COMPLETED(2)→失物已解决(3) 全链不变；
+- 迁移：`alembic upgrade head` → 0009（PRAGMA 确认 attempts 列）→ `downgrade -1`
+  （列删除）→ `upgrade head`（列恢复），三步 EXIT=0；
+- `pytest` 全量：`396 passed, 2 skipped, 0 failed in 451.22s`，EXIT=0（串行单进程）；
+- py_compile 全部改动文件通过；git status 变更仅限本卡清单；全程零 git 写操作。
+
 ## 安全配置与凭据治理 — 安检 L1 五项阻断修复（2026-09-23，卡#3）
 
 ### 改了什么

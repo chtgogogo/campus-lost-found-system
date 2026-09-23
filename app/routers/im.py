@@ -19,6 +19,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -119,10 +120,19 @@ def create_session(
         # 门控：唯一来源为 found_item.contact_allowed（Q5）
         if int(found.contact_allowed) == 0:
             raise PermissionError("对方暂未开启联系")
-        # 复用同一拾物下仍开启的会话
+        # 复用同一拾物下、**当前用户是参与者**的仍开启会话（卡#5 串线修复：
+        # 无参与者过滤时第二个联系者会拿到他人的活跃会话，随后被参与者校验
+        # 永远拒绝 → 403 死会话。同一拾物允许多条一对一独立会话）。
         session = (
             db.query(IMSession)
-            .filter(IMSession.found_id == found.id, IMSession.status == 0)
+            .filter(
+                IMSession.found_id == found.id,
+                IMSession.status == 0,
+                or_(
+                    IMSession.lost_user_id == int(user.id),
+                    IMSession.finder_user_id == int(user.id),
+                ),
+            )
             .order_by(IMSession.id.desc())
             .first()
         )
