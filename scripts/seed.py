@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 # 允许以脚本方式直接运行（将项目根加入 sys.path）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from app.core.config import settings
 from app.core.database import SessionLocal, init_db
 from app.core.seed import seed_admin, seed_categories
 from app.core.security import hash_password
@@ -159,8 +160,15 @@ def main() -> None:
     with SessionLocal() as db:
         n = seed_categories(db)
         admin = seed_admin(db, args.admin_no, args.admin_phone, args.admin_pwd)
-        demo_users = seed_demo_users(db)
-        m = seed_demo_items(db)
+        # 安检 L1（2026-09-23）：演示账号/示例物品播种加 SEED_DEMO 门控，默认不播种 ——
+        # 防止演示弱口令账号（demo_loser / demo_finder）意外进入真实环境。
+        if settings.SEED_DEMO:
+            demo_users = seed_demo_users(db)
+            m = seed_demo_items(db)
+        else:
+            demo_users = []
+            m = 0
+            print("[seed] SEED_DEMO=False：跳过演示账号与示例物品（需要时在 .env 设 SEED_DEMO=True）")
         db.commit()
         print(f"[seed] categories inserted: {n}")
         print(f"[seed] admin ready: id={admin.id} student_no={admin.student_no}")

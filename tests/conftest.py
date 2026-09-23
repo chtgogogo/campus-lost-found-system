@@ -18,6 +18,16 @@ _TEST_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "_mvp_qa.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
 os.environ["REDIS_ENABLED"] = "false"
 os.environ["DEBUG"] = "true"
+# ---- 卡#3 安检 L1（2026-09-23）：DEBUG 拆分后的测试环境显式声明 ----
+# 限流不再被 DEBUG 豁免：套件高频注册登录，显式关闭（限流单测见 test_v13 的 monkeypatch）
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+# dev_code（验证码回显）改由独立开关 SHOW_SMS_CODE 控制，测试依赖它取码
+os.environ["SHOW_SMS_CODE"] = "true"
+# 演示数据不播种（SEED_DEMO 门控）
+os.environ["SEED_DEMO"] = "false"
+# 密钥/邀请码随机注入（零字面量凭据），同时满足 create_app 的 fail fast 安全校验
+os.environ["JWT_SECRET"] = uuid.uuid4().hex + uuid.uuid4().hex
+os.environ["ADMIN_APPLY_CODE"] = "test-admin-" + uuid.uuid4().hex[:16]
 
 from fastapi.testclient import TestClient  # noqa: E402
 from app.core.database import Base, SessionLocal, engine, init_db  # noqa: E402

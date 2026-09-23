@@ -15,7 +15,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import settings
+from app.core.body_limit import RequestBodyLimitMiddleware
+from app.core.config import settings, validate_security_config
 from app.core.database import SessionLocal, init_db
 from app.core.exceptions import register_exception_handlers
 from app.core.seed import seed_categories
@@ -36,11 +37,20 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # 安全校验（fail fast，安检 L1-1/L1-2）：JWT_SECRET 弱默认 / 空值直接拒绝启动，
+    # ADMIN_APPLY_CODE 为空时日志说明。必须先于任何路由/中间件装配。
+    validate_security_config()
+
     app = FastAPI(
         title=settings.APP_NAME,
         version="0.1.0",
         description="基于 YOLOv8 的校园失物招领智能匹配系统（后端）",
         lifespan=lifespan,
+    )
+
+    # 请求体大小护栏（安检 L1，2026-09-23）：Content-Length 超限直接 413
+    app.add_middleware(
+        RequestBodyLimitMiddleware, max_body_mb=settings.REQUEST_BODY_MAX_MB
     )
 
     # CORS（仅放行本地前端开发端口；生产按域名收敛）

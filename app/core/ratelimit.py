@@ -3,8 +3,9 @@
 设计要点：
 - **固定窗口**（60s）：以 ``int(time // 60)`` 为窗口号拼接 key，``kv.incr`` 原子计数；
   窗口切换后旧 key 靠 TTL 自然过期。对防刷场景足够，不需要精确滑动窗口。
-- **开关**：``RATE_LIMIT_ENABLED=False``（测试/本地一键关闭）或 ``DEBUG=True``
-  （开发/测试套件同 IP 高频注册登录，全局关闭避免误伤）时直接放行。
+- **开关**：仅 ``RATE_LIMIT_ENABLED=False``（测试/本地一键关闭）时直接放行。
+  安检 L1-3（2026-09-23）：移除 ``or settings.DEBUG`` 连坐 —— 此前 DEBUG=True 会把限流
+  一并关掉（一个开关拖垮两道防线）；拆分后 DEBUG 只管调试行为，限流只归本开关管。
 - **异常**：超限抛 ``RateLimitError``（HTTP 429，exceptions.py 既有）。
 """
 from __future__ import annotations
@@ -26,7 +27,7 @@ def check_rate_limit(key: str, limit_per_min: int) -> None:
     Raises:
         RateLimitError: 超过窗口内限额（HTTP 429）。
     """
-    if not settings.RATE_LIMIT_ENABLED or settings.DEBUG:
+    if not settings.RATE_LIMIT_ENABLED:
         return
     window = int(time.time() // 60)
     count = redis_client.kv.incr(f"ratelimit:{key}:{window}", ttl_sec=120)

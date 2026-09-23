@@ -2,6 +2,48 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 安全配置与凭据治理 — 安检 L1 五项阻断修复（2026-09-23，卡#3）
+
+### 改了什么
+1. **JWT_SECRET 弱默认废除（L1-1）**：`app/core/config.py` 默认值改空串；新增
+   `validate_security_config()`（空值 / `dev-` 前缀 / 占位符 → `RuntimeError` 拒绝启动），
+   在 `create_app()` 最先调用；本机 `.env` 写入 `secrets.token_hex(32)` 随机新密钥；
+   `.env.example` 只留占位符；compose 增加 `JWT_SECRET: ${JWT_SECRET:?}`。
+2. **管理员工具码出库（L1-2）**：`ADMIN_APPLY_CODE` 默认 `"110"` 改空串（空=管理员邀请
+   通道禁用，启动打 WARNING 说明）；本机 `.env` 保留 `110`（用户"好记"需求，只走环境变量）；
+   前端 `MOCK_ADMIN_APPLY_CODE` 核实仅演示 mock 层使用，注明用途不改码。
+3. **DEBUG 连坐拆除（L1-3，一个开关只管一件事）**：`ratelimit.py` 移除 `or settings.DEBUG`
+   （DEBUG=True 不再豁免限流）；验证码显隐从 DEBUG 解耦为独立开关 `SHOW_SMS_CODE`
+   （默认 False，本机 .env 置 True 保留"家人自助注册"）；新增 `SEED_DEMO`（默认 False）
+   门控 `scripts/seed.py` 演示账号/示例物品播种（L1-12，指控核实属实）；
+   测试基建 conftest 显式声明 `RATE_LIMIT_ENABLED=false` / `SHOW_SMS_CODE=true` /
+   随机 `JWT_SECRET` 与 `ADMIN_APPLY_CODE`（测试零字面量凭据）。
+4. **compose 收敛（L1-4）**：MySQL 3306 映射改 `127.0.0.1:3306:3306`（redis 6379 同原则）；
+   `MYSQL_ROOT_PASSWORD` / `MYSQL_PASSWORD` / `DATABASE_URL` 口令段全部 `${VAR:?}` 环境变量化；
+   healthcheck 去除 `-plf` 字面量；顶部 `name: lostfound` 修复中文目录名派生空项目名。
+5. **请求体护栏（新增）**：`app/core/body_limit.py` 按 Content-Length 超限 413，
+   `REQUEST_BODY_MAX_MB=100`（与上传上限 9×10MB 联动），`main.py` 装配。
+6. 配套测试对齐：`test_v13_security_tagging.py` 的 DEBUG 豁免用例改为
+   `test_debug_no_longer_bypasses`（新语义反向断言）；`test_auth.py` 验证码用例改为
+   SHOW_SMS_CODE 双分支断言。新增 `docs/pipeline/安检报告.md`（L1 第 1/2/3/5/7/8/9/12 项结论+证据）。
+
+### 为什么
+安检 L1 五项阻断：弱默认 JWT 密钥、硬编码管理员码、DEBUG 一个开关拖垮限流+验证码两道
+防线、compose 将 MySQL 暴露宿主机且 root 口令字面量、演示账号播种未门控。原则：
+凭据只走环境变量（源码/示例/测试零字面量）、宁可拒绝启动也不带弱密钥上线、
+用户既有使用习惯（验证码页面显示、邀请码 110、DEBUG=True）全部保留。
+
+### 怎么验证的
+- fail fast：清空 / `dev-` 前缀 / 占位符三种 JWT_SECRET 启动均 `RuntimeError` 拒绝（EXIT=1）；
+  恢复后 `/health` 200；
+- 连坐解除：`SHOW_SMS_CODE=false + DEBUG=true` 实启动，send-sms 无 `dev_code`，
+  同 IP 第 11 发请求 429（限流在 DEBUG 下生效）；
+- `pytest` 全量：`394 passed, 2 skipped, 580 warnings in 453.95s`，EXIT=0（串行单进程）；
+- `grep -rn "dev-secret\|\"110\"" app/ --include="*.py"` 清零；`docker compose config` EXIT=0
+  （3306 `host_ip: 127.0.0.1` 确认）；py_compile / ruff 通过；服务进程清零；
+- 遗留项记录：`/users/me` 全量自查出口缺失、`LoginView.vue:246` dev_code 兜底 `'123456'`
+  在生产模式会误导、`scripts/seed.py --admin-pwd` 建议改必填（详见安检报告）。
+
 ## 测试复核 — "全量 55 failed"判定为环境假象，双向顺序实测全绿（2026-09-23）
 
 ### 改了什么

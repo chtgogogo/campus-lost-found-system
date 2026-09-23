@@ -1,7 +1,8 @@
 """v13 增量测试：API 限流 + 图片魔数校验 + 词边界抽取。
 
-- 限流：固定窗口计数器（core/ratelimit.py）；DEBUG=True 全局放行（测试套件依赖此豁免，
-  本文件用 monkeypatch 显式开启后单测）。
+- 限流：固定窗口计数器（core/ratelimit.py）；唯一开关 RATE_LIMIT_ENABLED
+  （卡#3 安检 L1：DEBUG 连坐已拆除，DEBUG=True 不再豁免限流；
+  套件全局靠 conftest 环境变量 RATE_LIMIT_ENABLED=false 关闭，本文件 monkeypatch 显式开启单测）。
 - 图片校验：按魔数判型，拒收伪装文件（utils/image_validator.py）。
 - 词边界：地点先抽并消费、名词消费式抽取（tagging_service v13 顺序）。
 """
@@ -29,11 +30,14 @@ class TestRateLimit:
         with pytest.raises(RateLimitError):
             check_rate_limit(key, 2)
 
-    def test_debug_bypasses(self, monkeypatch):
+    def test_debug_no_longer_bypasses(self, monkeypatch):
+        """卡#3 安检 L1：DEBUG=True 不再豁免限流，唯一开关是 RATE_LIMIT_ENABLED。"""
         monkeypatch.setattr(settings, "DEBUG", True)
+        monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", True)
         key = "test:rl-v13-b"
-        for _ in range(5):
-            check_rate_limit(key, 1)  # DEBUG 下永不抛
+        check_rate_limit(key, 1)
+        with pytest.raises(RateLimitError):
+            check_rate_limit(key, 1)
 
     def test_disabled_bypasses(self, monkeypatch):
         monkeypatch.setattr(settings, "DEBUG", False)
@@ -45,10 +49,9 @@ class TestRateLimit:
     def test_api_level_429(self, client, monkeypatch):
         """路由级接线验证：预览接口超限返回 429。
 
-        注意先注册（DEBUG=True 时 send-sms 才返回 dev_code），再开限流。
+        注意先注册（conftest 已设 SHOW_SMS_CODE=true，send-sms 才返回 dev_code），再开限流。
         """
         token, *_ = register_and_login(client, "v13rl")
-        monkeypatch.setattr(settings, "DEBUG", False)
         monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", True)
         monkeypatch.setattr(settings, "RATE_LIMIT_PREVIEW_PER_MIN", 1)
         headers = auth_header(token)

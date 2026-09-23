@@ -132,7 +132,11 @@ export const MATCH_TOP_N = 10
 /** 疑似候选条数硬上限（与后端 settings.MATCH_SUSPECT_MAX 对齐），防极端数据下候选爆炸 */
 export const MATCH_SUSPECT_MAX = 50
 
-/** 演示态管理员邀请码（与后端 settings.ADMIN_APPLY_CODE 默认值对齐；生产环境必须改环境变量） */
+/** ⚠️ 仅限本地演示模式（mockAdapter）使用的管理员邀请码 —— 卡#3 安检 L1（2026-09-23）核实：
+ *  本常量只被 `web/src/api/mockAdapter.ts` 引用，而 mockAdapter 仅在前端"演示数据"开关
+ *  （utils/demo getDemo()，见 request.ts 请求拦截器）开启时才挂载，生产请求路径不经过它。
+ *  真实注册走后端 `/auth/register`，邀请码由后端环境变量 `ADMIN_APPLY_CODE` 校验（源码零字面量）。
+ *  此处值仅用于演示态本地数据闭环，不构成生产凭据泄露。 */
 export const MOCK_ADMIN_APPLY_CODE = '110'
 
 // ---------------- flow-v2（2026-08-05）：[deprecated] 五维权重，v10 已下线，仅保留兼容引用 ----------------

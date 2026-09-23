@@ -60,11 +60,15 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post("/send-sms", response_model=StandardResponse)
 def send_sms(request: Request, body: SendSmsRequest, db: Session = Depends(get_db)):
-    """发送短信（Mock：控制台输出）。DEBUG 模式响应附带 dev_code 便于联调。"""
+    """发送短信（Mock：控制台输出）。SHOW_SMS_CODE=True 时响应附带 dev_code 便于联调。
+
+    安检 L1-3（2026-09-23）：显隐开关由 DEBUG 改为独立的 SHOW_SMS_CODE（默认 False），
+    一个开关只管一件事 —— 开着 DEBUG 调试不再连带把验证码暴露给页面。
+    """
     check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
     code = AuthService(db).send_sms(body.phone, body.purpose)
     data: dict = {"sent": True}
-    if settings.DEBUG:
+    if settings.SHOW_SMS_CODE:
         data["dev_code"] = code
     return success(data=data)
 

@@ -2,33 +2,47 @@
 # 用法（在装有 docker 的机器/服务器）：
 #   docker compose up -d --build
 # 本机若无 docker 命令，本文件仅作为交付物，请在目标环境运行。
+#
+# 凭据纪律（安检 L1，2026-09-23）：所有密钥/口令一律来自同目录 .env（compose 自动读取），
+# 本文件零字面量密钥；缺失必需变量时 compose 直接报错拒绝启动（${VAR:?} 语法）。
+#   必需：MYSQL_ROOT_PASSWORD / MYSQL_PASSWORD / JWT_SECRET
+# 顶层 name：目录名为中文时 compose 无法派生项目名，显式指定（2026-09-23）
+name: lostfound
 services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: lf
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: lostfound
       MYSQL_USER: lf
-      MYSQL_PASSWORD: lf
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 设置 MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
-      - "3306:3306"
+      # 仅绑定宿主机回环地址：3306 只许本机调试可达，不对局域网/公网暴露
+      - "127.0.0.1:3306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-plf"]
+      # $$ 为 compose 转义：运行时由容器内 shell 读取容器环境变量，密码不落在本文件
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 10s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
+    # 仅本机回环可达（与 mysql 同原则；业务容器走内网 service 名互访不受影响）
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   backend:
     build: .
     environment:
-      DATABASE_URL: mysql+pymysql://lf:lf@mysql:3306/lostfound
+      # 数据库口令同样环境变量化，拼进连接串（安检 L1：去除 lf:lf 字面量）
+      DATABASE_URL: mysql+pymysql://lf:${MYSQL_PASSWORD:?请在 .env 设置 MYSQL_PASSWORD}@mysql:3306/lostfound
+      # JWT 签名密钥：缺失直接拒绝编排（后端启动时还有二次 fail fast 校验）
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 设置 JWT_SECRET}
+      # 管理员邀请码：可选传入；留空 = 管理员邀请通道禁用
+      ADMIN_APPLY_CODE: ${ADMIN_APPLY_CODE:-}
       REDIS_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
       YOLO_DEVICE: cpu

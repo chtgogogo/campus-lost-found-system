@@ -35,12 +35,27 @@ def test_register_login_success(client):
     assert "refresh_token" in body["data"]
 
 
-def test_send_sms_returns_dev_code_in_debug(client):
-    phone = _fresh_phone()
-    r = client.post(f"{API}/auth/send-sms", json={"phone": phone, "purpose": "register"})
+def test_send_sms_dev_code_toggled_by_show_sms_code(client, monkeypatch):
+    """卡#3 安检 L1：dev_code 显隐由独立开关 SHOW_SMS_CODE 控制（与 DEBUG 解耦）。
+
+    True → 响应附带 dev_code；False → 不附带（验证码不暴露给页面）。
+    两个用例分别用新手机号，避开 60s 重发间隔限流。
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SHOW_SMS_CODE", True)
+    phone_on = _fresh_phone()
+    r = client.post(f"{API}/auth/send-sms", json={"phone": phone_on, "purpose": "register"})
     body = _check_ok(r)
     assert body["data"]["sent"] is True
     assert "dev_code" in body["data"]
+
+    monkeypatch.setattr(settings, "SHOW_SMS_CODE", False)
+    phone_off = _fresh_phone()
+    r = client.post(f"{API}/auth/send-sms", json={"phone": phone_off, "purpose": "register"})
+    body = _check_ok(r)
+    assert body["data"]["sent"] is True
+    assert "dev_code" not in body["data"]
 
 
 def test_send_sms_rate_limit(client):

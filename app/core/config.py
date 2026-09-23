@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -47,7 +48,10 @@ class Settings(BaseSettings):
     REDIS_ENABLED: bool = False  # 显式关闭则直接用内存兜底，避免无 Redis 报错
 
     # ---------------- JWT ----------------
-    JWT_SECRET: str = "dev-secret-change-me-in-production"
+    # 安全铁律（安检 L1-1，2026-09-23）：默认值必须为空串 —— 弱默认密钥等于把家门钥匙挂在门上。
+    # 应用启动时由 validate_security_config() fail fast 校验（非空 / 非 dev- 弱默认 / 非占位符），
+    # 未配置直接 RuntimeError 拒绝启动。生成方式：python -c "import secrets;print(secrets.token_hex(32))"
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MIN: int = 120          # access token 120 分钟
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7          # refresh token 7 天
@@ -74,11 +78,23 @@ class Settings(BaseSettings):
     SMS_RESEND_INTERVAL_SEC: int = 60           # 重发间隔
 
     # ---------------- API 限流（v13：固定窗口，见 core/ratelimit.py） ----------------
-    # DEBUG=True 或本开关 False 时全部放行（开发/测试套件同 IP 高频注册会误伤）
+    # 唯一开关是 RATE_LIMIT_ENABLED（安检 L1-3，2026-09-23：DEBUG 连坐已拆除，
+    # DEBUG=True 不再豁免限流；测试套件请显式设 RATE_LIMIT_ENABLED=false）
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_AUTH_PER_MIN: int = 10           # 登录/注册/发验证码（按 IP）
     RATE_LIMIT_PUBLISH_PER_MIN: int = 10        # 发布失物/拾物（按用户）
     RATE_LIMIT_PREVIEW_PER_MIN: int = 30        # 标签预览（按用户，轻量接口放宽）
+
+    # ---------------- 安全开关拆分（安检 L1-3：一个开关只管一件事） ----------------
+    # SHOW_SMS_CODE：send-sms 响应附带 dev_code（验证码直接显示，供"家人自助注册"演示）。
+    # 默认 False；公网部署务必保持 False，否则验证码形同虚设。原耦合在 DEBUG 上，已解耦。
+    SHOW_SMS_CODE: bool = False
+    # SEED_DEMO：scripts/seed.py 是否播种演示账号/示例物品（demo_loser / demo_finder 等）。
+    # 默认 False（不播种演示数据）；本机演示需要时在 .env 显式打开。
+    SEED_DEMO: bool = False
+    # 请求体大小护栏（安检 L1，2026-09-23）：超出直接 413，防恶意超大包打满内存。
+    # 默认按上传能力上限取整：IMG_MAX_COUNT(9) × IMG_MAX_SIZE_MB(10) = 90MB + multipart 开销。
+    REQUEST_BODY_MAX_MB: int = 100
 
     # ---------------- 匹配打分（2026-08-05 flow-v2 新公式，Q5 拍板） ----------------
     # 普通类五维公式（合计 100，阈值沿用 80）：
@@ -132,9 +148,10 @@ class Settings(BaseSettings):
     MATCH_SUSPECT_MAX: int = 60   # v15: 随 TOP_N=50 扩容（疑似追加护栏须大于保底，否则撑破能力失效）
 
     # ---------------- v10 管理员 ----------------
-    # 注册邀请码：命中则静默升为管理员（role=1）；生产必须通过环境变量 ADMIN_APPLY_CODE 改为强口令。
-    # ⚠️ 配成空串时 auth_service 的 bool(expected) 护栏会使任何邀请码都不命中（防全员管理员越权）。
-    ADMIN_APPLY_CODE: str = "110"
+    # 注册邀请码：命中则静默升为管理员（role=1）。安全铁律（安检 L1-2，2026-09-23）：
+    # 默认值改空串 = 管理员邀请通道默认禁用（auth_service._resolve_role 的空串护栏会拒绝
+    # 一切邀请码），启动时日志说明；实际值只从环境变量 / .env 注入，源码零字面量。
+    ADMIN_APPLY_CODE: str = ""
     # 管理员留存窗（天）：物品 expires_at + 本值之后才进入 CleanupService 物理清理范围。
     ADMIN_RETENTION_DAYS: int = 270
 
@@ -172,6 +189,42 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# JWT 占位符黑名单：.env.example 里的示例值 / 历史弱默认，一律不得用于真实签名密钥
+_JWT_FORBIDDEN = {
+    "",
+    "change-me",
+    "changeme",
+    "change-me-to-a-random-64hex",
+    "change-me-to-a-strong-random-secret",
+}
+
+
+def validate_security_config() -> None:
+    """启动安全校验（fail fast，安检 L1-1/L1-2，2026-09-23）。
+
+    在 ``create_app()`` 最先调用，任何一项不过立即 ``RuntimeError`` 拒绝启动 ——
+    宁可服务起不来，也不带着弱密钥上线。
+
+    - ``JWT_SECRET``：必须非空、非 ``dev-`` 弱默认前缀、非占位符；
+    - ``ADMIN_APPLY_CODE``：允许为空（= 管理员邀请通道禁用），但必须打日志说明，
+      避免运维误以为配置了邀请码。
+    """
+    secret = (settings.JWT_SECRET or "").strip()
+    if not secret:
+        raise RuntimeError(
+            "JWT_SECRET 未设置：拒绝启动。请在 .env 或环境变量配置随机密钥，"
+            '生成方式：python -c "import secrets;print(secrets.token_hex(32))"'
+        )
+    if secret.lower().startswith("dev-"):
+        raise RuntimeError("JWT_SECRET 为 dev- 弱默认值：拒绝启动，请更换为随机密钥")
+    if secret in _JWT_FORBIDDEN:
+        raise RuntimeError("JWT_SECRET 为占位符示例值：拒绝启动，请更换为随机密钥")
+    if not (settings.ADMIN_APPLY_CODE or "").strip():
+        logging.getLogger(__name__).warning(
+            "ADMIN_APPLY_CODE 为空：管理员邀请通道已禁用（任何邀请码都不会命中）；"
+            "如需启用请在 .env 配置强口令"
+        )
 
 
 def get_redis() -> "RedisClient":
