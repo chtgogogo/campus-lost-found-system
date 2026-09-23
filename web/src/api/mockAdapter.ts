@@ -376,10 +376,11 @@ function handleRefresh(ctx: Ctx): AxiosResponse {
 }
 
 function handleSendSms(ctx: Ctx): AxiosResponse {
-  // 演示模式下固定返回演示验证码，方便联调
+  // 卡8-1：演示模式不再用固定码字面量，改为随机 6 位演示码（注册侧本就不校验验证码）。
+  const devCode = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0')
   return ok(ctx.config, {
     sent: true,
-    dev_code: '123456',
+    dev_code: devCode,
   })
 }
 

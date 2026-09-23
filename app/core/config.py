@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # DEBUG=True 不再豁免限流；测试套件请显式设 RATE_LIMIT_ENABLED=false）
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_AUTH_PER_MIN: int = 10           # 登录/注册/发验证码（按 IP）
+    # 安检 L2（卡#9，2026-09-23）：认证端点独立更严限流 —— key 加端点维度
+    # （auth:login|register|send-sms:ip:<ip>），三端点各自独立桶，互不挤占。
+    RATE_LIMIT_AUTH_STRICT_PER_MIN: int = 5     # 登录/注册/发短信逐端点配额（按 IP）
     RATE_LIMIT_PUBLISH_PER_MIN: int = 10        # 发布失物/拾物（按用户）
     RATE_LIMIT_PREVIEW_PER_MIN: int = 30        # 标签预览（按用户，轻量接口放宽）
 

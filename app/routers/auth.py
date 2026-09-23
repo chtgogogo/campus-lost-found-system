@@ -33,7 +33,7 @@ def _ip(request: Request) -> str:
 @router.post("/register", response_model=StandardResponse)
 def register(request: Request, body: UserCreate, db: Session = Depends(get_db)):
     """注册（需短信 OTP）。返回用户信息与令牌。"""
-    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    check_rate_limit(f"auth:register:ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_STRICT_PER_MIN)
     user, access, refresh = AuthService(db).register(body)
     return success(
         data={
@@ -46,7 +46,7 @@ def register(request: Request, body: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=StandardResponse)
 def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     """登录（student_no + password）。返回令牌。"""
-    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    check_rate_limit(f"auth:login:ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_STRICT_PER_MIN)
     _, access, refresh = AuthService(db).login(body.student_no, body.password)
     return success(data=Token(access_token=access, refresh_token=refresh))
 
@@ -65,7 +65,7 @@ def send_sms(request: Request, body: SendSmsRequest, db: Session = Depends(get_d
     安检 L1-3（2026-09-23）：显隐开关由 DEBUG 改为独立的 SHOW_SMS_CODE（默认 False），
     一个开关只管一件事 —— 开着 DEBUG 调试不再连带把验证码暴露给页面。
     """
-    check_rate_limit(f"ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    check_rate_limit(f"auth:send-sms:ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_STRICT_PER_MIN)
     code = AuthService(db).send_sms(body.phone, body.purpose)
     data: dict = {"sent": True}
     if settings.SHOW_SMS_CODE:

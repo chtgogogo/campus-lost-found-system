@@ -94,6 +94,38 @@ class UserOut(BaseModel):
         )
 
 
+class UserMeOut(BaseModel):
+    """本人自查输出（卡8-2）。
+
+    「本人自查全量、他人视角脱敏」：仅供 GET /users/me（本人 token 才可达，
+    无越权面）使用，手机号明文回传；公开注册/绑手机等他人可见场景继续走
+    `UserOut`（脱敏），互不影响。
+    """
+
+    id: int
+    student_no: str
+    phone: str          # 明文（本人自查）
+    real_name: Optional[str] = None
+    role: int
+    credit_score: int
+    status: int
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, user) -> "UserMeOut":
+        """由 ORM 模型构造（手机号保持明文）。"""
+        return cls(
+            id=int(user.id),
+            student_no=user.student_no,
+            phone=user.phone,
+            real_name=user.real_name,
+            role=int(user.role),
+            credit_score=int(user.credit_score),
+            status=int(user.status),
+            created_at=user.created_at,
+        )
+
+
 class AdminUserOut(BaseModel):
     """管理后台用户输出（v10 变更 D1）。
 

@@ -112,7 +112,7 @@ pytest
 ├── app/           # FastAPI 后端（core/models/schemas/routers/services/utils）
 ├── web/           # Vue3 前端（views/components/api/stores）
 ├── migrations/    # 数据库迁移
-├── tests/         # pytest 测试，395 个用例
+├── tests/         # pytest 测试，398 个用例（随版本迭代增长）
 ├── docs/          # 系统设计、流程图、迭代 PRD
 ├── deploy/        # 部署相关
 └── docker-compose.yml

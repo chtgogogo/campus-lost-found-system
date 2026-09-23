@@ -172,3 +172,26 @@ def test_logout(client):
         json={"refresh_token": refresh},
     )
     _check_ok(r)
+
+
+def test_users_me_self_full_others_masked(client):
+    """卡8-2：本人自查 GET /users/me 返回全量（手机号明文）；他人视角（注册响应
+    UserOut 序列化器）继续脱敏，互不影响。"""
+    token, _, phone, student_no, _ = register_and_login(client, "meo")
+    r = client.get(f"{API}/users/me", headers=auth_header(token))
+    body = _check_ok(r)
+    data = body["data"]
+    assert data["student_no"] == student_no
+    assert data["phone"] == phone  # 本人全量：明文
+    assert data["role"] == 0
+    assert "credit_score" in data and "status" in data
+
+    # 他人视角不动：公开注册响应的手机号仍是脱敏形态（138****XXXX）
+    masked = re.sub(r"(\d{3})\d{4}(\d{4})", r"\1****\2", phone)
+    assert masked != phone
+    new_token, _, new_phone, _, _ = register_and_login(client, "meo2")
+    reg_masked = re.sub(r"(\d{3})\d{4}(\d{4})", r"\1****\2", new_phone)
+    assert reg_masked != new_phone
+    # 无 token 不可达
+    r2 = client.get(f"{API}/users/me")
+    assert r2.status_code in (401, 403)

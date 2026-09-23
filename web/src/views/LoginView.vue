@@ -78,7 +78,7 @@
               :closable="false"
               show-icon
               :title="`演示验证码：${devCode}`"
-              description="演示环境短信为桩，验证码固定为 123456，填写任意 6 位数字即可。"
+              description="演示环境短信为桩，请填写上方展示的演示验证码。"
             />
             <el-form-item label="密码" prop="password">
               <el-input
@@ -243,7 +243,9 @@ async function onSendSms() {
   }
   try {
     const res = await authApi.sendSms({ phone: regForm.phone, purpose: 'register' })
-    devCode.value = res.dev_code || '123456'
+    // 卡8-1：删除固定码硬编码兜底 —— 验证码一律以后端返回为准：
+    // 仅 SHOW_SMS_CODE=True 时后端才返回 dev_code，否则留空（提示条不显示），前端绝不造码。
+    devCode.value = res.dev_code ?? ''
     ElMessage.success('验证码已发送')
     smsCountdown.value = 60
     const timer = setInterval(() => {

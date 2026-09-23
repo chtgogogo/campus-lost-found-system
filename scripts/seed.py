@@ -1,8 +1,9 @@
 """种子数据初始化脚本（分类 + 管理员 + 演示用户 + 示例失物/拾物）。
 
 用法：
-    python scripts/seed.py
-    python scripts/seed.py --admin-no admin001 --admin-phone 13900000000 --admin-pwd admin123456
+    python scripts/seed.py --admin-pwd <随机密码>
+    python scripts/seed.py --admin-no admin001 --admin-phone 13900000000 --admin-pwd <随机密码>
+    # 随机密码生成：python -c "import secrets; print(secrets.token_urlsafe(12))"
 
 幂等：分类 / 管理员 / 演示用户 / 示例记录均按存在性判断，可重复执行。
 """
@@ -153,8 +154,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="初始化分类 / 管理员 / 演示数据")
     parser.add_argument("--admin-no", default="admin001")
     parser.add_argument("--admin-phone", default="13900000000")
-    parser.add_argument("--admin-pwd", default="admin123456")
+    # 卡8-3（安检遗留）：管理员初始密码必填——删除弱口令默认值，缺失时报错并提示生成随机密码。
+    parser.add_argument(
+        "--admin-pwd",
+        default=None,
+        help="管理员初始密码（必填，禁止默认/弱口令）",
+    )
     args = parser.parse_args()
+    if not args.admin_pwd:
+        parser.error(
+            "--admin-pwd 为必填项（安全要求：管理员禁止使用默认/弱口令）。"
+            "可先生成随机密码再传入，例如："
+            'python -c "import secrets; print(secrets.token_urlsafe(12))"'
+        )
 
     init_db()
     with SessionLocal() as db:

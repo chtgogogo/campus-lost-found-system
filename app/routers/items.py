@@ -37,6 +37,7 @@ from app.schemas.item import (
     TagsPreviewDTO,
 )
 from app.schemas.match import MatchOut
+from app.schemas.user import UserMeOut
 from app.services.clip_reorder import reorder_match_ids
 from app.services.match_service import build_match_outs
 from app.services.publish_service import PublishService
@@ -219,6 +220,17 @@ def tags_preview(
         category_name=payload.category_name,
     )
     return success(data={"tags": tags})
+
+
+# ---------------- 本人自查（卡8-2） ----------------
+@router.get("/users/me", response_model=StandardResponse)
+def me(user: User = Depends(get_current_user)):
+    """当前登录用户本人资料全量（手机号明文）。
+
+    「本人自查全量、他人视角脱敏」：本端点仅本人 token 可达（无越权面），
+    公开场景（注册/绑手机响应、物品列表详情）继续走 UserOut 脱敏，不受影响。
+    """
+    return success(data=UserMeOut.from_model(user))
 
 
 # ---------------- 我的发布（v3 需求 E） ----------------

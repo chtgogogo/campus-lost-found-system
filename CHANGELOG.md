@@ -2,6 +2,52 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 安检遗留三连修复 + 卫生扫尾（2026-09-23，卡#8）
+
+### 改了什么
+1. **LoginView.vue 删除验证码硬编码兜底（安检 L 级遗留）**：`onSendSms` 中
+   `devCode.value = res.dev_code || '123456'` 改为 `res.dev_code ?? ''`——验证码展示
+   一律以后端返回为准，前端绝不造码；同步改写提示条文案（去掉「验证码固定为
+   123456」表述）；`mockAdapter.ts` 演示模式 send-sms 由固定码字面量改为随机 6 位
+   （演示注册本就不校验验证码，展示体验不变）。前端全仓 `123456` 字面量清零。
+2. **新增 GET /users/me 本人自查全量出口**：新 Schema `UserMeOut`（`app/schemas/user.py`，
+   手机号明文 + 注释约束「仅本人 token 可达」）+ 端点挂在 `app/routers/items.py`
+   （与既有 /users/me/items 同处，`get_current_user` 守卫）。「本人自查全量、他人视角
+   脱敏」：公开场景（注册/绑手机响应走 UserOut、物品列表/详情不含手机号）不动。
+   读现状修正：后端此前**不存在** /users/me 端点（卡面猜测"走了脱敏序列化器"不成立），
+   属补建而非改道。
+3. **scripts/seed.py `--admin-pwd` 改必填**：删除弱口令默认值 `admin123456`，缺失时
+   `parser.error` 报错（EXIT=2）并提示用
+   `python -c "import secrets; print(secrets.token_urlsafe(12))"` 生成随机密码；
+   docstring 用法示例同步改为 `<随机密码>` 占位。
+4. **删除 tests/test_zz_diag.py**（自述"验证完毕即删"的临时诊断文件，卡#2 遗留裁决项）。
+5. **tests/test_auth.py 补断言** `test_users_me_self_full_others_masked`：本人
+   /users/me 返回明文手机号；注册响应（他人视角 UserOut）保持脱敏形态；无 token 401。
+6. **README 用例数修正**：395 → 398 个用例（398 = 399 − 2 诊断 + 1 新增，collect-only
+   实测口径；396 passed + 2 skipped）。
+
+### 为什么
+卡#3 安检报告 3 条遗留（前端验证码硬编码兜底、/users/me 自查出口、--admin-pwd 默认
+弱口令）+ 卡#2 遗留卫生项（临时诊断文件）+ 卡#6 发现的 README 数字出入，用户授权
+"修到底"。定性说明：`'123456'` 兜底在生产（SHOW_SMS_CODE=False）下会因后端不返回
+dev_code 而生效，页面弹出「演示验证码：123456」——后端真码为 secrets 随机 6 位，
+填 123456 注册会被拒，实际危害是生产页挂错误万能码提示并泄漏演示约定，非注册绕过；
+但硬编码兜底属安检红线，一律清除。
+
+### 怎么验证的
+- `grep -rn "123456" web/`（排除 node_modules/dist）：无匹配；`admin123456` 生产代码
+  （scripts/app/web/src）无匹配；
+- 代码走查：LoginView.vue 展示条 `v-if="devCode"`，SHOW_SMS_CODE=False 时 dev_code
+  缺省 → devCode 留空 → 提示条不显示、验证码框为空，无任何自动填码路径；
+- `pytest tests/test_auth.py`：14 passed（含新增断言）；
+- seed.py 缺参：`error: --admin-pwd 为必填项（安全要求：管理员禁止使用默认/弱口令）`
+  EXIT=2；带随机密码 + 临时 sqlite 库跑通 EXIT=0（dev.db 未触碰）；
+- `pytest` 全量串行单进程：**396 passed, 2 skipped, 0 failed**（7m37s），EXIT=0；
+- `py_compile`（user.py/items.py/seed.py/test_auth.py）EXIT=0；零 git 写操作；
+  变更仅限：web/src/views/LoginView.vue、web/src/api/mockAdapter.ts、
+  app/schemas/user.py、app/routers/items.py、scripts/seed.py、tests/test_auth.py、
+  README.md、本 CHANGELOG、删除 tests/test_zz_diag.py。
+
 ## 同步推理移出事件循环 — 三个 async 路由 to_thread 化（2026-09-23，卡#7）
 
 ### 改了什么
@@ -536,3 +582,6 @@ v14/v15.1 引入两类口径演进后，测试套件停在旧期望值上，实�
 - 「我的匹配」聚合接口 /matches 的 as_lost 分支补 MatchExclusion 过滤——
   此前排除项只在单失物列表过滤，聚合视图刷新后"复活"（用户实测反馈）
 - 新增防回归测试：排除项在聚合接口同样隐藏、排除池保持可见
+
+## 安检 L2（2026-09-23）
+- L2 上线前档本地可跑项全部检查通过（容器非root/固定版本、认证端点独立严限流、日志脱敏、pip-audit 高危0、.dockerignore 补 .env 排除）

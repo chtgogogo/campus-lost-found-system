@@ -21,6 +21,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# 安检 L2（卡#9，2026-09-23）：非 root 运行 —— 业务进程不持 root（最小权限基线）。
+# uploads/models 为宿主机卷挂载，目标环境需保证 uid=1000 对挂载点可写（部署清单项）。
+RUN useradd --create-home --uid 1000 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # 启动前先 seed 分类 + 演示数据，再拉起 uvicorn
