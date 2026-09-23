@@ -698,7 +698,29 @@ class MatchService:
         # 各类扣罚（品牌冲突/状态冲突/数量超供/互斥属性）必须全额跟随。
         # MATCH_NORMALIZE=False（回滚开关）时保持旧行为（raw 含缺省分，k=1）。
         if settings.MATCH_NORMALIZE:
-            normalized_raw = sum(dims[d] for d in V2_DIMENSIONS if provided.get(d)) - brand_pen - penalty
+            # 安检回归修复（2026-09-24）：分子口径对称后，"候选侧没提该维度"与
+            # "候选提到但不符"同样计 0 分，前者被误伤（主集 8 条正样本压线翻转，
+            # 召回 80→55）。现对候选侧未提及的已提供维度给 γ×满分 中性贡献：
+            # 缺失≠不符；候选提了但低分/冲突照实计（不虚高）。扣罚全额跟随。
+            # γ 只作用于 5 个文本维度：photo_category 是图片证据维（无图=无证据，
+            # 给中性分会系统性抬分），time 有自己的衰减语义，均不参与。
+            gamma_dims = ("qty", "color", "state", "place", "keyword")
+            found_provided = {
+                "qty": found_f.has_qty,
+                "color": found_f.has_color,
+                "state": found_f.has_state,
+                "place": found_f.has_place,
+                "keyword": found_f.has_keyword,
+            }
+            maxima = dim_max_scores()
+            gamma = float(getattr(settings, "MATCH_NEUTRAL_GAMMA", 0.0))
+            normalized_raw = sum(
+                (gamma * maxima[d] if not found_provided.get(d) else dims[d])
+                for d in V2_DIMENSIONS if provided.get(d) and d in gamma_dims
+            ) + sum(
+                dims[d] for d in V2_DIMENSIONS
+                if provided.get(d) and d not in gamma_dims
+            ) - brand_pen - penalty
         else:
             normalized_raw = raw_total
         total = min(max(normalized_raw * norm_factor, 0.0), 100.0)

@@ -50,9 +50,9 @@ _NO_HASH = None
 
 
 def test_threshold_config():
-    # 卡#6（2026-09-23）：历史权重（MATCH_W1..W4 / MATCH_W_TAG / flow-v2 MATCH_W_*）已随
-    # config 下线，本用例只守护仍生效的阈值与展示口径常量。
-    assert settings.MATCH_THRESHOLD == 80.0
+    # 卡#6（2026-09-23）：历史权重已随 config 下线；v16（09-24）阈值 80→78 随归一化
+    # 分布重标定，本用例守护仍生效的阈值与展示口径常量。
+    assert settings.MATCH_THRESHOLD == 78.0
     # flow-v3：低分「视觉」阈值 60 —— 仅供前端失主侧弱化展示，与 suspected(80) 完全解耦；
     # 后端业务代码不得引用（不参与召回/打分/落库），此处断言仅守护前后端常量单一事实源不漂移。
     assert settings.MATCH_LOW_SCORE == 60.0
@@ -304,7 +304,9 @@ def test_other_class_pure_tag_partial_match_not_suspected():
     lost = _item(category_name="其他", tags=["雨伞", "黑色"], lost_time=datetime(2026, 7, 16, 10, 0, 0))
     found = _item(category_name="其他", tags=["雨伞"], found_time=datetime(2026, 7, 16, 10, 0, 0))
     s = MatchService().score(lost, found)
-    assert s == pytest.approx(40.0, abs=0.01)
+    # v16 γ 中性分：候选无图（photo_category）与未提颜色各得 γ×满分的一半档贡献，
+    # 40 → 60；意图不变：仍远低于阈值 78，不进疑似。
+    assert s == pytest.approx(60.0, abs=0.01)
     assert MatchService.is_suspected(s) is False
 
 
@@ -460,3 +462,48 @@ def test_legacy_other_class_photo_only_path():
     s = MatchService().score(lost, found)
     assert s == pytest.approx(80.0, abs=0.01)
     assert 0.0 <= s <= 100.0, "上限封顶，不溢出"
+
+# ---------------- v16：候选侧缺失中性分（安检回归修复） ----------------
+
+def _v16_pair(color_found):
+    """失主：蓝色保温杯@5教（类目/颜色/地点齐全）；候选：类目命中、颜色按参数给。"""
+    lost = _item(category_name="保温杯", tags=["保温杯", "蓝色"], location="5教",
+                 color="蓝色", lost_time=datetime.fromisoformat("2026-09-24T09:00:00"))
+    found = _item(category_name="保温杯", tags=["保温杯"],
+                  color=color_found, found_time=datetime.fromisoformat("2026-09-24T10:00:00"))
+    return lost, found
+
+
+def test_v16_neutral_gamma_for_unmentioned_candidate_dim(monkeypatch):
+    """失主提到颜色、候选侧没提颜色 → γ 中性分使总分高于 γ=0（缺失≠不符）。"""
+    from app.core.config import settings as _s
+    lost, found = _v16_pair(color_found=None)
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.0)
+    total_off = MatchService().score(lost, found)
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.5)
+    total_on = MatchService().score(lost, found)
+    assert total_on > total_off  # 中性分生效
+
+
+def test_v16_candidate_mentioned_low_score_not_boosted(monkeypatch):
+    """候选提到了颜色但不符（绿 vs 蓝）→ γ 不得抬分（提到但不符照实计）。"""
+    from app.core.config import settings as _s
+    lost, found = _v16_pair(color_found="绿色")
+    found.location = "5教"  # place 两侧都对齐，隔离出颜色单维差异
+    found.description = "绿色保温杯"  # 候选描述提到了颜色（has_color=True）
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.0)
+    total_off = MatchService().score(lost, found)
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.5)
+    total_on = MatchService().score(lost, found)
+    assert total_on == pytest.approx(total_off)  # 候选提供了颜色：γ 不介入
+
+
+def test_v16_gamma_zero_restores_symmetric_behavior(monkeypatch):
+    """γ=0 回滚开关：恢复纯口径对称行为（候选缺失维度计 0）。"""
+    from app.core.config import settings as _s
+    lost, found = _v16_pair(color_found=None)
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.5)
+    total_on = MatchService().score(lost, found)
+    monkeypatch.setattr(_s, "MATCH_NEUTRAL_GAMMA", 0.0)
+    total_off = MatchService().score(lost, found)
+    assert total_off < total_on

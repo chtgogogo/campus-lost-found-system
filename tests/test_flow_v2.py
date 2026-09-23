@@ -366,10 +366,13 @@ def test_luggage_text_compat_view_and_normalized_total():
     # f2：qty=15(两个 vs 两个) + color=20(黄/粉全中) + state=3(中性分) → text=38。
     # 两侧 k 相同（k 只由失主侧决定：W=photo_category+qty+color+place=70 → k=100/70≈1.4286），
     # 因此本用例真正要守护的「f2 明显优于 f1」仍然成立。
+    # v16 γ 中性分（MATCH_NEUTRAL_GAMMA=0.5）：候选侧未提及的**已提供**文本维度按 0.5×满分
+    # 计入归一化分子（f1 的 qty 3→7.5、color 0→10；f2 的 place 0.5→7.5），total 相应上浮
+    # （54.29→75.0、78.57→89.29）；γ 只作用于 total 分子，dims 与旧键 text 明细不变。
     assert d1["text"] == pytest.approx(21.0, abs=0.01), f"实际 {d1['text']}"
     assert d2["text"] == pytest.approx(38.0, abs=0.01), f"实际 {d2['text']}"
-    assert d1["total"] == pytest.approx(54.29, abs=0.01), f"实际 {d1['total']}"
-    assert d2["total"] == pytest.approx(78.57, abs=0.01), f"实际 {d2['total']}"
+    assert d1["total"] == pytest.approx(75.0, abs=0.01), f"实际 {d1['total']}"
+    assert d2["total"] == pytest.approx(89.29, abs=0.01), f"实际 {d2['total']}"
     assert d2["total"] > d1["total"], "数量+颜色全中的候选必须排在只命中地点的候选之前"
     # 可解释：shared_text 含命中词
     assert sorted(svc.shared_text_tokens(lost, f2)) == ["两个", "粉色", "行李箱", "黄色"]

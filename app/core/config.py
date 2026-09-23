@@ -102,7 +102,9 @@ class Settings(BaseSettings):
     # 历史遗留的 flow-v2 五维权重（MATCH_W_PHOTO/CAT/TEXT/LOC/TIME/APP/FEAT/OTHER）、
     # v4 MATCH_W_TAG、v2 MATCH_W1..W4 已于卡#6（2026-09-23）整体下线：业务代码零引用，
     # 仅存 tests/test_match.py 的存续断言随字段一并删除。git 历史可查旧值。
-    MATCH_THRESHOLD: float = 80.0   # 疑似匹配阈值：判定对象为**归一化后**的 total（v10 维持 80 不变）
+    MATCH_THRESHOLD: float = 78.0   # 疑似匹配阈值：判定对象为**归一化后**的 total。
+    # 80→78（2026-09-24 安检回归修复）：归一化分子口径对称后分数系统性下移约 4 分，
+    # 阈值随分布重标定（主集 F1 回到 78.0；配合 MATCH_NEUTRAL_GAMMA=0.5，扫描数据见安检报告）。
     # flow-v3：低分「视觉」阈值。仅供前端（失主侧）弱化展示对齐口径 —— 弱化标签、虚线卡片、
     # 低分二次确认文案；与 suspected 判定（MATCH_THRESHOLD=80）完全解耦。
     # ⚠️ 后端业务代码不得引用本常量；此处定义的唯一目的是前后端常量单一事实源与可测性。
@@ -133,6 +135,11 @@ class Settings(BaseSettings):
     # 铁律：W_provided **只由失主侧决定**（候选侧永不进分母），否则同一失物的候选不可比、排序失真。
     MATCH_NORMALIZE: bool = True          # kill switch：False 时 k≡1.0，退回纯 raw 分（可回滚/AB）
     MATCH_NORM_MIN_WEIGHT: float = 50.0   # 防爆下限：仅填类目的纯图失物封顶 40 分，避免满分误报
+    # 归一化中性分 γ（安检回归修复 2026-09-24）：失主提供了某维度、但候选侧完全没提
+    # 该维度信息时，分子按 γ×该维度满分 计入（"对方没提到"≠"不符"，给部分信任）；
+    # 候选侧提到了该维度则照实计分（提到但不符→低分/冲突罚照走，不虚高）。
+    # γ=0 退回纯口径对称行为；扫描定值见 docs/pipeline/安检报告.md。
+    MATCH_NEUTRAL_GAMMA: float = 0.5
     # v10（变更 B）疑似候选追加总量护栏：单次发布最多生成 max(MATCH_TOP_N, MATCH_SUSPECT_MAX) 条候选。
     MATCH_SUSPECT_MAX: int = 60   # v15: 随 TOP_N=50 扩容（疑似追加护栏须大于保底，否则撑破能力失效）
 

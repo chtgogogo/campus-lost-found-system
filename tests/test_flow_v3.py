@@ -29,6 +29,7 @@ from app.core.config import settings
 from app.models.audit import AuditLog
 from app.models.item import FoundItem
 from app.models.match import HandoverCode, MatchRecord
+from app.services.match_service import dim_max_scores
 
 from conftest import API, PNG, auth_header, register_and_login
 
@@ -294,7 +295,7 @@ def test_f3_08_keep1_candidate_hidden_from_finder(client):
 
 
 # ============ 保底条数 / 回填 / 常量 / 明细 / 软删（F3-9 ~ F3-13） ============
-def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
+def test_f3_09_keep1_respects_base_quota_when_not_suspected(client, monkeypatch):
     """F3-9 保底条数不被 keep1 击穿（回归点 §9-3 / §2.7 R-3）：12 件 keep1 拾物 + 1 件失物。
 
     ⚠️ v10 变更 B 语义订正（原用例名 `..._top10_cap_not_broken_by_keep1`）：
@@ -316,6 +317,10 @@ def test_f3_09_keep1_respects_base_quota_when_not_suspected(client):
     """
     token_finder, _, _, _, _ = register_and_login(client, "f309f")
     token_owner, _, _, _, _ = register_and_login(client, "f309o")
+    # v16 重标定（阈值 80→78 + γ 中性分）使本场景最高分 78.21 撞上新阈值 78，前置条件失效。
+    # 本用例测的是 keep1 **配额逻辑**而非阈值，故 monkeypatch 把阈值钉回 80 隔离全局配置漂移，
+    # 保住「全部非疑似 → 恰好保底条数」的原始测试语义（阈值本身由 f3_11 / v10 用例守护）。
+    monkeypatch.setattr(settings, "MATCH_THRESHOLD", 80.0)
     # v15：TOP_N 扩容为 50，构造量须覆盖保底条数
     for i in range(settings.MATCH_TOP_N + 3):
         _publish_found(client, token_finder, "书包", f"捡到第{i}个黑色书包", keep_status="1")
@@ -373,12 +378,13 @@ def test_f3_10_legacy_keep1_self_backfill_via_refresh(client):
 
 
 def test_f3_11_low_score_and_threshold_constants_decoupled():
-    """F3-11 常量断言（变更 B）：MATCH_LOW_SCORE=60 新增，MATCH_THRESHOLD=80 未漂移。
+    """F3-11 常量断言（变更 B）：MATCH_LOW_SCORE=60 新增，MATCH_THRESHOLD=78 未漂移。
 
-    两者语义完全解耦：60 = 失主侧低分**视觉**弱化阈值（仅前端用）；80 = suspected 判定唯一口径。
+    两者语义完全解耦：60 = 失主侧低分**视觉**弱化阈值（仅前端用）；78 = suspected 判定唯一口径
+    （v16 重标定：80→78，配合 MATCH_NEUTRAL_GAMMA=0.5，主集 F1 恢复 78.0）。
     """
     assert settings.MATCH_LOW_SCORE == 60.0, f"低分视觉阈值应为 60.0，实际 {settings.MATCH_LOW_SCORE}"
-    assert settings.MATCH_THRESHOLD == 80.0, f"suspected 阈值应保持 80.0，实际 {settings.MATCH_THRESHOLD}"
+    assert settings.MATCH_THRESHOLD == 78.0, f"suspected 阈值应为 78.0（v16 重标定），实际 {settings.MATCH_THRESHOLD}"
     assert settings.MATCH_LOW_SCORE < settings.MATCH_THRESHOLD, "低分阈值须严格低于疑似阈值"
     # v10 变更 B：MATCH_TOP_N 语义由「候选硬上限」改为「普通候选保底条数」，取值仍为 10。
     assert settings.MATCH_TOP_N == 50, "普通候选保底条数（v15 扩容）"
@@ -447,13 +453,17 @@ def test_f3_12_score_detail_five_dimensions_on_keep1_candidate(client):
         f"raw_total 应等于 photo+text+time，实际 raw_total={out['raw_total']} "
         f"photo={out['photo']} text={out['text']} time={out['time']}"
     )
-    # 归一化关系（2026-09-23 口径修复后）：total == clamp(已提供维度分子 × norm_factor, 0, 100)，
-    # 分子只计失主已提供维度（raw_total 展示口径仍含缺省中性分），
-    # 故恒等式弱化为上界关系：total ≤ clamp(raw_total × norm_factor, 0, 100)。
-    raw_ceiling = min(100.0, max(0.0, out["raw_total"] * out["norm_factor"]))
-    assert out["total"] <= raw_ceiling + 0.05, (
-        f"total 不应超过 raw_total×norm_factor 上界，"
-        f"实际 total={out['total']} 上界={raw_ceiling}"
+    # 归一化关系：total == clamp(分子 × norm_factor, 0, 100)。
+    # v16 γ 中性分后「total ≤ raw_total×norm_factor」上界不再成立——分子对候选侧未提及的
+    # 已提供文本维度给 0.5×满分（可高于该维在 raw_total 里的缺省/零分）。γ 时代仍严格成立的
+    # 真上界是：分子每项 ≤ 该维满分 → total ≤ clamp(Σ(失主已提供维度满分) × norm_factor, 0, 100)，
+    # 仍守护「归一化不会把分数放大到超过失主所提供信息的理论上限」这一原始意图。
+    maxima = dim_max_scores()
+    provided_cap = sum(maxima[d] for d in out["provided_dims"])
+    ceiling = min(100.0, max(0.0, provided_cap * out["norm_factor"]))
+    assert out["total"] <= ceiling + 0.05, (
+        f"total 不应超过失主已提供维度满分上限×norm_factor，"
+        f"实际 total={out['total']} 上界={ceiling}（provided_dims={out['provided_dims']}）"
     )
     # location 是 place 的旧键别名，且已被计入 text
     assert out["location"] <= out["text"] + 1e-6, "location(=place) 应已含在 text 内"

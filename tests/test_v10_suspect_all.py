@@ -49,8 +49,12 @@ def test_b2_cut_appends_all_suspects_beyond_base_n():
 
 
 def test_b3_cut_with_zero_quota_returns_only_suspects():
-    """AC-B3：quota=0（失物候选已满）时只补 ≥80 的疑似，普通候选一条不补。"""
-    scored = _pairs([95.0, 88.0, 81.0] + [79.9 - i for i in range(10)])
+    """AC-B3：quota=0（失物候选已满）时只补 ≥阈值 的疑似，普通候选一条不补。
+
+    v16 重标定（阈值 80→78）：普通候选字面量起点由 79.9 下移到 76.9，
+    保证整组明确低于阈值，保住「只返回疑似」的测试意图。
+    """
+    scored = _pairs([95.0, 88.0, 81.0] + [76.9 - i for i in range(10)])
     out = _cut_with_suspects(scored, 0)
     assert len(out) == 3
     assert all(s >= THRESHOLD for s, _ in out)
@@ -77,8 +81,12 @@ def test_b6_cut_empty_and_short_lists():
 
 
 def test_b7_cut_boundary_score_exactly_threshold():
-    """边界：恰好等于阈值的候选算疑似（`>=` 而非 `>`）。"""
-    scored = _pairs([THRESHOLD] * 3 + [79.99])
+    """边界：恰好等于阈值的候选算疑似（`>=` 而非 `>`）。
+
+    v16 重标定（阈值 80→78）：对照样本由 79.99 字面量改为 THRESHOLD-0.01，
+    使「恰好阈值 vs 阈值下 0.01」的边界关系不随未来阈值漂移再失效。
+    """
+    scored = _pairs([THRESHOLD] * 3 + [THRESHOLD - 0.01])
     assert len(_cut_with_suspects(scored, 0)) == 3
 
 
