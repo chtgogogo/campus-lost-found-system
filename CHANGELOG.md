@@ -2,6 +2,50 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 测试复核 — "全量 55 failed"判定为环境假象，双向顺序实测全绿（2026-09-23）
+
+### 改了什么
+1. **零代码/零测试改动**（外科纪律：无可修之败，不动测试基建）。
+2. 记档订正：`docs/pipeline/cards/卡2_测试隔离修复.md` 写入复现实测证据；本条目如实说明。
+
+### 为什么
+上一轮（收尾）记档称"全量 pytest 通过"，随后另一次实测记录为 55 failed / 339 passed /
+2 skipped 并初步判为"测试顺序依赖"。本轮按卡 #2 复现取证：同一工作区、项目 `.venv`、
+串行单进程，**正序与 42 个测试文件全倒序各跑一轮全量**，均 394 passed / 2 skipped /
+**0 failed**；卡面点名 3 个"失败"用例另抽 2 例，单跑 5/5 通过。结论：55-failed 未复现，
+最可能是与"被中断的上一派遣"并发运行、进程间互删共享测试库 `tests/_mvp_qa.db` 所致
+（与 conftest 注释记载的随机 401/StaleDataError 同源症状）；非业务 bug，亦无顺序依赖。
+此前"全量通过与实测不符"的矛盾就此澄清：**通过为真，55-failed 为一次性环境假象**。
+
+### 怎么验证的
+- 全量正序：`394 passed, 2 skipped, 580 warnings in 681.00s`，EXIT=0；
+- 全量倒序（跨文件顺序全反转）：`394 passed, 2 skipped, 580 warnings in 529.93s`，EXIT=0；
+- 单跑抽查 5/5 通过（test_im_send_message_success_and_audit_mirror、test_exclude_batch、
+  test_v4_manual_match_requires_owner、test_handover_e2e_and_audit、test_register_login_success）；
+- 本轮新增改动仅 `CHANGELOG.md` 本条目与卡 #2 文档（工作区在此前已有收尾卡未提交改动：
+  app/main.py、README.md、LICENSE 等，与本轮无关）。
+
+## 收尾 — LICENSE + CORS 收敛 + 仓库清扫（2026-09-23）
+
+### 改了什么
+1. 新增 `LICENSE`（MIT，Copyright (c) 2026 CaoHT），README「许可证」一节同步指向。
+2. `app/main.py` CORS 收敛：`allow_origins` 由 `["*"]` 收紧为本地前端开发源
+   `["http://localhost:5173", "http://127.0.0.1:5173"]`（与 web/vite.config.ts 的 dev 端口
+   5173 核实一致）；`allow_credentials / allow_methods / allow_headers` 保持不动。
+3. 仓库清扫：删除 `_dbg_v13.db`、`nul`（Windows 保留名残留文件）、`_ccache_backup/`
+   （pip 缓存备份）；`deliverables/paper-figs/` 下 3 个下划线开头临时脚本
+   （`_scan_shuangduan.py` / `_scan_usecase.py` / `_fix_shuangduan.py`）归档至
+   `docs/attic/paper-figs/`。
+
+### 为什么
+代码侧收尾：补齐开源许可证；通配符 origin 与 `allow_credentials=True` 同用属 CORS 配置
+缺陷（星号会禁用凭据且扩大攻击面）；根目录杂物影响工程观感与检索。
+
+### 怎么验证的
+- 全量 pytest 通过（见卡验收输出）；`/health` 探活 200 后进程已杀净；
+- `grep '"\*"' app/main.py` 确认 CORS origin 通配符已消失（仅余 allow_methods/headers 的
+  方法级通配，属刻意保留）。
+
 ## v13 — 安全加固 + 词边界修复 + 匹配评测集（2026-09-07）
 
 ### 改了什么
