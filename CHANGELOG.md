@@ -20,6 +20,8 @@
 - **全量 pytest**：**406 passed, 2 skipped, 0 failed**（408 收集，286.89s，退出码 0；改前 399 passed 基线 `pytest_full_20260924.txt` / 改后 `pytest_full_after_20260924.txt`）——净增 7 用例零回归。
 - **评测不变**：主集 F1 仍 **78.0%**（P76.2/R80.0，`run_eval_after_20260924.txt`）——打分引擎零改动；评测脚本已不写任何文件。
 - **README 用例数**：401→408（collect 实测口径）。
+- **断言口径声明（测试纪律 B 类）**：`test_bestpt_model_loads` 与 v12 家族召回 e2e 补「best.pt 权重缺失 → skip」护栏（22MB 本地训练产物不进 git，CI/裸仓无权重；消融实验证实：移走权重后 v12 e2e 本地同样失败——photo_cat 维只能拿缺失档 10 分，归一化 raw 上限 35 < 阈值 78，数学上不可达）。本地有权重时两用例照常真跑，防回归价值不变。
+- **CI 首次转绿（历史首次完整跑通 pytest）**：run 35949297402（commit 0bbd6e9）conclusion=**success**——Lint「All checks passed!」+ **404 passed, 4 skipped, 0 failed**（Linux，113.85s；4 skip = MySQL×1 + 真实图×1 + 权重护栏×2，与本地 406+2 的差异全在环境依赖项，口径可对账）。
 
 ## v16（2026-09-24）· 安检回归修复：γ 中性分 + 阈值重标定
 
