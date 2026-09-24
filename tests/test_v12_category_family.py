@@ -9,6 +9,10 @@
 """
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from app.core.config import settings
 from app.services.category_service import (
     category_affinity,
@@ -150,6 +154,14 @@ class TestFamilyRecallE2E:
 
         v12 前该对既不召回（无共享名词 tag）也不给类目分；v12 后同家族召回 + 15 分档。
         """
+        # 审查 P0-CI 修复（2026-09-24）：本用例经发布链路接真实视觉——photo_cat 维度
+        # 需 best.pt 检出才能拿「同判」20 分档；权重缺失时（CI/裸仓）该维只能拿
+        # 「缺失/其他」10 分档，归一化后 raw 上限 35 < 阈值 78，数学上不可能过。
+        # 故权重缺失 → skip（与 test_qa_bestpt_regression 的真实图用例同口径），
+        # 本地有权重时照常真跑（防回归价值不变）。
+        weight_path = os.path.join(settings.YOLO_MODEL_DIR, settings.YOLO_COCO_MODEL)
+        if not os.path.exists(weight_path):
+            pytest.skip(f"best.pt 权重缺失，photo_cat 维无法达阈值（非阻塞）: {weight_path}")
         token_a, *_ = register_and_login(client, "fa")
         token_b, *_ = register_and_login(client, "fb")
 

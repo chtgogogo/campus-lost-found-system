@@ -17,6 +17,7 @@ import sys
 import pytest
 from PIL import Image
 
+from app.core.config import settings
 from app.core.seed import SEED_CATEGORIES
 from app.services import vision_service as vs_mod
 from app.services.vision_service import VisionService
@@ -39,6 +40,12 @@ def _seeded_names() -> set[str]:
 
 def test_bestpt_model_loads():
     """best.pt 必须能加载，且是 12 类校园失物模型（11 校园类 + other，索引 0-11）。"""
+    # 审查 P0-CI 修复（2026-09-24）：best.pt 为 22MB 本地训练产物（gitignore，
+    # CI/裸仓不携带）。权重缺失 → skip（与下方真实图用例同口径），套件恢复
+    # 「不依赖真实模型」的设计承诺；本地有权重时照常真跑。
+    weight_path = os.path.join(settings.YOLO_MODEL_DIR, settings.YOLO_COCO_MODEL)
+    if not os.path.exists(weight_path):
+        pytest.skip(f"best.pt 权重缺失（CI/裸仓非阻塞）: {weight_path}")
     vs = VisionService()
     assert vs._coco_model is not None, "best.pt 未加载（权重缺失或路径错误）"
     names = list(vs._coco_model.model.names.values())
