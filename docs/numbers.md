@@ -2,7 +2,7 @@
 
 > 纪律：任何对外场合（简历/面试/README）**只说这张表里的数字**；每个数字必须能沿
 > 「来源文件 → 复现命令」两步对账。改了代码先改这张表。
-> 最后核对：2026-09-24（HEAD = CI 双作业绿，见下）。
+> 最后核对：2026-09-25（v17 工程化补强批次）。
 
 ---
 
@@ -26,6 +26,7 @@
 | 8 | 演示态死代码拆除 **约 -2860 行 / 5 文件** | git commit f6a8905 | `git show --stat f6a8905` |
 | 9 | CI **双作业绿**：后端 ruff+407 passed；前端 vue-tsc+vitest 8 passed | `审查证据/ci_run_35953746464_batch2_green.txt` | GitHub Actions 页（run 35953746464 / 35954141816） |
 | 10 | 安全专项：**JWT type 隔离 / 封禁闭环 / 交接码恒时比较+错5次锁定+行锁 / 审计黑匣子** | CHANGELOG v16 前后各条 + `tests/test_p1_hardening.py` 等 | `python -m pytest tests/test_auth.py tests/admin_tests/ -q` |
+| 11 | 评测 CI 门禁阈值 **76**（主集 F1 78.0 − 2pp 容差；`--fail-under 99` 实测退出码 1 会挡） | `app/core/config.py`（EVAL_FAIL_UNDER）+ `审查证据/eval_gate_fail_under_99_block.txt` | `python evaluation/run_eval.py --fail-under 99; echo $?`（退出码 1=门禁生效） |
 
 ## 必须带着限定语说的数字（主动交代，防追问）
 

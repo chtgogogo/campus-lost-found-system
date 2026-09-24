@@ -43,6 +43,23 @@ jobs:
         # 仅对后端运行时与测试代码做 lint（tools/ 含不可改动的文档脚本，不纳入 CI lint 面）
         run: ruff check app tests
 
+      - name: Eval gate (main set 40 pairs)
+        # v17 评测门禁：主集 F1 低于 --fail-under（缺省 settings.EVAL_FAIL_UNDER=76，
+        # 单一事实源在 config.py）时退出码非 0，阻断 CI；F1/召回率写入 Job Summary。
+        # 放在 pytest 之前：秒级跑完，快速失败省 5 分钟测试时间。
+        # 红线：盲集 dataset_blind.json 禁止挂进常规 CI（每 commit 都跑会被「跑熟」失效），
+        # 仅打 tag 时人工跑并归档（CHANGELOG v17）。
+        run: |
+          set -o pipefail
+          python evaluation/run_eval.py 2>&1 | tee eval_gate.txt
+          {
+            echo "## 匹配引擎评测门禁（主集 40 对，--fail-under 见 config.EVAL_FAIL_UNDER）"
+            echo ""
+            echo '```'
+            head -7 eval_gate.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run tests
         # 测试环境 REDIS_ENABLED=false（见 tests/conftest.py），KV 走进程内内存兜底，
         # 不依赖外部 Redis / MySQL；MySQL 相关用例在无服务时自动 skip。

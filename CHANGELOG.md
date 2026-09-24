@@ -2,6 +2,24 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## v17 · 工程化补强六项（2026-09-25）
+
+### ① 评测脚本进 CI 门禁
+
+**做了什么**
+1. `evaluation/run_eval.py` 新增 `--fail-under <阈值>` 参数：所选数据集 F1（百分数）低于阈值时退出码 1，风格与既有 `--out`/`--force` 一致；判定逻辑抽为可单测的 `check_gate()`（等于阈值=通过，1e-9 浮点容差）。
+2. 门禁阈值单一事实源：`app/core/config.py` 新增 `EVAL_FAIL_UNDER = 76.0`（= 主集 F1 78.0 − 2pp 容差），`--fail-under` 缺省取它，workflow 里不散落魔法数字。
+3. `ci.yml` 后端作业新增 **Eval gate** 步骤（置于 pytest 之前，秒级快速失败）：跑主集 40 对，F1/召回率写入 `$GITHUB_STEP_SUMMARY`。
+4. **红线落文件**：盲集 `dataset_blind.json` 不挂进常规 CI（每 commit 都跑会被「跑熟」失效）——workflow 注释与 run_eval docstring 双处声明，仅打 tag 时人工跑并归档。
+
+**解决了什么问题**
+匹配引擎精度劣化此前只能靠人肉记得跑评测发现；现在任何让主集 F1 跌破 76 的提交会被 CI 直接挡下，且门禁阈值收敛到 config 单点可调。
+
+**怎么验证的**
+- 新增 `tests/test_eval_gate.py` 6 用例全绿（单元级判定 4 条 + 子进程真实退出码 2 条）。
+- 阈值 99 阻断实证（执行指令①验收项）：`python evaluation/run_eval.py --fail-under 99` → **退出码 1**，输出 `[门禁不通过] F1 = 78.0% < --fail-under 99`（证据 `审查证据/eval_gate_fail_under_99_block.txt`）；默认门禁 `--fail-under 76` → 退出码 0（`审查证据/eval_gate_default_76_pass.txt`）。
+- 全量回归：`pytest tests/ -q` **415 passed, 2 skipped, 0 failed**（417 收集，330.38s，退出码 0，`审查证据/pytest_v17_task1.txt`）；`ruff check app tests` 0 错误。
+
 ## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档
 
 **做了什么**

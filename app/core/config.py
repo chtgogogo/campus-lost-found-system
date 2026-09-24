@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     # v4 MATCH_W_TAG、v2 MATCH_W1..W4 已于卡#6（2026-09-23）整体下线：业务代码零引用，
     # 仅存 tests/test_match.py 的存续断言随字段一并删除。git 历史可查旧值。
     MATCH_THRESHOLD: float = 78.0   # 疑似匹配阈值：判定对象为**归一化后**的 total。
+    # v17 评测 CI 门禁下限（evaluation/run_eval.py --fail-under 的缺省值）：
+    # = 主集 F1 78.0 减 2pp 容差——门禁只挡「明显劣化」，给正常波动留余量；
+    # 红线：盲集 dataset_blind.json 禁止挂进常规 CI（每 commit 都跑会被「跑熟」失效），
+    # 仅打 tag 时人工跑并归档（CHANGELOG v17）。
+    EVAL_FAIL_UNDER: float = 76.0
     # 80→78（2026-09-24 安检回归修复）：归一化分子口径对称后分数系统性下移约 4 分，
     # 阈值随分布重标定（主集 F1 回到 78.0；配合 MATCH_NEUTRAL_GAMMA=0.5，扫描数据见安检报告）。
     # flow-v3：低分「视觉」阈值。仅供前端（失主侧）弱化展示对齐口径 —— 弱化标签、虚线卡片、

@@ -4,11 +4,18 @@
 
     .venv/Scripts/python.exe evaluation/run_eval.py            # 阈值取 settings.MATCH_THRESHOLD
     .venv/Scripts/python.exe evaluation/run_eval.py --threshold 70
+    .venv/Scripts/python.exe evaluation/run_eval.py --fail-under 99   # 演示门禁阻断（退出码 1）
 
 不依赖数据库/视觉模型：直接构造与 ORM 对象同构的 SimpleNamespace 喂给
 MatchService.score()（v10 七维均为文本/类目/时间维度，无需真实图片）。
 每次调权重后重跑本脚本，分数变化即调优依据（归档需显式 ``--out <文件名>``，
 默认只打印 —— 审查 P0（2026-09-24）：此前默认覆写 ``results-v13.md`` 历史证据）。
+
+v17（CI 门禁）：``--fail-under`` 使所选数据集 F1 低于阈值时以退出码 1 结束，
+供 ``.github/workflows/ci.yml`` 把主集评测挂进门禁；缺省值取
+``settings.EVAL_FAIL_UNDER``（76 = 主集 78.0 − 2pp 容差，单一事实源在 config）。
+**红线：盲集 dataset_blind.json 禁止挂进常规 CI**（每 commit 都跑会被「跑熟」失效），
+仅打 tag 时人工跑并归档结果。
 """
 from __future__ import annotations
 
@@ -91,6 +98,17 @@ def run(threshold: float, dataset_file: str = "dataset.json") -> dict:
     }
 
 
+def check_gate(result: dict, fail_under: float | None) -> bool:
+    """CI 门禁判定：F1（百分数口径）≥ fail_under 视为通过。
+
+    ``fail_under=None`` 表示未启用门禁，恒通过。1e-9 容差吸收浮点误差，
+    使「F1 恰好等于阈值」判定为通过（如 76.0 vs 0.76 的浮点表示）。
+    """
+    if fail_under is None:
+        return True
+    return result["f1"] * 100.0 >= fail_under - 1e-9
+
+
 def render(result: dict) -> str:
     lines = [
         f"# 评测结果（阈值 {result['threshold']}）",
@@ -126,6 +144,9 @@ if __name__ == "__main__":
                              "目标已存在时拒绝覆写，需 --force")
     parser.add_argument("--force", action="store_true",
                         help="允许覆写已存在的归档文件（防历史证据被静默覆盖）")
+    parser.add_argument("--fail-under", type=float, default=None,
+                        help="CI 门禁：所选数据集 F1（百分数）低于该值时以退出码 1 结束。"
+                             "缺省取 settings.EVAL_FAIL_UNDER（主集 76 = 78.0 − 2pp 容差）")
     args = parser.parse_args()
     result = run(args.threshold, args.dataset)
     report = render(result)
@@ -141,3 +162,11 @@ if __name__ == "__main__":
         print(f"[已写入 {out.name}]")
     else:
         print("[未写文件] 需要归档请加 --out <文件名.md>")
+    fail_under = args.fail_under if args.fail_under is not None else float(settings.EVAL_FAIL_UNDER)
+    if not check_gate(result, fail_under):
+        print(
+            f"[门禁不通过] F1 = {result['f1']:.1%} < --fail-under {fail_under:g}，"
+            f"以退出码 1 阻断（CI 用；本地演示可跑 --fail-under 99 复现）"
+        )
+        raise SystemExit(1)
+    print(f"[门禁通过] F1 = {result['f1']:.1%} ≥ --fail-under {fail_under:g}")
