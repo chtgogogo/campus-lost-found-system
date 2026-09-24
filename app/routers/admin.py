@@ -151,6 +151,8 @@ def _serialize(row: AuditLog) -> dict:
 @router.get("/audit-logs/export")
 def export_audit_logs(
     format: str = Query("csv", description="csv 或 json"),
+    page: int = Query(1, ge=1, description="页码（审计表长期留存，导出必须分页）"),
+    page_size: int = Query(200, ge=1, le=1000, description="每页记录数（长表行数≈记录数×11）"),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -160,6 +162,9 @@ def export_audit_logs(
     每条审计记录的每个字段展开成一行，说明直接跟在值后面；不再有单独一块
     「审计日志字段说明」。记录 ID = 该审计记录的 `id`，方便在 Excel 里按 ID 分组
     看同一记录的所有字段。
+
+    **审查 P1（2026-09-24）**：补分页——此前 `.all()` 全表加载且审计按设计长期
+    留存，数据量增长后该接口必然超时/OOM。默认每页 200 条（≤2200 长表行）。
     """
     if format not in ("csv", "json"):
         return Response(
@@ -167,7 +172,14 @@ def export_audit_logs(
             status_code=400,
             media_type="application/json",
         )
-    rows = db.query(AuditLog).order_by(AuditLog.id.desc()).all()
+    total = db.query(func.count()).select_from(AuditLog).scalar() or 0
+    rows = (
+        db.query(AuditLog)
+        .order_by(AuditLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     records = [_serialize(r) for r in rows]
 
     # 长表：每条记录的每个字段一行（说明对该值的具体含义，而非只写字段名）
@@ -187,7 +199,9 @@ def export_audit_logs(
         payload = {
             "_meta": {
                 "导出声明": _AUDIT_LEGEND_HEADER,
+                "总记录数": total,
                 "记录条数": len(records),
+                "分页": {"page": page, "page_size": page_size},
                 "长表行数": len(long_rows),
                 "字段列表": _EXPORT_FIELDS,
             },

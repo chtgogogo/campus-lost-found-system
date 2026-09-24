@@ -308,8 +308,16 @@ def get_lost_item(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """详情与列表同一口径（审查 P1，2026-09-24）：软删/已过期的物品凭 ID 不可见。
+
+    此前列表页隐藏了软删/过期项，详情页却放行——撤销语义被详情接口绕过。
+    """
     lost = db.get(LostItem, item_id)
-    if not lost:
+    if (
+        not lost
+        or lost.deleted_at is not None
+        or (lost.expires_at is not None and lost.expires_at <= _now())
+    ):
         raise NotFoundError("失物不存在")
     return success(data=LostItemOut.from_model(lost))
 
@@ -379,8 +387,13 @@ def get_found_item(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """详情与列表同一口径（审查 P1，2026-09-24）：软删/已过期不可见。"""
     found = db.get(FoundItem, item_id)
-    if not found:
+    if (
+        not found
+        or found.deleted_at is not None
+        or (found.expires_at is not None and found.expires_at <= _now())
+    ):
         raise NotFoundError("拾物不存在")
     return success(data=FoundItemOut.from_model(found))
 

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import secrets
 from typing import Optional
 
@@ -32,6 +33,8 @@ from app.core.security import (
 from app.models.user import User
 from app.schemas.user import UserCreate
 
+logger = logging.getLogger(__name__)
+
 
 class AuthService:
     """认证相关业务。"""
@@ -48,8 +51,9 @@ class AuthService:
 
         code = f"{secrets.randbelow(1_000_000):06d}"
         redis_client.kv.set(f"sms:{phone}", code, ttl_sec=300)
-        # Mock：控制台输出（生产替换为真实短信网关）
-        print(f"[MOCK SMS] phone={phone} purpose={purpose} code={code}")
+        # Mock：日志输出（生产替换为真实短信网关）。审查 P1（2026-09-24）：
+        # print 直打 stdout 在生产会把手机号+验证码带进采集管道，改走 logging 统一治理。
+        logger.info("[MOCK SMS] phone=%s purpose=%s code=%s", phone, purpose, code)
         return code
 
     # ---------------- 管理员邀请码 ----------------
@@ -80,7 +84,11 @@ class AuthService:
     # ---------------- 注册 ----------------
     def register(self, data: UserCreate) -> tuple[User, str, str]:
         stored = redis_client.kv.get(f"sms:{data.phone}")
-        if not stored or stored != data.sms_code:
+        # 审查 P1（2026-09-24）：OTP 比对改恒时比较（encode 规避非 ASCII TypeError），
+        # 与邀请码/交接码的恒时比较标准对齐。
+        if not stored or not secrets.compare_digest(
+            stored.encode("utf-8"), data.sms_code.encode("utf-8")
+        ):
             raise OtpError()
 
         if self.db.query(User).filter(User.student_no == data.student_no).first():
@@ -170,7 +178,10 @@ class AuthService:
     # ---------------- 绑手机 ----------------
     def bind_phone(self, user: User, phone: str, sms_code: str) -> User:
         stored = redis_client.kv.get(f"sms:{phone}")
-        if not stored or stored != sms_code:
+        # 审查 P1（2026-09-24）：同 register，恒时比较
+        if not stored or not secrets.compare_digest(
+            stored.encode("utf-8"), sms_code.encode("utf-8")
+        ):
             raise OtpError()
         if self.db.query(User).filter(User.phone == phone, User.id != user.id).first():
             raise BizError(9001, "手机号已被其他账号绑定", http_status=409)

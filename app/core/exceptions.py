@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -14,6 +15,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from app.schemas.common import ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 
 class BizError(Exception):
@@ -134,10 +137,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _validation_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # 审查 P1（2026-09-24）：剥离 `input` 字段——Pydantic 校验错误默认回显
+        # 用户原始输入，等于把注入载荷原样弹回响应体，属信息泄漏面。
+        safe_errors = [
+            {k: v for k, v in err.items() if k != "input"} for err in exc.errors()
+        ]
         return JSONResponse(
             status_code=422,
             content=ErrorResponse(
-                code=9001, message="参数校验失败", data=exc.errors()
+                code=9001, message="参数校验失败", data=safe_errors
             ).model_dump(mode="json"),
         )
 
@@ -146,6 +154,22 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=ErrorResponse(code=exc.status_code, message=str(exc.detail), data=None).model_dump(
+                mode="json"
+            ),
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
+        """兜底未预期异常（审查 P1，2026-09-24）：统一信封 + 服务端日志。
+
+        此前未预期异常（如并发注册撞 unique、驱动层 DataError）会穿透到
+        Starlette 默认 500 纯文本，破坏全局 `{code,message,data}` 信封且无日志。
+        响应体不含异常细节，堆栈只进服务端日志。
+        """
+        logger.exception("未处理异常 path=%s: %r", request.url.path, exc)
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(code=5001, message="内部错误", data=None).model_dump(
                 mode="json"
             ),
         )

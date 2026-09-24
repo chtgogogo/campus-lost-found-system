@@ -26,6 +26,7 @@ from app.schemas.common import (
     MatchStatus,
 )
 from app.schemas.im import IMSessionListItem, PeerUser
+from app.utils.desensitize import desensitize_student_no
 
 
 # ---------------- 工具 ----------------
@@ -95,7 +96,11 @@ def build_session_title(db: Session, session: IMSession) -> str:
 
 
 def build_peer_user(db: Session, session: IMSession, user: User) -> PeerUser:
-    """取得会话对方用户摘要。"""
+    """取得会话对方用户摘要。
+
+    审查 P1（2026-09-24）：学号脱敏——会话列表对任意发起联系的用户可见，
+    明文学号属于可枚举抓取面，与「本人自查全量、他人视角脱敏」口径对齐。
+    """
     peer_id = (
         int(session.finder_user_id)
         if int(user.id) == int(session.lost_user_id)
@@ -103,7 +108,7 @@ def build_peer_user(db: Session, session: IMSession, user: User) -> PeerUser:
     )
     peer = db.get(User, peer_id)
     nickname = peer.real_name if (peer and peer.real_name) else f"用户{peer_id}"
-    student_no = peer.student_no if peer else ""
+    student_no = desensitize_student_no(peer.student_no) if peer else ""
     return PeerUser(id=peer_id, nickname=nickname, student_no=student_no)
 
 
