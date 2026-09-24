@@ -296,7 +296,7 @@ def exclude_matches_batch(item_id: int, payload: ExcludeBatchIn, db: Session = D
 @router.get("/lost-items/{item_id}/matches/excluded", response_model=StandardResponse)
 def list_excluded_matches(item_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """排除池列表：只显示仍有效的候选（对端已解决 / 软删 / 到期的自动消失）。"""
-    lost = _get_lost_owned_or_raise(db, item_id, user)
+    _get_lost_owned_or_raise(db, item_id, user)  # 属主校验：非本人访问在此 403
     rows = (
         db.query(MatchExclusion, FoundItem)
         .join(FoundItem, MatchExclusion.found_id == FoundItem.id)

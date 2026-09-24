@@ -123,7 +123,7 @@ def extract_brand_products(text: str | None) -> set[str]:
         return set()
     lowered = str(text).lower()
     products: set[str] = set()
-    for pattern, brand, product in _BRAND_MODEL_PATTERNS:
+    for pattern, _brand, product in _BRAND_MODEL_PATTERNS:
         if pattern.search(lowered) and product:
             products.add(product)
     for alias, brand in _ALIAS_TO_BRAND.items():
