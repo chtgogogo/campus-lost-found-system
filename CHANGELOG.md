@@ -1,3 +1,25 @@
+# 更新日志（CHANGELOG）
+
+所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
+
+## 审查 P0 修复（2026-09-24）· CI 转绿 + 令牌类型隔离 + 封禁闭环 + 口径对齐
+
+**做了什么**
+1. **CI 转绿**：修复 3 处 ruff 报错（`routers/match.py` 未使用变量、`services/brand_dict.py` 未使用循环变量、`tests/admin_tests/test_audit_export.py` 末尾缺换行）——此前 Lint 步失败导致 GitHub Actions 连续红叉，**pytest 步骤从未在 CI 执行到**。
+2. **令牌类型隔离（安全）**：access/refresh 的 JWT payload 增加 `type` claim；`get_current_user` 仅接受 `type=access`，`/auth/refresh` 显式校验 `type=refresh`。堵住「refresh token 当 access token 用」——此前两类令牌 payload 同构且网关不校验类型，登出仅吊销 refresh 的 jti，refresh 在 7 天有效期内仍可调用全部业务接口。
+3. **封禁/解封闭环（安全）**：新增 `POST /admin/users/{id}/ban`、`POST /admin/users/{id}/unban`（require_admin 守卫 + 审计 `ban`/`unban`）。此前 deps 每请求校验封禁态但全系统无封禁入口，风控闭环缺失。管理员账号禁封（400）、目标不存在 404、重复操作幂等。
+4. **口径对齐**：README 控制集 95.5%→**93.6%**（v16 实测，主动取舍）并补「主集参与调参、无盲集、存在乐观偏差」的诚实声明；「CHANGELOG 记录到 v15.2b」→v16；`config.py` 阈值注释 80→78。
+5. **评测脚本防覆写**：`run_eval.py` 默认只打印不写文件；`--out` 显式归档且目标已存在时拒绝覆写（需 `--force`）——此前默认覆写 `results-v13.md` 历史证据（审查中实发，已还原）。
+
+**解决了什么问题**
+公开仓库 CI 全红（简历硬伤）、登出形同虚设、封禁死链路、对外数字与实测漂移、历史评测证据可被静默覆盖。
+
+**怎么验证的**
+- **红-绿对照（测试纪律）**：新增 7 条测试先跑红（5 failed：refresh 当 access ×1、封禁链路 ×4；2 条配套用例靠既有机制已绿，作纵深防御快照），修复后同批 **51 passed**（`tests/test_auth.py` + `tests/admin_tests/test_admin_ban.py` + `tests/test_v10_admin.py`）；证据：审查工作区 `审查证据-20260924/newtests_red_before_fix.txt` / `newtests_green_after_fix.txt`。
+- **ruff**：3 errors → **0**（改前 `ruff_check_20260924.txt` / 改后 `ruff_check_after_lintfix.txt`）。
+- **全量 pytest**：**406 passed, 2 skipped, 0 failed**（408 收集，286.89s，退出码 0；改前 399 passed 基线 `pytest_full_20260924.txt` / 改后 `pytest_full_after_20260924.txt`）——净增 7 用例零回归。
+- **评测不变**：主集 F1 仍 **78.0%**（P76.2/R80.0，`run_eval_after_20260924.txt`）——打分引擎零改动；评测脚本已不写任何文件。
+- **README 用例数**：401→408（collect 实测口径）。
 
 ## v16（2026-09-24）· 安检回归修复：γ 中性分 + 阈值重标定
 
@@ -13,9 +35,6 @@
 - 控制集 @78：F1 93.6%（对照 v15.2b 95.5，-1.9pp 为语义修正代价；逐条对照仅 G2-D/G9-C/G10-C 三条边缘负样本翻转，强冲突主样本仍全部压制）；
 - 新增 3 条单测：γ 中性分生效 / 候选提及不符不被抬分 / γ=0 回滚（tests/test_match.py）；
 - 全量 pytest 396+ 通过（见安检报告）。**已知取舍**：控制集 -1.9pp 与「部分匹配」类场景分数上移（如纯标签用例 40→60，仍远低于阈值），已在用例注释与口径表说明。
-# 更新日志（CHANGELOG）
-
-所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
 ## 匹配归一化口径修复 + 交接并发加固 + 死代码清理（2026-09-23，安检复核）
 

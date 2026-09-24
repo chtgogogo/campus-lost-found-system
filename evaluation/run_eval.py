@@ -7,7 +7,8 @@
 
 不依赖数据库/视觉模型：直接构造与 ORM 对象同构的 SimpleNamespace 喂给
 MatchService.score()（v10 七维均为文本/类目/时间维度，无需真实图片）。
-每次调权重后重跑本脚本，分数变化即调优依据（结果写入 evaluation/results-v13.md）。
+每次调权重后重跑本脚本，分数变化即调优依据（归档需显式 ``--out <文件名>``，
+默认只打印 —— 审查 P0（2026-09-24）：此前默认覆写 ``results-v13.md`` 历史证据）。
 """
 from __future__ import annotations
 
@@ -120,11 +121,23 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=float(settings.MATCH_THRESHOLD))
     parser.add_argument("--dataset", type=str, default="dataset.json",
                         help="评测集文件名（位于 evaluation/ 下，如 dataset_control.json）")
-    parser.add_argument("--out", type=str, default="results-v13.md", help="结果输出文件名")
+    parser.add_argument("--out", type=str, default=None,
+                        help="结果归档文件名（位于 evaluation/ 下）。缺省只打印不写文件；"
+                             "目标已存在时拒绝覆写，需 --force")
+    parser.add_argument("--force", action="store_true",
+                        help="允许覆写已存在的归档文件（防历史证据被静默覆盖）")
     args = parser.parse_args()
     result = run(args.threshold, args.dataset)
     report = render(result)
-    out = _HERE / args.out
-    out.write_text(report, encoding="utf-8")
     print(report)
-    print(f"[已写入 {out.name}]")
+    if args.out:
+        out = _HERE / args.out
+        if out.exists() and not args.force:
+            raise SystemExit(
+                f"[拒绝写入] {out.name} 已存在（历史证据防覆写）。"
+                f"确需覆盖请加 --force，或改用新文件名归档（如 results-v17.md）。"
+            )
+        out.write_text(report, encoding="utf-8")
+        print(f"[已写入 {out.name}]")
+    else:
+        print("[未写文件] 需要归档请加 --out <文件名.md>")
