@@ -258,6 +258,70 @@
           </el-timeline>
         </div>
       </el-tab-pane>
+
+      <!-- ============ v17⑥：业务漏斗看板 ============ -->
+      <el-tab-pane label="数据看板" name="funnel">
+        <div v-loading="funnelLoading">
+          <el-empty v-if="!funnelLoading && !funnel" description="暂无看板数据" />
+          <template v-else-if="funnel">
+            <div class="funnel-cards">
+              <div class="lf-card funnel-card">
+                <div class="funnel-num">{{ funnel.funnel.published }}</div>
+                <div class="funnel-label">失物发布</div>
+              </div>
+              <div class="lf-card funnel-card">
+                <div class="funnel-num">{{ funnel.funnel.match_created }}</div>
+                <div class="funnel-label">匹配候选</div>
+              </div>
+              <div class="lf-card funnel-card">
+                <div class="funnel-num">{{ funnel.funnel.claimed }}</div>
+                <div class="funnel-label">认领</div>
+              </div>
+              <div class="lf-card funnel-card">
+                <div class="funnel-num">{{ funnel.funnel.completed }}</div>
+                <div class="funnel-label">交接完成</div>
+              </div>
+              <div class="lf-card funnel-card">
+                <div class="funnel-num">{{ pctText(funnel.recovery_rate) }}</div>
+                <div class="funnel-label">找回率</div>
+              </div>
+            </div>
+
+            <div class="lf-card funnel-bars">
+              <div class="funnel-title">漏斗（以失物发布数为 100% 基准）</div>
+              <div v-for="step in [
+                { label: '发布', value: funnel.funnel.published },
+                { label: '候选', value: funnel.funnel.match_created },
+                { label: '认领', value: funnel.funnel.claimed },
+                { label: '完成', value: funnel.funnel.completed },
+              ]" :key="step.label" class="funnel-row">
+                <span class="funnel-row-label">{{ step.label }}</span>
+                <div class="funnel-track">
+                  <div class="funnel-fill" :style="{ width: funnelPct(step.value) + '%' }" />
+                </div>
+                <span class="funnel-row-value">{{ step.value }}</span>
+              </div>
+              <div class="lf-muted funnel-caption">
+                统计口径：候选=历史累计生成（含终态）；认领=进入过认领流程（完成/认领中/待自取）；
+                完成=按失物去重；找回率=完成失物数/失物发布数。数字与数据库实查一致（测试对照）。
+              </div>
+            </div>
+
+            <div class="lf-card funnel-stale">
+              <div class="funnel-title">滞留物品 Top 类别（未解决失物）</div>
+              <el-empty
+                v-if="funnel.stale_by_category.length === 0"
+                description="没有滞留物品"
+                :image-size="60"
+              />
+              <el-table v-else :data="funnel.stale_by_category" size="small">
+                <el-table-column prop="category" label="类目" />
+                <el-table-column prop="count" label="未解决失物数" width="140" />
+              </el-table>
+            </div>
+          </template>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- ============ D2：匹配详情抽屉 ============ -->
@@ -342,7 +406,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { LocationFilled } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/admin'
@@ -353,6 +417,7 @@ import type {
   AuditLog,
   ExportFormat,
   ExportScope,
+  FunnelStats,
   MatchOut,
   Page,
 } from '@/types'
@@ -368,7 +433,40 @@ const MATCH_STATUS_LABELS = [
   '已撤回',
 ] as const
 
-const activeTab = ref<'users' | 'matches' | 'audit'>('users')
+const activeTab = ref<'funnel' | 'users' | 'matches' | 'audit'>('users')
+
+// ---------------- v17⑥：业务漏斗看板 ----------------
+const funnel = ref<FunnelStats | null>(null)
+const funnelLoading = ref(false)
+const funnelLoaded = ref(false)
+
+async function loadFunnel(): Promise<void> {
+  funnelLoading.value = true
+  try {
+    funnel.value = await adminApi.getFunnel()
+    funnelLoaded.value = true
+  } catch {
+    /* 错误已由拦截器提示；看板保留上一次数据 */
+  } finally {
+    funnelLoading.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'funnel' && !funnelLoaded.value) void loadFunnel()
+})
+
+/** 漏斗条形宽度百分比（以发布数为 100% 基准）。 */
+function funnelPct(value: number): number {
+  const base = funnel.value?.funnel.published ?? 0
+  if (base <= 0) return 0
+  return Math.max(2, Math.min(100, Math.round((value / base) * 100)))
+}
+
+function pctText(rate: number): string {
+  return `${(rate * 100).toFixed(1)}%`
+}
+
 
 // ---------------- D1：用户列表 ----------------
 const users = ref<AdminUserOut[]>([])
@@ -658,5 +756,75 @@ onMounted(() => {
   margin-top: 6px;
   font-size: 12px;
   word-break: break-all;
+}
+
+/* ---------------- v17⑥：业务漏斗看板 ---------------- */
+.funnel-cards {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.funnel-card {
+  flex: 1;
+  min-width: 120px;
+  padding: 14px;
+  text-align: center;
+}
+.funnel-num {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--lf-primary);
+}
+.funnel-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7785;
+}
+.funnel-bars,
+.funnel-stale {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.funnel-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.funnel-row-label {
+  width: 42px;
+  font-size: 13px;
+  text-align: right;
+  color: #334155;
+}
+.funnel-track {
+  flex: 1;
+  height: 18px;
+  background: #eef1f7;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.funnel-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--lf-primary), #7c3aed);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.funnel-row-value {
+  width: 56px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.funnel-caption {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

@@ -16,6 +16,7 @@ import type {
   AuditLog,
   ExportFormat,
   ExportScope,
+  FunnelStats,
   MatchOut,
   Page,
 } from '@/types'
@@ -119,5 +120,10 @@ export const adminApi = {
   /** v7：触发周期清理（POST /admin/cleanup）。 */
   triggerCleanup(): Promise<{ purged_matches: number; purged_items: number }> {
     return http.post('/admin/cleanup')
+  },
+
+  /** v17⑥：业务漏斗看板（GET /admin/stats/funnel）——发布→候选→认领→完成 + 找回率 + 滞留 Top。 */
+  getFunnel(): Promise<FunnelStats> {
+    return http.get('/admin/stats/funnel')
   },
 }

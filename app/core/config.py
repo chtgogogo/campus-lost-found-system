@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     # SEED_DEMO：scripts/seed.py 是否播种演示账号/示例物品（demo_loser / demo_finder 等）。
     # 默认 False（不播种演示数据）；本机演示需要时在 .env 显式打开。
     SEED_DEMO: bool = False
+    # DEMO_MODE（v18，2026-09-24）：演示模式总开关 —— 只允许 .env/代码切换，无前端入口。
+    # true 时：注册无需手机号/验证码（未填自动生成唯一 demo-xxxx 占位号）、
+    #          管理员用户列表手机号脱敏（原明文，防家人真实号码外泄）；
+    # false 时：全部走真实流程（OTP 必填、管理员明文取证）。
+    DEMO_MODE: bool = False
     # 请求体大小护栏（安检 L1，2026-09-23）：超出直接 413，防恶意超大包打满内存。
     # 默认按上传能力上限取整：IMG_MAX_COUNT(9) × IMG_MAX_SIZE_MB(10) = 90MB + multipart 开销。
     REQUEST_BODY_MAX_MB: int = 100

@@ -326,3 +326,20 @@ export interface AuditLog {
   detail: string | null
   created_at: string
 }
+
+// ---------------- v17⑥：业务漏斗看板 ----------------
+export interface FunnelStats {
+  /** 发布 → 候选 → 认领 → 完成（失物视角，completed 按失物去重） */
+  funnel: {
+    published: number
+    match_created: number
+    claimed: number
+    completed: number
+  }
+  found_published: number
+  /** 找回率 = 完成交接的失物数 / 失物发布数（0~1） */
+  recovery_rate: number
+  /** 滞留物品 Top 类别（未解决且未软删失物按类目分组前 5） */
+  stale_by_category: { category: string; count: number }[]
+  generated_at: string
+}

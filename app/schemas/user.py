@@ -10,11 +10,16 @@ from app.schemas.common import UserRole, UserStatus
 
 
 class UserCreate(BaseModel):
-    """注册请求体。"""
+    """注册请求体。
 
-    student_no: str = Field(..., min_length=1, max_length=32, description="学号/工号")
-    phone: str = Field(..., min_length=5, max_length=20, description="手机号")
-    sms_code: str = Field(..., min_length=1, description="短信验证码")
+    v18（2026-09-24）：phone / sms_code 放宽为 Optional —— 是否必填由 DEMO_MODE 在
+    service 层裁决（演示模式可不填、自动生成占位号并跳过 OTP；真实模式缺失直接拒绝）。
+    schema 保持宽松单一，行为分叉收敛在 auth_service.register 一处，便于测试。
+    """
+
+    student_no: str = Field(..., min_length=1, max_length=32, description="学号/工号（演示模式下为自定义 ID，中英文数字均可）")
+    phone: Optional[str] = Field(None, min_length=5, max_length=20, description="手机号（演示模式可不填，自动生成 demo-xxxx 占位号）")
+    sms_code: Optional[str] = Field(None, min_length=1, description="短信验证码（演示模式不校验）")
     password: str = Field(..., min_length=6, max_length=64, description="密码")
     real_name: Optional[str] = Field(None, max_length=50, description="真实姓名（选填）")
     # v10（变更 C）：管理员邀请码。命中 settings.ADMIN_APPLY_CODE → 静默升为 role=1。

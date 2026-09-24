@@ -31,7 +31,7 @@ from app.models.match import MatchRecord
 from app.models.user import User
 from app.routers.deps import require_admin
 from app.schemas.admin import AdminConversationItem, AdminMatchDetailOut
-from app.schemas.common import Page, success
+from app.schemas.common import LostItemStatus, MatchStatus, Page, success
 from app.schemas.match import MatchOut
 from app.schemas.user import AdminUserOut
 from app.services import admin_export_service, audit_service
@@ -549,3 +549,78 @@ def trigger_cleanup(
     """触发一轮周期清理（依赖序物理删超 1 年数据），返回本次清理计数。"""
     result = CleanupService(db).run_once()
     return success(data=result)
+
+
+# ---------------- v17⑥：业务漏斗看板 ----------------
+@router.get("/stats/funnel")
+def get_business_funnel(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """业务漏斗看板：发布 → 匹配候选 → 认领 → 交接完成 + 找回率 + 滞留 Top 类别。
+
+    口径（全部聚合 SQL 下推 DB，测试用原始 SQL 实查对照保证一致）：
+
+    - **发布数**：未软删物品 count（失物/拾物分开）；
+    - **候选数**：match_record 历史累计行数（含终态——生成过即计入漏斗）；
+    - **认领数**：status ∈ {CLAIMING(1), COMPLETED(2), MANUAL_PENDING(4)}——
+      进入过认领流程的候选（拒绝/放弃/撤回不计认领）；
+    - **完成数**：status = COMPLETED(2)，按失物 id 去重（一条失物多次完成只计一次）；
+    - **找回率** = 完成失物数 / 未软删失物发布数；
+    - **滞留 Top**：未解决且未软删失物按 category_name 分组前 5（降序）。
+    """
+    now = _now()
+    lost_published = (
+        db.query(func.count(LostItem.id)).filter(LostItem.deleted_at.is_(None)).scalar() or 0
+    )
+    found_published = (
+        db.query(func.count(FoundItem.id)).filter(FoundItem.deleted_at.is_(None)).scalar() or 0
+    )
+    match_created = db.query(func.count(MatchRecord.id)).scalar() or 0
+    claimed = (
+        db.query(func.count(MatchRecord.id))
+        .filter(
+            MatchRecord.status.in_(
+                [
+                    int(MatchStatus.CLAIMING),
+                    int(MatchStatus.COMPLETED),
+                    int(MatchStatus.MANUAL_PENDING),
+                ]
+            )
+        )
+        .scalar()
+        or 0
+    )
+    completed_lost = (
+        db.query(func.count(func.distinct(MatchRecord.lost_id)))
+        .filter(MatchRecord.status == int(MatchStatus.COMPLETED))
+        .scalar()
+        or 0
+    )
+    stale_rows = (
+        db.query(LostItem.category_name, func.count(LostItem.id).label("cnt"))
+        .filter(
+            LostItem.deleted_at.is_(None),
+            LostItem.status != int(LostItemStatus.RESOLVED),
+        )
+        .group_by(LostItem.category_name)
+        .order_by(func.count(LostItem.id).desc(), LostItem.category_name)
+        .limit(5)
+        .all()
+    )
+    return success(
+        data={
+            "funnel": {
+                "published": int(lost_published),
+                "match_created": int(match_created),
+                "claimed": int(claimed),
+                "completed": int(completed_lost),
+            },
+            "found_published": int(found_published),
+            "recovery_rate": round(completed_lost / lost_published, 4) if lost_published else 0.0,
+            "stale_by_category": [
+                {"category": name, "count": int(cnt)} for name, cnt in stale_rows
+            ],
+            "generated_at": now.isoformat(),
+        }
+    )
