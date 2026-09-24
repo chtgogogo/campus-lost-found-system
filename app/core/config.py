@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     RECOGNITION_WORKER_ENABLED: bool = True
     RECOGNITION_MAX_RETRIES: int = 3   # 重试上限，耗尽 → failed 死信（error 可查）
 
+    # ---------------- 可观测层（v17⑤：request_id + JSON 日志 + /metrics + 慢 SQL） ----------------
+    # true=单行 JSON 结构化日志（采集器友好）；false=人类可读格式。两者均携带 request_id。
+    LOG_JSON: bool = True
+    SLOW_SQL_MS: int = 100             # 慢 SQL 告警阈值（超过打 WARNING）
+    # 演示端点 /__demo/slow（人为慢接口 + 慢 SQL，供 request_id 定位演示）；默认关闭
+    OBS_DEMO_ENDPOINT: bool = False
+
     # ---------------- 交接码 ----------------
     HANDOVER_TTL_SEC: int = 10                 # 双码交叉验证模型 TTL（10 秒）
 

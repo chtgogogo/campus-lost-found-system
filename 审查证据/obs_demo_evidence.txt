@@ -1,0 +1,7 @@
+2026-09-25 04:08:57,101 INFO [-] vision: [vision] COCO 模型加载成功: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\models\weights\best.pt
+2026-09-25 04:08:57,107 INFO [-] recognition_worker: [recognition-worker] 已启动（单线程，poll=1.0s）
+2026-09-25 04:09:18,248 INFO [8e6986603048] observability: GET /health -> 200 72.5ms
+2026-09-25 04:09:18,302 INFO [caf67b107ce4] observability: GET /health -> 200 1.7ms
+2026-09-25 04:09:18,707 WARNING [5b85684b1c4f] observability: 慢 SQL: 166.3ms (阈值 100ms)
+2026-09-25 04:09:18,708 INFO [5b85684b1c4f] observability: GET /__demo/slow -> 200 319.2ms
+2026-09-25 04:09:35,827 INFO [3562d5b5c9f7] observability: GET /metrics -> 200 1.3ms

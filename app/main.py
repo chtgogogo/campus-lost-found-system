@@ -17,8 +17,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.body_limit import RequestBodyLimitMiddleware
 from app.core.config import settings, validate_security_config
-from app.core.database import SessionLocal, init_db
+from app.core.database import SessionLocal, engine, init_db
 from app.core.exceptions import register_exception_handlers
+from app.core.observability import (
+    ObservabilityMiddleware,
+    StatusCaptureMiddleware,
+    metrics_snapshot_safe,
+    register_demo_slow_route,
+    register_slow_sql_listener,
+    setup_logging,
+)
 from app.core.seed import seed_categories
 from app.routers import admin, auth, im, items, match, vision
 from app.services import recognition_worker
@@ -47,6 +55,10 @@ def create_app() -> FastAPI:
     # ADMIN_APPLY_CODE 为空时日志说明。必须先于任何路由/中间件装配。
     validate_security_config()
 
+    # v17⑤ 可观测层：JSON/可读日志（均携带 request_id）+ 慢 SQL 监听（装配期一次性）
+    setup_logging()
+    register_slow_sql_listener(engine)
+
     app = FastAPI(
         title=settings.APP_NAME,
         version="0.1.0",
@@ -68,6 +80,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # v17⑤ 可观测层中间件：StatusCapture（捕获状态码给指标）→ Observability（最外层，
+    # 尽早设置 request_id，让全部内层日志/慢 SQL 告警携带同一条 trace id）
+    app.add_middleware(ObservabilityMiddleware)
+    app.add_middleware(StatusCaptureMiddleware)
+
     # 路由装配
     app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
     app.include_router(items.router, prefix=settings.API_V1_PREFIX)
@@ -86,6 +103,15 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["meta"])
     def health():
         return {"code": 0, "message": "ok", "data": {"app": settings.APP_NAME}}
+
+    @app.get("/metrics", tags=["meta"])
+    def metrics_endpoint():
+        """v17⑤ 自研进程内指标：按路由聚合 QPS / p95 / 错误率（零外部依赖）。"""
+        return {"code": 0, "message": "ok", "data": metrics_snapshot_safe()}
+
+    if settings.OBS_DEMO_ENDPOINT:
+        # 演示端点（默认关闭）：人为慢接口 + 慢 SQL，展示 request_id 全链路定位。
+        register_demo_slow_route(app)
 
     return app
 

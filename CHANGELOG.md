@@ -57,6 +57,25 @@
 - **发布接口延迟前后实测（回任务②同一压测，10 用户/60s）**：**5.4 → 74.4 QPS（13.8 倍），p95 1800ms → 68ms（-96%），中位 1600ms → 25ms**；0 错误 0 锁错误。证据 `evaluation/loadtest/_results/sqlite_baseline_publish.summary.txt`（改前）vs `sqlite_async_publish.summary.txt`（改后），复现命令见 numbers.md #14。
 - 全量回归：`pytest tests/ -q` **426 passed, 2 skipped, 0 failed**（428 收集，139.47s）；附带收益：发布类测试不再各自跑同步 YOLO，**套件时长 325s → 115~140s**；`ruff check app tests evaluation` 0 错误。
 
+### ⑤ 轻量可观测层
+
+**做了什么**
+1. **request_id 全链路**（`app/core/observability.py`，纯 ASGI 中间件）：每请求生成/透传 `X-Request-ID`（响应头回写，上游网关值优先）→ ContextVar → logging Filter 注入每条日志行；故障可用一条 id 捞全该请求的访问日志/慢 SQL 告警/报错堆栈。
+2. **JSON 结构化日志**：标准库 `logging.Formatter` 实现（不引第三方日志库），`LOG_JSON` 开关切换 JSON/人类可读（均带 request_id）；装配幂等守卫（防 create_app 多次调用清掉 pytest caplog handler）。
+3. **自研 `/metrics`**：进程内按 (方法, 路由模板) 聚合请求数/QPS/p95/错误率，耗时样本环形上限 1000 防内存膨胀；采集异常时返回空快照（观测不得拖垮业务）。
+4. **慢 SQL 监听**：SQLAlchemy 游标事件，超过 `SLOW_SQL_MS`（默认 100ms）打 WARNING（含耗时/语句摘要/request_id）。
+5. **故障演示端点 `/__demo/slow`**（`OBS_DEMO_ENDPOINT=true` 才挂载，默认关闭、生产禁开）：sleep 150ms + 900k 行递归 CTE 真实慢查询；README 附「演示」标注的证据日志与分钟级定位链路说明——**据此简历句允许加「故障可通过 request_id 分钟级定位（附演示）」**。
+6. `.env.example` 补 LOG_JSON / SLOW_SQL_MS / OBS_DEMO_ENDPOINT 三项。
+
+**解决了什么问题**
+此前线上排查只能看裸文本零散日志，无请求维度串联；无任何指标暴露（连 QPS 都答不上）；慢 SQL 无感知。全部零外部依赖解决（诚实规模：单机项目不装 Prometheus）。
+
+**怎么验证的**
+- 新增 `tests/test_observability.py` 9 用例全绿：两次请求不同 request_id、日志行 request_id 与响应头一致（服务端日志断言——客户端侧 httpx 日志不在请求上下文，request_id 合理为 "-"，测试注释说明）、上游 id 透传、JSON 行可解析、/metrics 计数/p95/错误率、慢 SQL 阈值触发与不触发、演示端点开关。
+- **真实服务演示实证**（`审查证据/obs_demo_evidence.txt`）：两次 /health 返回不同 request_id（`8e6986603048` / `caf67b107ce4`）；`/__demo/slow` 的 id `5b85684b1c4f` 把「慢 SQL WARNING 166.3ms」与「接口访问日志 319.2ms」串成一条线。
+- 简历口径（基础句）：「请求 ID 全链路贯穿结构化日志 + /metrics 暴露 QPS/p95/错误率 + 慢 SQL 日志，零外部依赖」；含演示追加「故障可通过 request_id 分钟级定位（附演示）」。入 `docs/numbers.md` #15。
+- 全量回归：`pytest tests/ -q` **435 passed, 2 skipped, 0 failed**（437 收集，129.56s，`审查证据/pytest_v17_task5.txt`）；`ruff check app tests` 0 错误。
+
 - 全量回归：`pytest tests/ -q` **418 passed, 2 skipped, 0 failed**（420 收集，325.16s，`审查证据/pytest_v17_task2_retry.txt`）；`ruff check app tests` 0 错误。**如实记录一次偶发段错误**（首跑 139 退出码，`审查证据/pytest_v17_task2.txt`）：torch 2.7.1 在 Windows 上主线程 YOLO 与后台线程 CLIP JIT load 并发的既有竞态（与本次改动无关，venv 环境未变），重跑即绿；v17④ 把 CLIP 迁入单线程 worker 后该竞态面自然消除。
 
 ## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档
