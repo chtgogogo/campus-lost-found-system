@@ -1,7 +1,7 @@
 """安全工具：密码哈希、JWT 签发/校验、刷新令牌存储。
 
-- 密码：passlib[bcrypt]。
-- JWT：HS256，payload = {sub, role, jti, exp, iat}。
+- 密码：bcrypt（直接依赖，passlib 已随 2026-09-24 依赖清理移除）。
+- JWT：HS256，payload = {sub, role, type, jti, exp, iat}。
 - 刷新令牌：jti 存入 KV 存储（Redis 优先，否则内存兜底），支持登出/封禁吊销。
 """
 from __future__ import annotations

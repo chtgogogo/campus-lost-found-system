@@ -1,13 +1,25 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 
 // Vite 配置：开发服务器默认 5173 端口；
 // 配置 /api 与 /uploads 代理到后端 (http://localhost:8000)，
 // 这样真实后端联调时无需处理 CORS。
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    // 审查 P2（2026-09-24）：Element Plus 按需引入——模板组件编译期按需注册，
+    // 取代 main.ts 的全量 app.use(ElementPlus)（主 chunk 由此砍掉约一半 JS）。
+    // 样式仍走全局 CSS（main.ts），故 importStyle 关闭避免重复；ElMessage 等
+    // JS-API 组件的样式由全局 CSS 覆盖。
+    Components({
+      resolvers: [ElementPlusResolver({ importStyle: false })],
+      dts: false,
+    }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

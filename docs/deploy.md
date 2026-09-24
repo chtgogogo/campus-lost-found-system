@@ -1,209 +1,110 @@
 # 部署文档（Production Deployment Guide）
 
-> 系统：基于 YOLOv8 的校园失物招领智能匹配系统
-> 覆盖范围：依赖安装（torch/ultralytics/opencv/numpy 约 2GB，落 E 盘）→ 权重下载 → MySQL 建库（本机 9.5 / Docker）→ Redis 启用 → Docker 编排 → 前端真实 API 切换 → 端到端验证清单。
-> 明确标注：**本机无 docker、无 redis 服务** 的应对方案。
+> 系统：基于 YOLOv8 的校园失物招领智能匹配系统（FastAPI + Vue 3）
+> 最后核对：2026-09-24（v16 / 审查 P2 后口径）。测试基线：411 用例（409 通过 / 2 跳过，CI 门禁）。
+> 部署形态两种：**Docker Compose 一键起**（推荐，见 §5）或**裸机分步部署**（§1–§4）。
+> 历史版本（2026-08 的本机环境快照）中机器特定路径/约束已抽象为通用流程，存档见 git 历史。
 
 ---
 
-## 0. 环境约束速览
+## 0. 组件与端口总览
 
-| 项 | 现状 | 应对 |
+| 组件 | 端口 | 说明 |
 | --- | --- | --- |
-| Python 依赖未装 | venv 未装 `torch/ultralytics/opencv/numpy`（约 2GB） | 见 §1 安装，落 E 盘 venv |
-| MySQL 本地有 | `/e/gongjuruanjian/MYSQL/bin/` 含 mysql/mysqld | 见 §3 本机真建库 |
-| Redis 无服务 | 本机无 Redis 进程 | 见 §4：配置启用 + 内存兜底（功能不崩） |
-| Docker 不可用 | 本机 `docker` 命令不存在 | 见 §5：仅交付 Dockerfile/compose，在自有机器运行 |
-| 磁盘/E 盘 | 权重与上传必须落 E 盘 | `models/weights`、`uploads` 已在 config 预留，严禁 C 盘 |
-| Web EXIF/GPS | 浏览器安全限制，Web 端不可行 | 降级为「用户手动选地点层级」（决策 P2-02，无代码任务） |
+| 前端（nginx 容器） | 80 | 静态资源 + 反代 `/api`、`/uploads` |
+| 后端（uvicorn） | 8000 | FastAPI，`app.main:app` |
+| MySQL 8.0 | 3306 | 生产库（开发可用 SQLite） |
+| Redis | 6379 | 可选：JWT 吊销 / 限流 / 验证码 KV；无服务时进程内内存兜底 |
 
 ---
 
-## 1. 后端依赖安装（落 E 盘）
+## 1. 后端依赖（裸机）
 
 ```bash
-cd E:/xuexixiangguan/pythonProject/gongcheng/失物招领系统
 python -m venv .venv
-.venv\Scripts\activate        # Windows；Linux/macOS: source .venv/bin/activate
+.venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
 
-# 1) 先装 CPU 版 torch（避免拉取 CUDA 体积，约省 1GB+）
+# 1) 先装 CPU 版 torch（避免拉取 CUDA 体积，约省 1GB+；有 GPU 需求另配）
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# 2) 安装其余依赖（含 ultralytics / opencv-headless / numpy）
+# 2) 再装其余依赖（含锁 commit 的 CLIP）
 pip install -r requirements.txt
-
 # 3) 验证关键依赖
 python -c "import torch, ultralytics, cv2, numpy; print('ok', torch.__version__)"
 ```
 
-> 说明：`requirements.txt` 已标注 torch 使用 CPU 索引。`ultralytics` 会自动拉取 `opencv-python`/`numpy`/`pyyaml`；我们用 `opencv-python-headless` 避免 GUI 依赖。
+依赖说明：torch/ultralytics 仅视觉推理用，缺失时视觉服务自动降级（业务不中断）；
+WordNet 语料首次使用时由 `match_service` 懒加载下载（离线环境自动回退精确匹配）。
 
----
-
-## 2. 视觉权重下载（落 `models/weights/`，严禁 C 盘）
-
-```bash
-# 下载 yolov8n.pt（COCO 9 类）与 yolov8s-world.pt（YOLO-World 零样本）到 models/weights/
-python scripts/download_models.py
-```
-
-- 若 `models/weights/` 已存在权重则自动跳过（可重跑）。
-- 若未下载，应用启动时 `VisionService` 也会尝试自动下载（优雅降级，不阻塞启动）。
-- **用户自有校园权重**：直接丢入 `models/weights/` 即可切换，无需改代码（已由 `YOLO_MODEL_DIR` 预留）。
-
----
-
-## 3. 数据库：MySQL 8.0 / 9.5
-
-### 3.1 本机真建库（推荐，可真验证）
+## 2. 视觉权重（不入 git，严禁落系统盘）
 
 ```bash
-# 1) 试连（若已运行可跳过初始化）
-E:\gongjuruanjian\MYSQL\bin\mysql.exe -h127.0.0.1 -P3306 -uroot -e "select 1"
+python scripts/download_models.py   # 下载 yolov8s-world.pt 等；已存在自动跳过
 ```
 
-若连接被拒，初始化并启动（数据目录选 E 盘某空目录，如 `E:/mysql-data`）：
+```
+models/weights/best.pt           # 自训 12 类校园失物 YOLO 权重（22MB，私有产物）
+models/weights/yolov8s-world.pt  # YOLO-World 开放词表权重（27MB）
+weights/clip/                    # CLIP 权重（首次调用自动下载 ViT-B/32）
+```
+
+- 自有校园权重直接放入 `models/weights/` 即可切换（`YOLO_MODEL_DIR` 预留）。
+- 缺权重时系统照常运行：发布/预识别降级为「其他」类，CLIP 精排自动跳过。
+
+## 3. 数据库
+
+- 开发：SQLite（`DATABASE_URL=sqlite:///./dev.db`），零配置。
+- 生产：MySQL 8.0。建库 + 迁移（Alembic 是唯一入口）：
+
+```sql
+CREATE DATABASE lostfound DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'lf'@'%' IDENTIFIED BY '<强口令>';
+GRANT ALL ON lostfound.* TO 'lf'@'%';
+```
 
 ```bash
-E:\gongjuruanjian\MYSQL\bin\mysqld.exe --initialize-insecure --datadir=E:/mysql-data
-E:\gongjuruanjian\MYSQL\bin\mysqld.exe --datadir=E:/mysql-data
-# 另开终端建库 + 建用户
-E:\gongjuruanjian\MYSQL\bin\mysql.exe -h127.0.0.1 -P3306 -uroot -e ^
-  "CREATE DATABASE IF NOT EXISTS lostfound CHARACTER SET utf8mb4; ^
-   CREATE USER IF NOT EXISTS 'lf'@'127.0.0.1' IDENTIFIED BY 'lf'; ^
-   GRANT ALL PRIVILEGES ON lostfound.* TO 'lf'@'127.0.0.1'; FLUSH PRIVILEGES;"
+PYTHONUTF8=1 alembic -c migrations/alembic.ini upgrade head
 ```
 
-### 3.2 配置 `.env` 切换到 MySQL
-
-复制 `.env.example` 为 `.env`，确认：
-
-```ini
-DATABASE_URL=mysql+pymysql://lf:lf@127.0.0.1:3306/lostfound
-```
-
-### 3.3 建表（幂等 `create_all`）+ 种子
+## 4. 环境变量
 
 ```bash
-# 建 10 张表（init_db 的 create_all，幂等，可重复执行）
-# 启动应用即自动建表；也可显式 seed：
-python scripts/seed.py
+cp .env.example .env   # 逐项修改；密钥纪律见文件头注释
 ```
 
-`scripts/seed.py` 会：seed 12 分类 → 管理员 → 演示用户（失主/拾得者）→ 示例失物/拾物（幂等，重复运行不冲突）。
+关键项（全部有启动校验，配错直接拒绝启动）：
+- `JWT_SECRET`：必填随机 64 位 hex（`python -c "import secrets;print(secrets.token_hex(32))"`），留空 / `dev-` 开头 / 占位符值均拒启；
+- `ADMIN_APPLY_CODE`：留空 = 管理员邀请通道禁用；启用必须强口令；
+- `DATABASE_URL` / `REDIS_URL` / `SHOW_SMS_CODE=false`（公网必须）；
+- `RATE_LIMIT_ENABLED=true`（默认生效，与 DEBUG 解耦）。
 
-> 决策 B：本迭代使用 `create_all` 落地 MySQL（零迁移风险、本机可真验证）。`migrations/0001_initial.py`（Alembic）与 `deploy/mysql/init.sql` 仅作生产迁移/DBA 参考，非本迭代主路径。
+完整字段与语义见 `.env.example`（与 `app/core/config.py` 逐项对照，含已停用字段的标注）。
 
----
-
-## 4. Redis 启用（本机无服务 → 内存兜底）
-
-`.env`：
-
-```ini
-REDIS_ENABLED=true
-REDIS_URL=redis://127.0.0.1:6379/0
-```
-
-- 若本机有 Redis 服务：正常连接，`RedisClient.available=True`。
-- 若本机无 Redis（本机现状）：`RedisClient` 自动 `available=False`，走进程内 `_MemoryStore` 兜底，**接口行为一致，功能不崩**。
-
-Docker 部署时 compose 已带 `redis` 服务（见 §5）。
-
----
-
-## 5. Docker 容器化（交付物，本机不验证）
-
-> 本机 `docker` 命令不存在，以下文件仅作为交付物写出；请在自有机器/服务器执行 `docker compose up`。
+## 5. Docker Compose（推荐）
 
 ```bash
+cp .env.example .env       # 按上节修改；compose 强制校验关键变量（${VAR:?} 缺省即报错）
 docker compose up -d --build
-# 访问：前端 http://localhost:8080 ，后端 http://localhost:8000/health
 ```
 
-编排四服务：`mysql` / `redis` / `backend` / `frontend`，含网络与卷（mysql 数据、`uploads`、`models/weights` 挂载）。
+拓扑：nginx(80) → backend(8000, 不对外) → mysql/redis（仅绑 127.0.0.1）。
+健康检查、非 root 容器、`.dockerignore` 排除 `.env`/`models`/`uploads` 均已配置。
 
-- 后端 `Dockerfile`：python:3.12-slim + CPU torch + uvicorn，启动即 `seed.py` + uvicorn。
-- 前端 `web/Dockerfile`：node 构建 → nginx 静态服务；`web/nginx.conf` 反代 `/api` `/uploads` `/health` 到 backend。
-- 校验语法（有 docker 的机器）：`docker compose config`。
-
----
-
-## 6. 前端：真实 API 优先 + 不可达降级
-
-前端（`web/`）默认走真实后端（`getDemo()` 默认 `false`）：
-
-- 后端可达：所有接口走真实后端（含发布页 AI 识别结果卡片）。
-- 后端不可达：自动切演示模式 + 全局 Banner 提示，不白屏。
-- 本地开发：`npm run dev`（vite 代理 `/api`、`/uploads`、`/health` 到 `localhost:8000`）。
-- Docker 部署：`VITE_API_BASE` 保持默认 `/api/v1`，由 nginx 反代到 backend。
+## 6. 前端
 
 ```bash
 cd web
-npm install
-npm run dev        # 开发
-npm run build      # 产物到 web/dist
+npm ci            # 按 lockfile 安装（Docker 构建同口径）
+npm run build     # 产物 dist/；按需引入后主 chunk gzip ≈195KB（2026-09-24 基线）
 ```
 
-### 6.1 发布页 AI 识别卡片
+`VITE_API_BASE` 默认 `/api/v1`（nginx 反代同源）；跨域部署时改为后端绝对地址并
+在后端 CORS 白名单（`app/main.py`）加入前端源。
 
-上传照片后前端调用 `POST /api/v1/vision/predict` 预识别，渲染「识别类别 + 置信度进度条 + 手动改类」卡片；确认或纠偏后提交发布。演示模式下由 `mockAdapter` 返回确定性占位识别。
+## 7. 上线验证清单
 
----
-
-## 7. 端到端验证清单
-
-### 7.1 回归闸门（SQLite，56 绿，与 DB 无关）
-
-```bash
-# 测试环境强制 SQLite + REDIS_ENABLED=false（tests/conftest.py 已固化）
-.venv/Scripts/python.exe -m pytest -q
-# 期望：56 passed
-```
-
-> 关键：换真推理后仍 56 绿 —— 因为 `VisionService.predict` 永不抛异常，无权重时降级为有效活跃分类 + `confidence=0.0`。
-
-### 7.2 MySQL 端到端（smoke.py）
-
-以 MySQL 启动应用后运行：
-
-```bash
-# 1) 启动 API（进程内真推理预热）
-.venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
-
-# 2) 另终端跑端到端冒烟（注册→登录→发失物(真推理打标)→反向匹配→
-#     发拾物→查匹配→认领→确认归还→交接码双端验证→已解决→审计黑匣子）
-.venv/Scripts/python.exe scripts/smoke.py
-```
-
-### 7.3 审计导出（P2-03）
-
-管理员登录后访问：
-
-```
-GET /api/v1/admin/audit-logs/export?format=csv
-GET /api/v1/admin/audit-logs/export?format=json
-```
-
-前端管理后台「审计日志」页提供导出按钮。
-
----
-
-## 8. 故障排查
-
-| 现象 | 原因 | 处理 |
-| --- | --- | --- |
-| 启动慢 / 首次推理慢 | 首次下载权重 / CPU 推理 | 耐心等待；或预先 `download_models.py` |
-| 识别置信度恒为 0.0 | 权重缺失 / 图片无目标 | 正常降级，系统仍可用；检查 `models/weights/` |
-| 发布后类别不对 | 图片特征模糊 | 发布页可手动改类（AI 卡片） |
-| 连不上 MySQL | 服务未起 / 账号错 | 见 §3 启动 mysqld 并建库 |
-| Redis 报错 | 本机无服务 | 正常，已内存兜底（§4） |
-| 前端白屏 | 后端不可达且未降级 | 检查 `/health` 探测；应自动切演示 + Banner |
-
----
-
-## 9. 后续可选增强（非本迭代范围）
-
-- **T12 真实短信网关**：需用户提供阿里云/腾讯云短信 API Key、签名、模板；当前保留 `DEBUG` 下 `dev_code` 开发路径。
-- **Alembic 生产迁移**：本迭代用 `create_all`；上生产后再补 Alembic 全量迁移并真机验证。
-- **EXIF/GPS 定位**：Web 端不可行（浏览器安全限制），维持「用户手动选地点层级」；未来移动端可补。
+1. `curl http://<host>/health` → `{"code":0,...}`；
+2. 前端登录页注册一个账号（验证码短信走日志；`SHOW_SMS_CODE=true` 的回显仅限内网调试）；
+3. 发布失物 + 拾物各一 → 匹配列表出现候选（视觉降级时类目走手填，打分仍可用）；
+4. 管理员 `GET /api/v1/admin/users` 确认审计已落库；
+5. `docker compose logs backend` 无启动安检告警（弱密钥/占位符会直接拒启）；
+6. （可选）跑通一遍交接：生成动态交接码 → 双端验证 → 状态流转至已完成。

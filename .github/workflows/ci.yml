@@ -9,7 +9,21 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    # 无需任何 secret：纯开源依赖 + 进程内内存兜底（REDIS_ENABLED 在测试环境为 false）
+    # 无需任何 secret：纯开源依赖 + 进程内内存兜底（REDIS_ENABLED 在测试环境为 false）；
+    # MySQL service 供 tests/db_tests 真连建表（root 空密码 = 测试候选凭据第一优先，
+    # 此前本地 MySQL 不可用时该组用例自动 skip，2026-09-24 起生产库路径进 CI）。
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout
         uses: actions/checkout@v4

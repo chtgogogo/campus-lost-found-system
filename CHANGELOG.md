@@ -2,6 +2,25 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档
+
+**做了什么**
+1. **盲测集实物**：`evaluation/dataset_blind.json`——12 对全新实例（6 正 6 负，覆盖六类召回/六类压制场景），标注后**即冻结**、从未参与任何调参；`_meta` 内置使用协议（每大版本跑一次、据此回调参即失效）。
+2. **MySQL 生产路径进 CI**：backend 作业挂 mysql:8.0 service（root 空密码 = db_tests 候选凭据第一优先），`tests/db_tests` 建表用例从「本地有 MySQL 才跑」变为 CI 实跑。
+3. **依赖治理**：CLIP git 依赖锁 commit（`@d05afc4`，原 master 随上游漂移）；删除死依赖 passlib（代码直用 bcrypt，grep 全仓零引用）。
+4. **Element Plus 按需引入**：unplugin-vue-components + ElementPlusResolver 取代全量 `app.use(ElementPlus)`；CSS 保持全局（ElMessage 等 JS-API 组件样式确定性，取舍记录在案）。
+5. **文档三件套**：`docs/deploy.md` 整体重写（剔除 2026-08 本机环境快照，通用化）；新增 `docs/known-tradeoffs.md`（已知技术债与取舍：A~E 五类 15 条 + 已清账对照表）；新增 `docs/numbers.md`（对外数字口径表：10 项核心数字均可两步对账 + 禁用旧数字清单）。
+6. `.env.example` 补 `MATCH_NEUTRAL_GAMMA` / `RATE_LIMIT_AUTH_STRICT_PER_MIN`（实际生效但此前缺失），阈值 80→78，停用字段显式标注。
+
+**解决了什么问题**
+「评测有乐观偏差」从口头声明变为可量化证据；生产数据库路径首次被 CI 覆盖；构建可复现；主包体积减半；新人/面试官拿到项目后的数字对账与取舍追问全部有单页答案。
+
+**怎么验证的**
+- **盲集首跑（冻结后一次）**：F1 **57.1%**（P 50.0/R 66.7，TP4/FP4/FN2/TN2）——与主集 20.9pp 差距即乐观偏差量化；按协议不据此调参，暴露的 4 类误配登记为后续议题（`results-blind-20260924.md`）。n=12 单对 8.3pp，置信区间宽。
+- **包体**：主 chunk **1249KB→582KB（gzip 406→195KB，-52%）**；`vite build` + `vue-tsc` + vitest 8 passed 全绿。
+- **依赖**：`pip` 侧无新装（passlib 移除/CLIP 仅加锚）；全量 pytest 见下（python 侧行为零改动，仅 security.py 文档串与 requirements）。
+- 文档：deploy.md 重写后所有命令与 `.env.example`/compose 逐项对得上；numbers.md 每行数字都指向已存在的来源文件。
+
 ## 审查 P1 工程化补强（2026-09-24）· 性能改造 + 安全加固包 + mock 层拆除 + 前端门禁
 
 **做了什么**
