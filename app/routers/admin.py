@@ -38,6 +38,7 @@ from app.services import admin_export_service, audit_service
 from app.services.admin_export_service import ExportDependencyError
 from app.services.cleanup import CleanupService
 from app.services.match_service import build_match_outs
+from app.utils.desensitize import desensitize_phone
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -360,9 +361,17 @@ def list_admin_users(
         target_type="user", target_id=None,
         detail=f"keyword={kw};role={role};status={status};page={page};total={total}",
     )
+    items = []
+    for u in users:
+        item = AdminUserOut.from_model(u)
+        if settings.DEMO_MODE:
+            # v18 演示模式：管理员侧手机号也脱敏（138****8000）——演示库常有亲友真实号码，
+            # 防截屏/演示投屏外泄；切回真实模式（.env DEMO_MODE=false）即恢复明文取证。
+            item.phone = desensitize_phone(u.phone)
+        items.append(item)
     return success(
         data=Page[AdminUserOut](
-            items=[AdminUserOut.from_model(u) for u in users],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,

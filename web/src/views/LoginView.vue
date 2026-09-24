@@ -51,6 +51,16 @@
 
         <!-- 注册 -->
         <el-tab-pane label="注册" name="register">
+          <!-- v18 演示模式：后端 DEMO_MODE=true 时隐藏手机号/验证码，ID+密码即可注册 -->
+          <el-alert
+            v-if="demoMode"
+            type="info"
+            :closable="false"
+            show-icon
+            title="当前为演示状态"
+            description="无需手机号和验证码，填一个喜欢的 ID 和密码即可注册体验。"
+            class="demo-tip"
+          />
           <el-form
             ref="regFormRef"
             :model="regForm"
@@ -58,13 +68,17 @@
             label-position="top"
             @submit.prevent
           >
-            <el-form-item label="学号" prop="student_no">
-              <el-input v-model="regForm.student_no" placeholder="请输入学号" :prefix-icon="User" />
+            <el-form-item :label="demoMode ? 'ID' : '学号'" prop="student_no">
+              <el-input
+                v-model="regForm.student_no"
+                :placeholder="demoMode ? 'ID（中文、数字、字母均可，不可重复）' : '请输入学号'"
+                :prefix-icon="User"
+              />
             </el-form-item>
-            <el-form-item label="手机号" prop="phone">
+            <el-form-item v-if="!demoMode" label="手机号" prop="phone">
               <el-input v-model="regForm.phone" placeholder="请输入手机号" :prefix-icon="Iphone" />
             </el-form-item>
-            <el-form-item label="短信验证码" prop="sms_code">
+            <el-form-item v-if="!demoMode" label="短信验证码" prop="sms_code">
               <div class="sms-row">
                 <el-input v-model="regForm.sms_code" placeholder="6 位验证码" :prefix-icon="Message" />
                 <el-button :disabled="smsCountdown > 0" @click="onSendSms">
@@ -73,7 +87,7 @@
               </div>
             </el-form-item>
             <el-alert
-              v-if="devCode"
+              v-if="!demoMode && devCode"
               type="success"
               :closable="false"
               show-icon
@@ -85,7 +99,7 @@
                 v-model="regForm.password"
                 type="password"
                 show-password
-                placeholder="至少 6 位"
+                :placeholder="demoMode ? '演示状态选择最简单密码即可' : '至少 6 位'"
                 :prefix-icon="Lock"
               />
             </el-form-item>
@@ -122,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -146,6 +160,15 @@ const tab = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const devCode = ref('')
 const smsCountdown = ref(0)
+// v18 演示模式：启动时向后端拉取公开配置（DEMO_MODE 只在 .env/代码层切换，前端只读跟随）
+const demoMode = ref(false)
+onMounted(async () => {
+  try {
+    demoMode.value = (await authApi.getPublicConfig()).demo_mode
+  } catch {
+    demoMode.value = false // 拉取失败按真实模式渲染（保守：多要求字段不会错杀）
+  }
+})
 
 const loginFormRef = ref<FormInstance>()
 const loginForm = reactive({ student_no: '', password: '' })
@@ -164,21 +187,27 @@ const regForm = reactive({
   // v10：管理员邀请码（选填）。空串在提交时转为 null，与"未填写"完全等价。
   admin_code: '',
 })
-const regRules: FormRules = {
-  student_no: [{ required: true, message: '请输入学号', trigger: 'blur' }],
-  phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
-    { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' },
-  ],
-  sms_code: [
-    { required: true, message: '请输入验证码', trigger: 'blur' },
-    { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
-  ],
-}
+// v18：演示模式下隐藏手机号/验证码输入，对应校验规则一并移除（computed 保证切换即生效）
+const regRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    student_no: [{ required: true, message: '请输入ID', trigger: 'blur' }],
+    password: [
+      { required: true, message: '请输入密码', trigger: 'blur' },
+      { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+    ],
+  }
+  if (!demoMode.value) {
+    rules.phone = [
+      { required: true, message: '请输入手机号', trigger: 'blur' },
+      { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' },
+    ]
+    rules.sms_code = [
+      { required: true, message: '请输入验证码', trigger: 'blur' },
+      { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' },
+    ]
+  }
+  return rules
+})
 
 function buildUserFromToken(token: string, studentNo: string): UserOut | null {
   const payload = decodeJwt(token)
@@ -249,8 +278,9 @@ async function onRegister() {
     try {
       const res = await authApi.register({
         student_no: regForm.student_no,
-        phone: regForm.phone,
-        sms_code: regForm.sms_code,
+        // v18：演示模式下不携带手机号/验证码（后端自动生成占位号、跳过 OTP）
+        phone: demoMode.value ? undefined : regForm.phone,
+        sms_code: demoMode.value ? undefined : regForm.sms_code,
         password: regForm.password,
         real_name: regForm.real_name || null,
         // v10：空串归一为 null，保证"填了空格/没填"与"填错码"走同一条后端分支
@@ -318,5 +348,8 @@ async function onRegister() {
   font-size: 12px;
   margin-top: 12px;
   text-align: center;
+}
+.demo-tip {
+  margin-bottom: 12px;
 }
 </style>

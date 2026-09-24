@@ -30,6 +30,16 @@ def _ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+@router.get("/public-config", response_model=StandardResponse)
+def public_config():
+    """前端公开配置（v18）：演示模式标志，控制注册表单是否隐藏手机号/验证码。
+
+    仅暴露一个 boolean，无敏感信息、无需鉴权；DEMO_MODE 只能在 .env/代码切换，
+    此接口是只读投影，不提供任何修改入口（安检口径：一个开关只管一件事）。
+    """
+    return success(data={"demo_mode": settings.DEMO_MODE})
+
+
 @router.post("/register", response_model=StandardResponse)
 def register(request: Request, body: UserCreate, db: Session = Depends(get_db)):
     """注册（需短信 OTP）。返回用户信息与令牌。"""

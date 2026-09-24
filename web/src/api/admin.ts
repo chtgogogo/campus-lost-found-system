@@ -126,4 +126,14 @@ export const adminApi = {
   getFunnel(): Promise<FunnelStats> {
     return http.get('/admin/stats/funnel')
   },
+
+  /** v18：注销用户（POST /admin/users/{id}/ban）——status 置 1，禁止登录。 */
+  banUser(userId: number): Promise<unknown> {
+    return http.post(`/admin/users/${userId}/ban`)
+  },
+
+  /** v18：解除注销（POST /admin/users/{id}/unban）——status 恢复 0。 */
+  unbanUser(userId: number): Promise<unknown> {
+    return http.post(`/admin/users/${userId}/unban`)
+  },
 }

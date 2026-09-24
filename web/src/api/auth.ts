@@ -1,7 +1,8 @@
 // 认证相关接口（对齐 app/routers/auth.py）
-import { apiPost } from './request'
+import { apiGet, apiPost } from './request'
 import type {
   LoginRequest,
+  PublicConfig,
   RegisterRequest,
   SendSmsRequest,
   Token,
@@ -14,6 +15,10 @@ export interface RegisterResult {
 }
 
 export const authApi = {
+  // v18：前端公开配置（演示模式标志）。GET 幂等无副作用，无需鉴权。
+  getPublicConfig(): Promise<PublicConfig> {
+    return apiGet<PublicConfig>('/auth/public-config')
+  },
   register(body: RegisterRequest): Promise<RegisterResult> {
     return apiPost<RegisterResult>('/auth/register', body)
   },

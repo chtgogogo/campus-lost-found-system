@@ -1,12 +1,14 @@
 <template>
   <div class="lf-container">
-    <!-- ⚠️ 合规提示：本页所有手机号/导出文件均为明文，仅 role=1 可见 -->
+    <!-- ⚠️ 合规提示：真实模式明文 / 演示模式脱敏（v18） -->
     <el-alert
       type="warning"
       :closable="false"
       show-icon
       title="敏感信息合规提示"
-      description="本页用户手机号与取证导出文件均为明文，仅管理员可见。请勿截屏外传，导出后按校方留存规范保管。"
+      :description="demoMode
+        ? '当前为演示状态：用户手机号已脱敏显示（如 138****8000），保护注册用户隐私。切回真实模式后恢复明文取证。'
+        : '本页用户手机号与取证导出文件均为明文，仅管理员可见。请勿截屏外传，导出后按校方留存规范保管。'"
       style="margin-bottom: 14px"
     />
 
@@ -68,7 +70,7 @@
             <el-table-column label="姓名" width="100">
               <template #default="{ row }">{{ row.real_name || '—' }}</template>
             </el-table-column>
-            <el-table-column label="手机号（明文）" min-width="130">
+            <el-table-column :label="demoMode ? '手机号（已脱敏）' : '手机号（明文）'" min-width="130">
               <template #default="{ row }">
                 <span class="plain-phone">{{ row.phone }}</span>
               </template>
@@ -91,6 +93,23 @@
               </template>
             </el-table-column>
             <el-table-column prop="created_at" label="注册时间" width="170" />
+            <!-- v18：注销（封禁）/恢复操作——演示站管理员可即时下架违规账号 -->
+            <el-table-column label="操作" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="row.status === 0"
+                  size="small"
+                  type="danger"
+                  plain
+                  @click="onBanUser(row)"
+                >
+                  注销
+                </el-button>
+                <el-button v-else size="small" type="success" plain @click="onUnbanUser(row)">
+                  恢复
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
 
           <el-pagination
@@ -410,6 +429,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { LocationFilled } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/admin'
+import { authApi } from '@/api/auth'
 import { auditActionLabel, auditTargetTypeLabel } from '@/api/constants'
 import type {
   AdminMatchDetailOut,
@@ -656,10 +676,39 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(() => {
+// v18：演示模式标志（管理页手机号列与合规提示随其切换；只读跟随后端 .env，前端无切换入口）
+const demoMode = ref(false)
+
+// v18：注销（封禁）/恢复——后端 /admin/users/{id}/ban|unban（安检期封禁闭环），演示站管理员即时下架违规账号
+async function onBanUser(row: AdminUserOut): Promise<void> {
+  try {
+    await adminApi.banUser(row.id)
+    ElMessage.success(`已注销用户 ${row.student_no}`)
+    await loadUsers(userPage.value)
+  } catch {
+    /* 错误已由拦截器提示 */
+  }
+}
+
+async function onUnbanUser(row: AdminUserOut): Promise<void> {
+  try {
+    await adminApi.unbanUser(row.id)
+    ElMessage.success(`已恢复用户 ${row.student_no}`)
+    await loadUsers(userPage.value)
+  } catch {
+    /* 错误已由拦截器提示 */
+  }
+}
+
+onMounted(async () => {
   loadUsers(1)
   loadMatches()
   load()
+  try {
+    demoMode.value = (await authApi.getPublicConfig()).demo_mode
+  } catch {
+    demoMode.value = false
+  }
 })
 </script>
 

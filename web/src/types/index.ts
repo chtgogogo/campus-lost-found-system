@@ -45,13 +45,19 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   student_no: string
-  phone: string
-  sms_code: string
+  // v18（DEMO_MODE）：演示模式下可不填（后端自动生成占位号、跳过验证码）
+  phone?: string
+  sms_code?: string
   password: string
   real_name?: string | null
   // v10（变更 C）：管理员邀请码（选填）。命中后端 ADMIN_APPLY_CODE 时静默升为 role=1。
   // ⚠️ 错码与不填的响应体完全一致，前端不得依据响应差异提示"邀请码错误"（AC-C9）。
   admin_code?: string | null
+}
+
+// v18：前端公开配置（GET /auth/public-config）——目前仅演示模式标志
+export interface PublicConfig {
+  demo_mode: boolean
 }
 
 export interface SendSmsRequest {

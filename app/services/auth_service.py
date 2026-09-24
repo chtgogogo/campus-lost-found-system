@@ -81,15 +81,36 @@ class AuthService:
             return False
         return secrets.compare_digest(supplied, expected)
 
+    def _demo_placeholder_phone(self) -> str:
+        """v18 演示模式：生成唯一占位手机号（demo- + 8 位 hex，13 字符 < String(20)）。
+
+        phone 列有唯一约束，随机碰撞（2^-32）时重试至多 5 次；穷尽视为服务异常。
+        """
+        for _ in range(5):
+            candidate = f"demo-{secrets.token_hex(4)}"
+            if not self.db.query(User).filter(User.phone == candidate).first():
+                return candidate
+        raise BizError(9001, "演示注册繁忙，请稍后重试", http_status=503)
+
     # ---------------- 注册 ----------------
     def register(self, data: UserCreate) -> tuple[User, str, str]:
-        stored = redis_client.kv.get(f"sms:{data.phone}")
-        # 审查 P1（2026-09-24）：OTP 比对改恒时比较（encode 规避非 ASCII TypeError），
-        # 与邀请码/交接码的恒时比较标准对齐。
-        if not stored or not secrets.compare_digest(
-            stored.encode("utf-8"), data.sms_code.encode("utf-8")
-        ):
-            raise OtpError()
+        # v18（2026-09-24）DEMO_MODE 分叉：是否需要手机号/验证码在此裁决（schema 层已放宽）。
+        # 真实模式：两者必填（schema 缺失时在此补拦，响应语义与旧版 422 一致）+ OTP 校验；
+        # 演示模式：跳过 OTP（服务器无真实短信通道，收不到码），未填手机号自动生成
+        # 唯一占位号（demo-8位hex，String(20) 内；脱敏函数对非数字串按短掩码处理，不会崩）。
+        if settings.DEMO_MODE:
+            if not data.phone:
+                data.phone = self._demo_placeholder_phone()
+        else:
+            if not data.phone or not data.sms_code:
+                raise BizError(9001, "手机号与验证码必填", http_status=422)
+            stored = redis_client.kv.get(f"sms:{data.phone}")
+            # 审查 P1（2026-09-24）：OTP 比对改恒时比较（encode 规避非 ASCII TypeError），
+            # 与邀请码/交接码的恒时比较标准对齐。
+            if not stored or not secrets.compare_digest(
+                stored.encode("utf-8"), data.sms_code.encode("utf-8")
+            ):
+                raise OtpError()
 
         if self.db.query(User).filter(User.student_no == data.student_no).first():
             raise BizError(9001, "学号已存在", http_status=409)
