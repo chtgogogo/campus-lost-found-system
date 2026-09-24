@@ -174,6 +174,32 @@ def test_logout(client):
     _check_ok(r)
 
 
+def test_refresh_token_rejected_as_access_token(client):
+    """审查 P0-2（2026-09-24）：refresh token 不得当 access token 使用。
+
+    背景：此前 access/refresh 的 JWT payload 结构完全相同（无 type claim），且
+    get_current_user 不校验令牌类型 —— 登出仅吊销 refresh 的 jti，refresh token
+    在 7 天有效期内仍可作为 Bearer 调用全部业务接口。修复后：get_current_user
+    仅接受 type=access 的令牌，refresh token 一律 401（code 1000）。
+    """
+    _, refresh, _, _, _ = register_and_login(client, "rfa")
+    r = client.get(f"{API}/users/me", headers=auth_header(refresh))
+    assert r.status_code == 401, r.text
+    assert r.json()["code"] == 1000
+
+
+def test_refresh_rejects_access_token(client):
+    """审查 P0-2 配套：/auth/refresh 仅接受 type=refresh 的令牌。
+
+    纵深防御：此前靠「access 的 jti 不入 KV」间接拦截，现显式校验类型
+    （1004 = RefreshInvalidError，与无效刷新令牌同一响应，不泄露原因）。
+    """
+    token, _, _, _, _ = register_and_login(client, "rfa2")
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": token})
+    assert r.status_code == 401, r.text
+    assert r.json()["code"] == 1004
+
+
 def test_users_me_self_full_others_masked(client):
     """卡8-2：本人自查 GET /users/me 返回全量（手机号明文）；他人视角（注册响应
     UserOut 序列化器）继续脱敏，互不影响。"""

@@ -34,11 +34,12 @@ def _now() -> datetime:
 
 
 def create_access_token(user_id: int, role: int) -> str:
-    """签发 access token（默认 120 分钟）。"""
+    """签发 access token（默认 120 分钟）。type=access：业务接口仅接受本类型。"""
     now = _now()
     payload = {
         "sub": str(user_id),
         "role": role,
+        "type": "access",
         "jti": f"a-{user_id}-{int(now.timestamp())}",
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MIN)).timestamp()),
@@ -47,12 +48,14 @@ def create_access_token(user_id: int, role: int) -> str:
 
 
 def create_refresh_token(user_id: int, role: int) -> str:
-    """签发 refresh token（默认 7 天），并将 jti 写入 KV 存储。"""
+    """签发 refresh token（默认 7 天），并将 jti 写入 KV 存储。type=refresh：
+    仅 /auth/refresh 接受；业务接口拒绝，防止 refresh 当 access 用（登出吊销失效）。"""
     now = _now()
     jti = f"r-{user_id}-{int(now.timestamp())}"
     payload = {
         "sub": str(user_id),
         "role": role,
+        "type": "refresh",
         "jti": jti,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)).timestamp()),

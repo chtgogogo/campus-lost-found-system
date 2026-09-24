@@ -33,6 +33,12 @@ def get_current_user(
     except jwt.PyJWTError:
         raise UnauthorizedError()
 
+    # 审查 P0-2（2026-09-24）：refresh token 不得当 access token 使用 ——
+    # 此前两类令牌 payload 同构且此处不校验类型，登出仅吊销 refresh 的 jti，
+    # refresh token 在 7 天有效期内仍可调用全部业务接口。
+    if payload.get("type") != "access":
+        raise UnauthorizedError()
+
     user = db.get(User, int(payload.get("sub")))
     if not user:
         raise UnauthorizedError()

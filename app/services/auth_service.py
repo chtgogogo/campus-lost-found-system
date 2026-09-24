@@ -147,6 +147,11 @@ class AuthService:
         except jwt.PyJWTError:
             raise RefreshInvalidError()
 
+        # 审查 P0-2 配套（2026-09-24）：显式校验类型（纵深防御）。
+        # 此前靠「access 的 jti 不入 KV」间接拦截，access token 传进来同样在此拒绝。
+        if payload.get("type") != "refresh":
+            raise RefreshInvalidError()
+
         jti = payload.get("jti")
         if not jti or not is_refresh_token_valid(jti):
             raise RefreshInvalidError()

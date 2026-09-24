@@ -82,6 +82,7 @@ _AUDIT_ACTION_MEANING: dict[str, str] = {
     "handover_complete": "交接完成",
     "handover_verify": "验证交接码",
     "ban": "封禁用户",
+    "unban": "解封用户",
     "appeal": "申诉",
     "im_message": "发送消息",
     "im_success_archive": "对话归档（交接成功后消息留存）",
@@ -353,6 +354,54 @@ def list_admin_users(
             page_size=page_size,
         )
     )
+
+
+@router.post("/users/{user_id}/ban")
+def ban_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    """封禁用户（审查 P0-5，2026-09-24）：`status` 置 1。
+
+    即时生效 —— `get_current_user` 每请求校验封禁态，业务接口随即 403，
+    重新登录亦被拒（`login` 同样校验）。管理员账号不可封禁（400）；
+    目标不存在 404；重复封禁幂等返回当前状态。动作落审计（action=ban）。
+    """
+    return _set_user_banned(request, db, admin, user_id, banned=True)
+
+
+@router.post("/users/{user_id}/unban")
+def unban_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    """解封用户：`status` 复位 0。目标不存在 404；重复解封幂等。
+    动作落审计（action=unban）。"""
+    return _set_user_banned(request, db, admin, user_id, banned=False)
+
+
+def _set_user_banned(request: Request, db: Session, admin, user_id: int, *, banned: bool):
+    """ban/unban 共用实现：状态变更与审计分两次提交（审计失败不回滚主操作）。"""
+    user = db.get(User, user_id)
+    if user is None:
+        return _error(f"用户 {user_id} 不存在", status_code=404)
+    if banned and int(user.role) == 1:
+        return _error("管理员账号不可封禁", status_code=400)
+    new_status = 1 if banned else 0
+    if int(user.status) != new_status:
+        user.status = new_status
+        db.commit()
+        db.refresh(user)
+        _audit(
+            request, db, admin, "ban" if banned else "unban",
+            target_type="user", target_id=user_id,
+            detail=f"student_no={user.student_no}",
+        )
+    return success(data=AdminUserOut.from_model(user))
 
 
 @router.get("/matches")
