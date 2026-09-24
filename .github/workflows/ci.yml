@@ -32,4 +32,6 @@ jobs:
       - name: Run tests
         # 测试环境 REDIS_ENABLED=false（见 tests/conftest.py），KV 走进程内内存兜底，
         # 不依赖外部 Redis / MySQL；MySQL 相关用例在无服务时自动 skip。
-        run: pytest -q
+        # 必须用 `python -m pytest` 而非裸 `pytest`：后者不把仓库根加入 sys.path，
+        # conftest 导入 `app` 包会 ModuleNotFoundError（审查 P0 修复 2026-09-24 实测）。
+        run: python -m pytest -q

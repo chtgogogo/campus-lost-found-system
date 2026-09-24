@@ -5,7 +5,7 @@
 ## 审查 P0 修复（2026-09-24）· CI 转绿 + 令牌类型隔离 + 封禁闭环 + 口径对齐
 
 **做了什么**
-1. **CI 转绿**：修复 3 处 ruff 报错（`routers/match.py` 未使用变量、`services/brand_dict.py` 未使用循环变量、`tests/admin_tests/test_audit_export.py` 末尾缺换行）——此前 Lint 步失败导致 GitHub Actions 连续红叉，**pytest 步骤从未在 CI 执行到**。
+1. **CI 转绿**：修复 3 处 ruff 报错（`routers/match.py` 未使用变量、`services/brand_dict.py` 未使用循环变量、`tests/admin_tests/test_audit_export.py` 末尾缺换行）——此前 Lint 步失败导致 GitHub Actions 连续红叉，**pytest 步骤从未在 CI 执行到**。lint 清零后暴露第二层病根：CI 用裸 `pytest`，不把仓库根加入 `sys.path`，conftest 导入 `app` 包直接 `ModuleNotFoundError`（run 35948187551；本地裸 pytest 同样复现）——`ci.yml` 改为 `python -m pytest -q`（与本地文档口径一致）。
 2. **令牌类型隔离（安全）**：access/refresh 的 JWT payload 增加 `type` claim；`get_current_user` 仅接受 `type=access`，`/auth/refresh` 显式校验 `type=refresh`。堵住「refresh token 当 access token 用」——此前两类令牌 payload 同构且网关不校验类型，登出仅吊销 refresh 的 jti，refresh 在 7 天有效期内仍可调用全部业务接口。
 3. **封禁/解封闭环（安全）**：新增 `POST /admin/users/{id}/ban`、`POST /admin/users/{id}/unban`（require_admin 守卫 + 审计 `ban`/`unban`）。此前 deps 每请求校验封禁态但全系统无封禁入口，风控闭环缺失。管理员账号禁封（400）、目标不存在 404、重复操作幂等。
 4. **口径对齐**：README 控制集 95.5%→**93.6%**（v16 实测，主动取舍）并补「主集参与调参、无盲集、存在乐观偏差」的诚实声明；「CHANGELOG 记录到 v15.2b」→v16；`config.py` 阈值注释 80→78。
