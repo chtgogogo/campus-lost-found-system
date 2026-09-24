@@ -2,6 +2,29 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## 审查 P1 工程化补强（2026-09-24）· 性能改造 + 安全加固包 + mock 层拆除 + 前端门禁
+
+**做了什么**
+1. **匹配列表性能改造**（`routers/match.py` + `match_service.build_match_outs`）：过滤/去重/排序/分页全部下推 SQL（排除池改相关子查询 NOT EXISTS，P1-2 对端隐藏条件全量下推），两端物品改两条 `in_` 批量预取；新增基准脚本 `scripts/bench_match_list.py`（300 匹配场景计时 + SQL 语句计数）。
+2. **P1 安全加固包**：兜底 Exception 处理器（统一 500/5001 信封 + 日志）；422 校验错误剥离 `input`（不回显用户输入）；OTP 比对改恒时比较；模拟短信 print → logging；失物/拾物详情补软删+过期过滤（与列表同口径）；IM 会话对方学号脱敏（新增 `desensitize_student_no`）；审计导出补分页（默认每页 200，此前全表 `.all()`）。
+3. **演示态 mock 层整体拆除**：删除 mockAdapter/mockData/stores-demo/DemoBanner/utils-demo 五文件封闭集（约 2700 行，占 src 约 30%），断开六个活文件引用边；删 `match.auditLogs` 死接口与 `MOCK_ADMIN_APPLY_CODE='110'` 字面量；`API_ORIGIN` 迁至 request.ts。
+4. **前端质量门禁进 CI**：vitest 2.x + jsdom 接入，request.ts 8 条单测；`ci.yml` 新增 web 作业（npm ci + vue-tsc + vitest）；web/Dockerfile `npm install` → `npm ci`。
+5. **git tag 补版本锚点**：v13/v14/v15/v15.2b/v16（各版评测结果自此可 checkout 复现）。
+6. **并发冒烟**：4 线程并发注册+登录冒烟用例（SQLite 并发提交不死锁、学号不串写）。
+
+**解决了什么问题**
+列表页数据量增长线性恶化（N+1 + 全量内存分页）；未预期异常破坏统一信封；用户输入回显；软删物品凭 ID 绕过撤销语义；学号可枚举抓取；审计导出必超时；生产包携带 2700 行死代码与弱码字面量；前端零测试零门禁；版本演进无法 checkout 复现。
+
+**怎么验证的**
+- **性能红-绿对照（bench_before/after_20260924.txt，300 匹配 × 10 轮均值）**：
+  page_size=20 平均 **165.0ms → 18.0ms**、每请求 SQL **630 → 5 条**；
+  page_size=200 平均 **256.2ms → 68.7ms**、SQL **829 → 5 条**；
+  行为等价：test_mymatch_top10 + test_match + test_flow_v3 共 **64 用例零回归**。
+- **安全包红-绿对照（p1tests_red/green_*.txt）**：新增 7 用例先跑 **6 failed**（并发冒烟本应过）→ 修复后同批 **68 passed**（含 errors/auth/soft_delete/admin_export/admin_tests/flow_v2 相邻套件）。
+- **前端**：`vue-tsc` 零错；vitest **8 passed**；`vite build` 通过；全 src mock 关键词零残留（约 -2860/+1091 行）。
+- **全量 pytest**：**409 passed, 2 skipped, 0 failed**（411 收集，288.95s，退出码 0；pytest_full_after_batch2.txt）。**口径变更声明（测试纪律 A 类）**：移除 4 条演示态 mock 镜像测试（`test_v6_mock_*` ×3、`test_f3_17_mock_adapter_*`）——被守护对象 mockAdapter/mockData 已按本版决策整体删除，属"功能删除随带测试删除"，非断言弱化；exclude_resolved 等真实行为由同文件 client 级用例继续守护且全部通过。
+- git tag v13→v16 已推送 origin，`git checkout v16 && python evaluation/run_eval.py` 可复现当版评测。
+
 ## 审查 P0 修复（2026-09-24）· CI 转绿 + 令牌类型隔离 + 封禁闭环 + 口径对齐
 
 **做了什么**

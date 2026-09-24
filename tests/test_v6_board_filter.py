@@ -7,8 +7,6 @@
 - ⚠️ 红线验证：``MatchRecord.status == 3``（REJECTED）与 ``LostItem.status == 3``（RESOLVED）数值相同、
   含义不同；已解决判定**绝不**读取 ``MatchRecord.status``，拒绝匹配不会让物品"被已解决"。
 - 分页 ``total`` 在过滤后准确（仅含过滤后集合）。
-- 演示闭环：``web/src/api/mockData.ts`` 含 1 对完成示例（status=1 拾物 + status=3 失物 + status=2 匹配），
-  且 ``mockAdapter.ts`` 镜像了 ``exclude_resolved`` / ``resolved_only`` 分支（主 tab 不含已解决项）。
 - v7 变更：``DELETE /items/{id}`` 语义由"撤销=置 status=RESOLVED"改为"软删=置 deleted_at"（REST 外键约束）；
   因此"已解决"仅由完成交接（status=3/1）产生，与软删（deleted_at）解耦。迁移链 head 现为 ``0004_v7_incremental``。
 """
@@ -239,51 +237,9 @@ def test_v6_resolution_not_driven_by_match_status(client):
 # ---------------- 演示闭环（mock 数据 + 适配器镜像） ----------------
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
-def _slice(text: str, start_marker: str, end_marker: str) -> str:
-    s = text.index(start_marker)
-    e = text.index(end_marker, s)
-    return text[s:e]
-
-
-def test_v6_mock_demo_pair_present():
-    """mockData.ts 含 1 对完成示例：status=1 拾物 + status=3 失物 + status=2 匹配关联二者。"""
-    path = os.path.join(_BASE, "web", "src", "api", "mockData.ts")
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    lost_block = _slice(text, "export const mockLostItems", "export const mockFoundItems")
-    found_block = _slice(text, "export const mockFoundItems", "export const mockMatches")
-    match_block = _slice(text, "export const mockMatches", "export const mockUsers")
-
-    assert "status: 3" in lost_block, "mockLostItems 应含 status:3 的已解决失物"
-    assert "status: 1" in found_block, "mockFoundItems 应含 status:1 的已解决拾物（演示配对）"
-    assert "status: 2" in match_block, "mockMatches 应含 status:2 的已完成匹配"
-    # 完成匹配关联一对已解决物品（id=7 示例）
-    assert "lost_id: 7" in match_block and "found_id: 7" in match_block, \
-        "mockMatches 应有一条 status:2 匹配关联完成配对（lost_id/found_id=7）"
-
-
-def test_v6_mock_adapter_mirrors_filter():
-    """mockAdapter.listLost/listFound 镜像后端 exclude_resolved / resolved_only 分支（含阈值 3/1）。"""
-    path = os.path.join(_BASE, "web", "src", "api", "mockAdapter.ts")
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    assert "exclude_resolved" in text and "resolved_only" in text, \
-        "mockAdapter 应实现 exclude_resolved / resolved_only 两分支（与后端一致）"
-    # 阈值与后端一致：Lost 已解决=3，Found 已解决=1
-    assert "i.status === 3" in text, "失物过滤阈值应为 3"
-    assert "i.status === 1" in text, "拾物过滤阈值应为 1"
-
-
-def test_v6_mock_main_tab_excludes_resolved():
-    """主 tab 拉取走 exclude_resolved=true；mock 已解决拾物(status:1) 不应出现在主 tab。
-    通过验证 mockFoundItems 中存在 status:1 项（适配器会将其排除）来闭环。"""
-    path = os.path.join(_BASE, "web", "src", "api", "mockData.ts")
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    found_block = _slice(text, "export const mockFoundItems", "export const mockMatches")
-    # 该 status:1 项会被 listFound 的 exclude_resolved 分支过滤，确保主 tab 不含已解决
-    assert "status: 1" in found_block
+# v6 演示闭环镜像测试（mockData/mockAdapter 对齐断言）已随演示态 mock 层整体拆除
+# 而移除（2026-09-24，审查 P1）：被守护对象不复存在；exclude_resolved/resolved_only
+# 的真实行为由上方 client 级用例继续守护。
 
 
 # ---------------- v7 迁移链（0004 现合法存在） ----------------

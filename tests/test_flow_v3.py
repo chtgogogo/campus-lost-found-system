@@ -608,17 +608,6 @@ def test_f3_16_matches_view_keep1_and_low_score_copy():
     assert ">= 90" in src and ">= 80" in src, "scoreColor 的 90/80 三档配色阈值属豁免项，不得改动"
 
 
-def test_f3_17_mock_adapter_keeps_unidirectional_alignment():
-    """F3-17：`mockAdapter.ts` 与后端保持**不对称**口径（设计 §7-1）。
-
-    正向 `genCandidatesForLost` 删除 keep_status 过滤；反向 `handleCreateFound` 的
-    isKeep1 早退保留；suspected 仍以 MATCH_THRESHOLD 计算；confirm-return / reject
-    补 keep1 拦截以对齐后端 T02。
-    """
-    src = _read_web("api/mockAdapter.ts")
-    assert "f.keep_status === 0" not in src, "mock 正向候选池不得再按 keep_status 过滤（变更 A）"
-    assert "isKeep1 ? [] : genCandidatesForFound" in src, "mock 反向 keep1 早退必须保留（单向性）"
-    assert "score >= MATCH_THRESHOLD" in src, "mock 的 suspected 仍以 80 为界，不随 60 漂移"
-    assert src.count("m.found_item?.keep_status === 1") >= 4, (
-        "mock 的 claim / confirm-return / reject 三处守卫 + myMatches U2 过滤均应有 keep1 拦截，与后端对齐"
-    )
+# F3-17（mockAdapter 镜像对齐）已随演示态 mock 层整体拆除而移除（2026-09-24，
+# 审查 P1：被守护对象 mockAdapter.ts 不复存在；单向性由后端用例与前端
+# MatchesView/constants 源码断言（上方用例）继续守护）。
