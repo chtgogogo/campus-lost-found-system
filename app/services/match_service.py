@@ -1146,15 +1146,32 @@ def build_match_outs(db, matches) -> list:
 
     单个 ``MatchService`` 实例贯穿整个循环：同一件失物在多条 match 中只抽取一次特征
     （``_feature_cache`` 命中），避免 N 次重复跑流水线。
+
+    审查 P1 性能改造（2026-09-24）：两端物品改为**两条 in_ 批量预取**——
+    此前循环内逐条 ``db.get``（每条匹配 2 次查询），列表页 N+1 的主要来源之一。
     """
     from app.models.item import FoundItem, LostItem
     from app.schemas.match import MatchOut
 
+    if not matches:
+        return []
+    lost_map = {
+        it.id: it
+        for it in db.query(LostItem)
+        .filter(LostItem.id.in_({m.lost_id for m in matches}))
+        .all()
+    }
+    found_map = {
+        it.id: it
+        for it in db.query(FoundItem)
+        .filter(FoundItem.id.in_({m.found_id for m in matches}))
+        .all()
+    }
     matcher = MatchService()
     outs = []
     for m in matches:
-        lost = db.get(LostItem, m.lost_id)
-        found = db.get(FoundItem, m.found_id)
+        lost = lost_map.get(m.lost_id)
+        found = found_map.get(m.found_id)
         lost_name = lost.category_name if lost else None
         found_name = found.category_name if found else None
         detail = matcher.score_detail(lost, found) if lost and found else {}

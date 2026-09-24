@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -132,52 +132,70 @@ def list_my_matches(
 
     flow-v3 U2=完全隐藏（方案 2）：as_found 分支过滤掉 keep1（留在原地未挪动）拾物的
     全部候选，拾得者侧不再看到任何 keep1 匹配记录（无论状态），单向性由列表层过滤保证。
+
+    审查 P1 性能改造（2026-09-24）：过滤/去重/排序/分页全部下推 SQL——
+    此前「全量拉取 → Python 去重排序过滤 → 内存切片」随数据量线性恶化，
+    且逐条 2 次 db.get（对端隐藏判定）构成 N+1；现单查询 + COUNT，
+    条件与原 Python 逻辑一一对应（去重由单查询天然保证）。
     """
-    # v15.2：过滤「不是我的」排除项——排除永不参与该用户的任何匹配视图
-    excluded_pairs = {
-        (e.lost_id, e.found_id)
-        for e in db.query(MatchExclusion).filter(MatchExclusion.user_id == user.id).all()
-    }
-    as_lost = (
+    # v15.2「不是我的」排除：相关子查询 NOT EXISTS——排除永不参与该用户的任何匹配视图
+    excluded_exists = (
+        db.query(MatchExclusion.id)
+        .filter(
+            MatchExclusion.user_id == user.id,
+            MatchExclusion.lost_id == MatchRecord.lost_id,
+            MatchExclusion.found_id == MatchRecord.found_id,
+        )
+        .exists()
+    )
+    in_progress = (
+        int(MatchStatus.PENDING_CLAIM),
+        int(MatchStatus.CLAIMING),
+        int(MatchStatus.MANUAL_PENDING),
+    )
+    q = (
         db.query(MatchRecord)
         .join(LostItem, MatchRecord.lost_id == LostItem.id)
-        .filter(LostItem.publisher_id == user.id)
-    )
-    as_found = (
-        db.query(MatchRecord)
         .join(FoundItem, MatchRecord.found_id == FoundItem.id)
-        .filter(FoundItem.finder_id == user.id)
-        # flow-v3 U2=完全隐藏：过滤 keep1（NOT_KEEPING=1）拾物的全部候选，
-        # 拾得者侧不再看到任何 keep1 匹配记录（与 claim/confirm-return/reject 守卫互为纵深）
-        .filter(FoundItem.keep_status != int(KeepStatus.NOT_KEEPING))
-    )
-    if status is not None:
-        as_lost = as_lost.filter(MatchRecord.status == status)
-        as_found = as_found.filter(MatchRecord.status == status)
-    matches = as_lost.all() + as_found.all()
-    # 去重
-    seen = set()
-    unique = []
-    for m in matches:
-        if m.id not in seen:
-            seen.add(m.id)
-            if (m.lost_id, m.found_id) not in excluded_pairs:
-                unique.append(m)
-    # v11（2026-08-27）：CLIP 精排次排序——同分时照片相似度高的排前；
-    # clip_sim 为 NULL（未精排/不可用）排在后面（COALESCE -1），行为与激活前一致。
-    unique.sort(
-        key=lambda x: (
-            -float(x.match_score),
-            -(float(x.clip_sim) if x.clip_sim is not None else -1.0),
-            x.id,
+        .filter(
+            # 失主侧 ∪ 拾得者侧；拾得者侧叠加 flow-v3 U2：keep1 拾物的全部候选隐藏
+            or_(
+                LostItem.publisher_id == user.id,
+                and_(
+                    FoundItem.finder_id == user.id,
+                    FoundItem.keep_status != int(KeepStatus.NOT_KEEPING),
+                ),
+            ),
+            ~excluded_exists,
+            # P1-2 对端隐藏·无条件部分：任一侧软删 → 隐藏（终态同样隐藏，与原逻辑一致）
+            LostItem.deleted_at.is_(None),
+            FoundItem.deleted_at.is_(None),
+            # P1-2 对端隐藏·条件部分：进行中状态且任一侧已解决 → 隐藏（终态保留）
+            ~(
+                MatchRecord.status.in_(in_progress)
+                & or_(
+                    LostItem.status == int(LostItemStatus.RESOLVED),
+                    FoundItem.status == int(FoundItemStatus.RESOLVED),
+                )
+            ),
         )
     )
-    # P1-2：对端软删 / 进行中状态对端已解决 → 隐藏（终态保留）
-    unique = [m for m in unique if not _counterpart_hidden(db, m)]
-    total = len(unique)
-    start = (page - 1) * page_size
-    page_items = unique[start : start + page_size]
-    outs = build_match_outs(db, page_items)
+    if status is not None:
+        q = q.filter(MatchRecord.status == status)
+    total = q.with_entities(func.count()).scalar() or 0
+    # v11（2026-08-27）：CLIP 精排次排序——同分时照片相似度高的排前；
+    # clip_sim 为 NULL（未精排/不可用）排在后面（COALESCE -1），行为与激活前一致。
+    rows = (
+        q.order_by(
+            MatchRecord.match_score.desc(),
+            func.coalesce(MatchRecord.clip_sim, -1.0).desc(),
+            MatchRecord.id.asc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    outs = build_match_outs(db, rows)
     return success(
         data=Page[MatchOut](items=outs, total=total, page=page, page_size=page_size)
     )
