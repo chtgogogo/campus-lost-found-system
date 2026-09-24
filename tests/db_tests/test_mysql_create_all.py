@@ -1,8 +1,9 @@
 """数据库测试：MySQL init_db 建表数 + scripts/seed.py 幂等性。
 
-A) test_mysql_init_db_creates_10_tables
+A) test_mysql_init_db_creates_12_tables
    - 连接本机 MySQL（root 空密码，127.0.0.1:3306），建专用测试库；
-   - Base.metadata.create_all 后断言存在 10 张表；
+   - Base.metadata.create_all 后断言存在 12 张表（含 v15 的 match_exclusion；
+     2026-09-24 口径订正：此前 10/11 张为陈旧值，MySQL 路径进 CI 后首次暴露）；
    - 结束后 DROP 测试库，保持环境干净；MySQL 不可用时自动 skip。
 
 B) test_seed_idempotency
@@ -71,13 +72,14 @@ def _mysql_available() -> bool:
         return False
 
 
-def test_metadata_registers_10_tables():
-    """不依赖真实 MySQL：Base.metadata 即 create_all 的建表依据，断言恰好 11 张表。
+def test_metadata_registers_12_tables():
+    """不依赖真实 MySQL：Base.metadata 即 create_all 的建表依据，断言恰好 12 张表。
 
-    即便本机 MySQL 因鉴权/未启动而跳过，也能保证“11 张表”这一目标本身被覆盖。
+    即便本机 MySQL 因鉴权/未启动而跳过，也能保证“12 张表”这一目标本身被覆盖。
+    （函数名与文案于 2026-09-24 随 MySQL 进 CI 的口径订正统一为 12。）
     """
     assert len(Base.metadata.tables) == 12, (
-        f"期望 11 张表，实际 {len(Base.metadata.tables)}: "
+        f"期望 12 张表，实际 {len(Base.metadata.tables)}: "
         f"{sorted(Base.metadata.tables.keys())}"
     )
     for expected in EXPECTED_TABLES:
@@ -85,7 +87,14 @@ def test_metadata_registers_10_tables():
 
 
 @pytest.mark.skipif(not _mysql_available(), reason="本地 MySQL 不可用（root 空密码 / lf/lf 均无法连接 127.0.0.1:3306）")
-def test_mysql_init_db_creates_10_tables():
+def test_mysql_init_db_creates_12_tables():
+    """真连 MySQL 建表并核对表数量/名单。
+
+    口径订正（2026-09-24，审查 P2）：此前断言 11 张为陈旧值（v15 的 match_exclusion
+    加入后未同步，且本地无 MySQL 一直 skip 从未暴露）；真实 schema = 12 张，与本文件
+    顶部 EXPECTED_TABLES（12 项）及 test_metadata_registers_12_tables 的 metadata 断言
+    一致。CI 挂 mysql:8.0 service 后本用例每次实跑。
+    """
     # 选用首个可用的凭据，保证 create_all 用的是同一组可连接凭据
     import pymysql
 
@@ -112,8 +121,8 @@ def test_mysql_init_db_creates_10_tables():
     try:
         Base.metadata.create_all(bind=engine)
         table_names = inspect(engine).get_table_names()
-        assert len(table_names) == 11, (
-            f"期望 11 张表，实际 {len(table_names)}: {table_names}"
+        assert len(table_names) == 12, (
+            f"期望 12 张表，实际 {len(table_names)}: {table_names}"
         )
         for expected in EXPECTED_TABLES:
             assert expected in table_names, f"缺少表 {expected}"

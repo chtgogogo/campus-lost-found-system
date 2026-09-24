@@ -6,7 +6,7 @@
 
 **做了什么**
 1. **盲测集实物**：`evaluation/dataset_blind.json`——12 对全新实例（6 正 6 负，覆盖六类召回/六类压制场景），标注后**即冻结**、从未参与任何调参；`_meta` 内置使用协议（每大版本跑一次、据此回调参即失效）。
-2. **MySQL 生产路径进 CI**：backend 作业挂 mysql:8.0 service（root 空密码 = db_tests 候选凭据第一优先），`tests/db_tests` 建表用例从「本地有 MySQL 才跑」变为 CI 实跑。
+2. **MySQL 生产路径进 CI**：backend 作业挂 mysql:8.0 service（root 空密码 = db_tests 候选凭据第一优先），`tests/db_tests` 建表用例从「本地有 MySQL 才跑」变为 CI 实跑。**首次实跑即暴露陈旧断言**：`test_mysql_init_db_creates_10_tables` 仍断言 11 张表（v15 加 match_exclusion 后应为 12，本地无 MySQL 一直 skip 从未暴露）——口径订正为 12 并统一函数名/docstring（测试纪律 A 类：陈旧期望订正，非断言弱化；EXPECTED_TABLES 与 metadata 断言本就是 12）。
 3. **依赖治理**：CLIP git 依赖锁 commit（`@d05afc4`，原 master 随上游漂移）；删除死依赖 passlib（代码直用 bcrypt，grep 全仓零引用）。
 4. **Element Plus 按需引入**：unplugin-vue-components + ElementPlusResolver 取代全量 `app.use(ElementPlus)`；CSS 保持全局（ElMessage 等 JS-API 组件样式确定性，取舍记录在案）。
 5. **文档三件套**：`docs/deploy.md` 整体重写（剔除 2026-08 本机环境快照，通用化）；新增 `docs/known-tradeoffs.md`（已知技术债与取舍：A~E 五类 15 条 + 已清账对照表）；新增 `docs/numbers.md`（对外数字口径表：10 项核心数字均可两步对账 + 禁用旧数字清单）。
