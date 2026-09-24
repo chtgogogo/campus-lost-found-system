@@ -77,6 +77,8 @@ class LostItemOut(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime] = None  # v7：失效时间
     deleted_at: Optional[datetime] = None  # v7：软删时间
+    # v17④：异步识别状态（0 待识别/1 识别中/2 完成/3 失败，见 RecognitionStatus）
+    recognize_status: int = 2
 
     @classmethod
     def from_model(cls, item) -> "LostItemOut":
@@ -99,6 +101,7 @@ class LostItemOut(BaseModel):
             created_at=item.created_at,
             expires_at=item.expires_at,
             deleted_at=item.deleted_at,
+            recognize_status=int(getattr(item, "recognize_status", 2)),
         )
 
 
@@ -122,6 +125,8 @@ class FoundItemOut(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime] = None  # v7：失效时间
     deleted_at: Optional[datetime] = None  # v7：软删时间
+    # v17④：异步识别状态（0 待识别/1 识别中/2 完成/3 失败，见 RecognitionStatus）
+    recognize_status: int = 2
 
     @classmethod
     def from_model(cls, item) -> "FoundItemOut":
@@ -144,6 +149,7 @@ class FoundItemOut(BaseModel):
             created_at=item.created_at,
             expires_at=item.expires_at,
             deleted_at=item.deleted_at,
+            recognize_status=int(getattr(item, "recognize_status", 2)),
         )
 
 

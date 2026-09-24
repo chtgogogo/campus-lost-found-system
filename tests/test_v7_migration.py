@@ -95,8 +95,8 @@ def test_upgrade_head_creates_0004_columns_and_indexes():
 
         with engine.connect() as conn:
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        # 卡#4（2026-09-23）：head 由 0008 前移至 0009_handover_attempts（attempts 防穷举列）
-        assert ver == "0009_handover_attempts"
+        # v17④（2026-09-25）：head 由 0009 前移至 0010_recognition_task（异步识别任务表）
+        assert ver == "0010_recognition_task"
     finally:
         try:
             engine.dispose()
@@ -123,7 +123,7 @@ def test_upgrade_idempotent_rerun():
         engine = create_engine(db_url)
         with engine.connect() as conn:
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0009_handover_attempts"  # 卡#4（2026-09-23）：head 前移至 0009
+        assert ver == "0010_recognition_task"  # v17④（2026-09-25）：head 前移至 0010
         assert "expires_at" in _columns(engine, "lost_item")
         assert "flow_type" in _columns(engine, "match_record")
     finally:

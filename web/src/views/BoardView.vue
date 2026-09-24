@@ -172,6 +172,7 @@ import { matchApi } from '@/api/match'
 import { fullImageUrl } from '@/api/request'
 import { formatChineseDateTime } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
+import { useRecognitionPolling } from '@/composables/useRecognitionPolling'
 import type { FoundItemOut, LostItemOut, MatchOut, Page } from '@/types'
 import ContactDialog from '@/views/ContactDialog.vue'
 
@@ -373,8 +374,19 @@ async function submitApplyMatch() {
   }
 }
 
-async function load() {
-  loading.value = true
+// v17④：公示栏是否存在识别中物品（0 待识别 / 1 识别中）
+const hasRecognizing = computed(() =>
+  [...lostItems.value, ...foundItems.value].some(
+    (it) => it.recognize_status === 0 || it.recognize_status === 1,
+  ),
+)
+const recognitionPoll = useRecognitionPolling(
+  () => hasRecognizing.value,
+  (silent?: boolean) => load(silent ?? false),
+)
+
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const [lost, found, rFound, completed] = await Promise.all([
       // 主三 tab：排除已解决（后端过滤 + merged 前端 P0 保底）
@@ -407,8 +419,10 @@ async function load() {
   } catch {
     /* 错误已由拦截器提示 */
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
+  // v17④：列表里有「AI 识别中」物品时自动静默轮询，识别完成后徽标消失
+  recognitionPoll.maybeStart()
 }
 
 watch([typeFilter, keyword, resolvedKeyword], () => {

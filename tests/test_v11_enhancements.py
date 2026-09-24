@@ -238,6 +238,11 @@ def test_correction_sample_recorded_on_publish(client, db, monkeypatch):
     )
     assert r.status_code == 200, r.text
 
+    # v17④：识别异步化——纠错样本移至 worker 回填时记录，同步驱动识别完成后断言
+    from conftest import drain_recognition
+
+    drain_recognition()
+
     rows = db.query(CorrectionSample).all()
     assert len(rows) == 1, f"应记录 1 条纠错样本，实际 {len(rows)}"
     assert rows[0].vision_label == "书包"

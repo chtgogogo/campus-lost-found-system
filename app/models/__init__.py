@@ -5,6 +5,7 @@ from app.models.correction import CorrectionSample
 from app.models.im import IMMessage, IMSession
 from app.models.item import FoundItem, LostItem
 from app.models.match import HandoverCode, MatchExclusion, MatchRecord
+from app.models.recognition import RecognitionTask
 from app.models.user import TrustScoreLog, User
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "IMMessage",
     "AuditLog",
     "CorrectionSample",
+    "RecognitionTask",
 ]

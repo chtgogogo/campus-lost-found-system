@@ -21,6 +21,7 @@ from app.core.database import SessionLocal, init_db
 from app.core.exceptions import register_exception_handlers
 from app.core.seed import seed_categories
 from app.routers import admin, auth, im, items, match, vision
+from app.services import recognition_worker
 from app.services.vision_service import get_vision_service
 
 
@@ -33,7 +34,12 @@ async def lifespan(app: FastAPI):
         seed_categories(db)
     # 进程内视觉服务：唯一加载点 get_vision_service() 预热（仅此一处实例化）
     app.state.vision = get_vision_service()
+    # v17④：异步识别 worker（单线程消费 recognition_task；测试套件经 conftest 显式关闭）
+    if settings.RECOGNITION_WORKER_ENABLED:
+        recognition_worker.start()
     yield
+    if settings.RECOGNITION_WORKER_ENABLED:
+        recognition_worker.stop()
 
 
 def create_app() -> FastAPI:

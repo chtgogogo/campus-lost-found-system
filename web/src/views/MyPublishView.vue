@@ -29,12 +29,24 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { itemsApi } from '@/api/items'
 import ItemCard, { type BoardItem } from '@/components/ItemCard.vue'
+import { useRecognitionPolling } from '@/composables/useRecognitionPolling'
 import type { FoundItemOut, LostItemOut } from '@/types'
 
 const tab = ref<'active' | 'done'>('active')
 const loading = ref(false)
 const lost = ref<LostItemOut[]>([])
 const found = ref<FoundItemOut[]>([])
+
+// v17④：我的发布是否存在识别中物品（0 待识别 / 1 识别中）→ 自动静默轮询
+const hasRecognizing = computed(() =>
+  [...lost.value, ...found.value].some(
+    (it) => it.recognize_status === 0 || it.recognize_status === 1,
+  ),
+)
+const recognitionPoll = useRecognitionPolling(
+  () => hasRecognizing.value,
+  (silent?: boolean) => load(silent ?? false),
+)
 
 // Q10 状态映射：失物进行中={0,1,2}/已完成={3}；拾物进行中={0}/已完成={1}
 function isActive(kind: 'lost' | 'found', status: number): boolean {
@@ -59,8 +71,8 @@ const emptyText = computed(() =>
   tab.value === 'active' ? '暂无进行中的发布' : '暂无已完成的发布',
 )
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const res = await itemsApi.myPublished()
     lost.value = res.lost
@@ -68,8 +80,10 @@ async function load() {
   } catch {
     /* 忽略 */
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
+  // v17④：有「AI 识别中」物品时自动静默轮询
+  recognitionPoll.maybeStart()
 }
 
 function onOpen(_it: BoardItem) {

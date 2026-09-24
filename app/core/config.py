@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     # 检测置信度阈值（低于此值的检测框被忽略）
     YOLO_CONF_THRESHOLD: float = 0.12  # 降低门槛以提升弱类（钥匙/钱包/水杯）召回，代价是偶发误识别
 
+    # ---------------- 异步识别（v17④：发布接口不再同步跑 YOLO） ----------------
+    # 后台 worker 消费 recognition_task；测试套件显式关闭（conftest 设 false），
+    # 单测直接驱动 claim/process 函数。单线程 worker 是有意选择：SQLite 单写者，诚实规模。
+    RECOGNITION_WORKER_ENABLED: bool = True
+    RECOGNITION_MAX_RETRIES: int = 3   # 重试上限，耗尽 → failed 死信（error 可查）
+
     # ---------------- 交接码 ----------------
     HANDOVER_TTL_SEC: int = 10                 # 双码交叉验证模型 TTL（10 秒）
 

@@ -104,6 +104,15 @@ class RecognitionMode(IntEnum):
     WORLD = 1           # YOLO-World 零样本
 
 
+class RecognitionStatus(IntEnum):
+    """v17④ 异步识别任务状态（recognition_task.status 与物品 recognize_status 共用）。"""
+
+    PENDING = 0         # 待处理
+    RUNNING = 1         # 执行中
+    DONE = 2            # 完成
+    FAILED = 3          # 失败（重试耗尽死信，可查 error）
+
+
 class AuditAction(IntEnum):
     PUBLISH = 1
     CLAIM = 2

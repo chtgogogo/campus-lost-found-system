@@ -29,6 +29,7 @@
 | 11 | 评测 CI 门禁阈值 **76**（主集 F1 78.0 − 2pp 容差；`--fail-under 99` 实测退出码 1 会挡） | `app/core/config.py`（EVAL_FAIL_UNDER）+ `审查证据/eval_gate_fail_under_99_block.txt` | `python evaluation/run_eval.py --fail-under 99; echo $?`（退出码 1=门禁生效） |
 | 12 | 压测·开 WAL 前后（SQLite，10 用户/60s，`evaluation/loadtest/`）：匹配列表 **52.1→61.3 QPS（p95 180→130ms）**、发布（含同步识别）**5.4→6.8 QPS（p95 1800→1400ms）**、交接码验证 **79.8→90.8 QPS（p95 37→17ms）**、物品列表 90.2 持平（p95 17→13ms）；全场景 0 错误 0 锁错误 | `evaluation/loadtest/_results/sqlite_baseline_*.summary.txt` + `sqlite_wal_*.summary.txt` | `python evaluation/loadtest/run_one.py --scenario matches --db sqlite --label 对比标签 -u 10 -r 5 -t 60`（先 `-r requirements` 装 locust；口径见 `evaluation/loadtest/README.md`） |
 | 13 | 压测·SQLite vs MySQL 8（同脚本同机 10 用户/60s）：MySQL 全面落后——列表 84.9 vs **90.2** QPS、匹配列表 42.6 vs **61.3**、发布 6.0 vs **6.8**、交接码 65.9 vs **90.8**（p95 180 vs **17ms**）、混合 22.9 vs **27.6**；主因=Docker 回环 TCP 每查询一次往返（匹配列表 5 条 SQL → 5 次 RTT）；两库全场景 0 错误 0 锁错误 | `evaluation/loadtest/_results/mysql_*.summary.txt` + `sqlite_wal_*.summary.txt` | 同上，`--db mysql`（MySQL 容器 `docker run` 命令见 loadtest README） |
+| 14 | 发布接口异步化前后（同一压测口径 10 用户/60s）：**5.4 → 74.4 QPS（13.8 倍），p95 1800ms → 68ms（-96%），中位 1600ms → 25ms**；识别转后台任务表（同图全库只推理一次），压测实证任务/物品状态 100% 回填一致 | `evaluation/loadtest/_results/sqlite_baseline_publish.summary.txt`（改前）vs `sqlite_async_publish.summary.txt`（改后）+ `审查证据/pytest_v17_task4.txt` | `python evaluation/loadtest/run_one.py --scenario publish --db sqlite --label sqlite_async -u 10 -r 5 -t 60`（改前数字 checkout 提交 f7cc411 后同命令） |
 
 ## 必须带着限定语说的数字（主动交代，防追问）
 

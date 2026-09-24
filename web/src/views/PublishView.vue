@@ -485,7 +485,7 @@ async function onSubmitFound() {
   foundLoading.value = true
   try {
     const res = await itemsApi.createFound(fd)
-    ElMessage.success(`发布成功${res.suspected_matches.length ? `，发现 ${res.suspected_matches.length} 条疑似匹配` : ''}`)
+    ElMessage.success(`发布成功${res.suspected_matches.length ? `，发现 ${res.suspected_matches.length} 条疑似匹配` : ''}，AI 识别中，稍后自动刷新`)
     foundFiles.value = []
     found.description = ''
     found.found_time = ''
@@ -531,7 +531,7 @@ async function onSubmitLost() {
   lostLoading.value = true
   try {
     const res = await itemsApi.createLost(fd)
-    ElMessage.success(`发布成功${res.suspected_matches.length ? `，发现 ${res.suspected_matches.length} 条疑似匹配` : ''}`)
+    ElMessage.success(`发布成功${res.suspected_matches.length ? `，发现 ${res.suspected_matches.length} 条疑似匹配` : ''}，AI 识别中，稍后自动刷新`)
     lostFiles.value = []
     lost.title = ''
     lost.lost_time = ''

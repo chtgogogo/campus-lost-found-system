@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -38,9 +38,9 @@ from app.schemas.item import (
 )
 from app.schemas.match import MatchOut
 from app.schemas.user import UserMeOut
-from app.services.clip_reorder import reorder_match_ids
 from app.services.match_service import build_match_outs
 from app.services.publish_service import PublishService
+from app.services.recognition_service import enqueue_clip
 from app.services.tagging_service import TaggingService
 
 router = APIRouter(tags=["items"])
@@ -76,7 +76,6 @@ def _now() -> datetime:
 @router.post("/lost-items", response_model=StandardResponse)
 async def create_lost_item(
     request: Request,
-    background_tasks: BackgroundTasks,
     title: str = Form(..., max_length=100),
     description: str = Form(...),
     category_name: str = Form(..., max_length=100, description="纯自由文本分类（必填）"),
@@ -113,8 +112,10 @@ async def create_lost_item(
         location=location,
         images=img_data,
     )
-    # 卡7（安检 P3）：publish_lost 内含 YOLO 推理 + 感知哈希等秒级同步重活，
-    # 移出事件循环（线程池执行）；Session 跨线程仅顺序使用（check_same_thread=False）。
+    # 卡7（安检 P3）：publish_lost 含图片落盘 + 文本打分等重活，移出事件循环（线程池执行）；
+    # Session 跨线程仅顺序使用（check_same_thread=False）。
+    # v17④：YOLO 识别已异步化（recognition_task 表 + 后台 worker），发布响应毫秒级，
+    # 物品 recognize_status=pending 供前端显示「识别中」并轮询。
     lost, matches = await asyncio.to_thread(
         PublishService(db).publish_lost,
         user,
@@ -123,9 +124,8 @@ async def create_lost_item(
         ua=request.headers.get("user-agent"),
     )
     if matches:
-        background_tasks.add_task(
-            reorder_match_ids, [m.id for m in matches]
-        )
+        # v17④：CLIP 精排由 BackgroundTasks（进程重启即丢）迁入任务表（worker 消费）
+        enqueue_clip(db, [m.id for m in matches])
     out = LostItemOut.from_model(lost)
     return success(
         data={"item": out, "suspected_matches": build_match_outs(db, matches)}
@@ -136,7 +136,6 @@ async def create_lost_item(
 @router.post("/found-items", response_model=StandardResponse)
 async def create_found_item(
     request: Request,
-    background_tasks: BackgroundTasks,
     keep_status: int = Form(..., description="0 暂为保管 / 1 未保管"),
     category_name: str = Form(..., max_length=100, description="纯自由文本分类（必填）"),
     images: List[UploadFile] = File(..., description="至少 1 张照片"),
@@ -182,8 +181,8 @@ async def create_found_item(
         features=features,
         location=location,
     )
-    # 卡7（安检 P3）：publish_found 内含 YOLO 推理 + 感知哈希等秒级同步重活，
-    # 移出事件循环（线程池执行）；Session 跨线程仅顺序使用（check_same_thread=False）。
+    # 卡7（安检 P3）：publish_found 含图片落盘等重活，移出事件循环（线程池执行）。
+    # v17④：YOLO 识别已异步化（同 create_lost_item 注释）。
     found, matches = await asyncio.to_thread(
         PublishService(db).publish_found,
         user,
@@ -192,9 +191,8 @@ async def create_found_item(
         ua=request.headers.get("user-agent"),
     )
     if matches:
-        background_tasks.add_task(
-            reorder_match_ids, [m.id for m in matches]
-        )
+        # v17④：CLIP 精排迁入任务表（worker 消费，进程重启不丢）
+        enqueue_clip(db, [m.id for m in matches])
     out = FoundItemOut.from_model(found)
     return success(
         data={"item": out, "suspected_matches": build_match_outs(db, matches)}

@@ -97,7 +97,7 @@ class LoadTestUser(HttpUser):
                 "category_name": "书包",
                 "description": f"压测发布-{os.urandom(4).hex()}",
             },
-            name="POST /found-items（含同步识别）",
+            name="POST /found-items",
         )
 
     # ---------------- 场景 3：匹配列表 ----------------

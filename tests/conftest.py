@@ -31,6 +31,9 @@ os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["SHOW_SMS_CODE"] = "true"
 # 演示数据不播种（SEED_DEMO 门控）
 os.environ["SEED_DEMO"] = "false"
+# v17④：测试套件关闭后台识别 worker（避免线程与测试并发抢库）；
+# 需要识别结果的用例显式调 drain_recognition() 同步驱动（单测直接测 worker 函数）
+os.environ["RECOGNITION_WORKER_ENABLED"] = "false"
 # 密钥/邀请码随机注入（零字面量凭据），同时满足 create_app 的 fail fast 安全校验
 os.environ["JWT_SECRET"] = uuid.uuid4().hex + uuid.uuid4().hex
 os.environ["ADMIN_APPLY_CODE"] = "test-admin-" + uuid.uuid4().hex[:16]
@@ -47,6 +50,7 @@ from app.models import (  # noqa: E402
     LostItem,
     MatchExclusion,
     MatchRecord,
+    RecognitionTask,
     TrustScoreLog,
     User,
 )
@@ -56,6 +60,7 @@ from app.models.im import IMMessage, IMSession  # noqa: E402
 API = "/api/v1"
 _BUSINESS_TABLES = (
     MatchExclusion,  # v15：引用 user/lost/found，必须最先清（否则 FK/残留污染后续测试）
+    RecognitionTask,  # v17④：异步识别任务（item_id 为逻辑关联无 FK，位置不敏感）
     HandoverCode,
     MatchRecord,
     AuditLog,
@@ -67,6 +72,17 @@ _BUSINESS_TABLES = (
     User,
     CorrectionSample,
 )
+
+
+def drain_recognition() -> int:
+    """同步驱动异步识别 worker：处理当前全部 pending 任务（v17④ 测试助手）。
+
+    发布相关的既有用例在 v17④ 后于发布内拿不到视觉结果（识别已异步化），
+    断言识别效果（类目/标签/纠错样本）前先调本函数，等价于「等 worker 跑完」。
+    """
+    from app.services import recognition_worker
+
+    return recognition_worker.drain_all()
 
 
 def _png_bytes() -> bytes:

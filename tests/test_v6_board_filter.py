@@ -270,8 +270,10 @@ def test_v6_migration_head_is_0004():
     # v11（2026-08-27）在 0007 之上追加 0008_clip_reorder_and_correction。
     assert "0007_dual_handover_code" in revs, "应存在 0007_dual_handover_code 迁移"
     assert "0008_clip_reorder_and_correction" in revs, "应存在 0008_clip_reorder_and_correction 迁移"
-    # 卡#4 安检 L1-9（2026-09-23）在 0008 之上追加 0009_handover_attempts，head 现为 0009。
+    # 卡#4 安检 L1-9（2026-09-23）在 0008 之上追加 0009_handover_attempts。
     assert "0009_handover_attempts" in revs, "应存在 0009_handover_attempts 迁移"
-    assert heads == ["0009_handover_attempts"], (
-        f"迁移 head 应为 0009_handover_attempts，实际 {heads}"
+    # v17④（2026-09-25）在 0009 之上追加 0010_recognition_task，head 现为 0010。
+    assert "0010_recognition_task" in revs, "应存在 0010_recognition_task 迁移"
+    assert heads == ["0010_recognition_task"], (
+        f"迁移 head 应为 0010_recognition_task，实际 {heads}"
     )

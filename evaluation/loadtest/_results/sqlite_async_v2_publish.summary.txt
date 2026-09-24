@@ -1,0 +1,8 @@
+场景=publish 配置=sqlite_async_v2 数据库=sqlite 用户=5 生成速率=5.0/s 时长=30s
+接口: POST /found-items
+  请求总数=1187  QPS=39.6  p95=30ms  中位=16ms  平均=20.842684077660152ms  错误率=0.0% (0/1187)
+接口: Aggregated
+  请求总数=1192  QPS=39.7  p95=31ms  中位=16ms  平均=21.927433976674635ms  错误率=0.0% (0/1192)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_sqlite_async_v2.log

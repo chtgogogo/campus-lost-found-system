@@ -26,6 +26,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -43,13 +45,14 @@ from app.schemas.common import (
     KeepStatus,
     LostItemStatus,
     MatchStatus,
+    RecognitionStatus,
 )
 from app.schemas.item import FoundItemPublishDTO, LostItemPublishDTO
 from app.services import audit_service
 from app.services.category_service import same_family
 from app.services.match_service import MatchService
+from app.services.recognition_service import enqueue_yolo
 from app.services.tagging_service import NOUN_SET, TaggingService
-from app.services.vision_service import get_vision_service
 from app.utils import storage as storage_util
 from app.utils.image_validator import validate_images
 
@@ -89,6 +92,20 @@ class PublishService:
         self._matcher = MatchService()
 
     # ---------------- 视觉结果 → 内部 category_id ----------------
+    def _fallback_category_id(self) -> int:
+        """视觉不可用时的降级类目：优先「其他」类（v8 兜底回退目标），否则首个活跃类。"""
+        other = (
+            self.db.query(Category)
+            .filter(Category.is_active == 1, Category.name == settings.OTHER_CATEGORY_NAME)
+            .first()
+        )
+        if other is not None:
+            return int(other.id)
+        fallback = self.db.query(Category).filter(Category.is_active == 1).first()
+        if not fallback:
+            raise CategoryError("无可用分类，请先 seed")
+        return int(fallback.id)
+
     def _category_from_vision(self, vision_result: dict) -> int:
         """由视觉结果解析内部 category_id（仅用于匹配候选检索）。
 
@@ -96,23 +113,12 @@ class PublishService:
         """
         cat = self.db.get(Category, vision_result["category_id"])
         if not cat or not cat.is_active:
-            # v8：降级兜底优先指向「其他」类（按名称解析，避免硬编码 id 耦合）
-            other = (
-                self.db.query(Category)
-                .filter(Category.is_active == 1, Category.name == settings.OTHER_CATEGORY_NAME)
-                .first()
-            )
-            if other is not None:
-                return int(other.id)
-            fallback = self.db.query(Category).filter(Category.is_active == 1).first()
-            if not fallback:
-                raise CategoryError("无可用分类，请先 seed")
-            return int(fallback.id)
+            return self._fallback_category_id()
         return int(vision_result["category_id"])
 
     # ---------------- v4 类目解析（名词优先） ----------------
     def _resolve_category_id(
-        self, category_name: Optional[str], vision_result: dict, noun_tags: list[str]
+        self, category_name: Optional[str], vision_result: Optional[dict], noun_tags: list[str]
     ) -> int:
         """解析内部 category_id（v4：名词优先于视觉降级）。
 
@@ -120,6 +126,10 @@ class PublishService:
         1) ``category_name`` 精确命中活跃分类（用户填写的规范名词）。
         2) 提取名词 tag 命中种子类目名（如 "钥匙" → 类目「钥匙」）。
         3) 回退视觉结果（保持 v3 降级），避免无图/无名词时断发布。
+
+        v17④ 异步识别：发布时视觉结果未知（``vision_result=None``），第 3 优先级按
+        「视觉不可用」降级（与 YOLO 权重缺失时行为一致）；worker 识别完成后由
+        ``apply_vision_result`` 以相同优先级重解析并归一化 category_name。
         """
         name = (category_name or "").strip()
         if name:
@@ -140,7 +150,9 @@ class PublishService:
             )
             if cat:
                 return int(cat.id)
-        return self._category_from_vision(vision_result)
+        if vision_result is not None:
+            return self._category_from_vision(vision_result)
+        return self._fallback_category_id()
 
     @staticmethod
     def _vision_label(vision_result: dict) -> Optional[str]:
@@ -182,6 +194,39 @@ class PublishService:
         except Exception:  # pragma: no cover - 防御性兜底
             pass
 
+    # ---------------- v17④：异步识别完成后的回填（worker 调用） ----------------
+    def apply_vision_result(self, item_type: str, item, vision_result: dict) -> None:
+        """识别 worker 完成 YOLO 推理后回填物品：重解析类目 / 补标签 / 纠错样本 / 补匹配。
+
+        与同步时代口径对齐（``_resolve_category_id`` 同一优先级：名词 → 视觉降级）：
+        - 发布时 category_name 保留用户原始输入；此处重解析后，若解析到「其他」类才
+          归一化 category_name（同步时代的归一化时机）；
+        - 标签以真实 vision_label 重跑 ``TaggingService.extract``（发布时 vision_label 为 None）；
+        - 纠错样本 / 反向匹配增量补齐（``_exists_match`` 去重，不重复生成候选）。
+        """
+        name = (item.category_name or "").strip()
+        vision_label = self._vision_label(vision_result)
+        tags = TaggingService.extract(
+            title=getattr(item, "title", None),
+            description=item.description or "",
+            vision_label=vision_label,
+            category_name=name,
+        )
+        category_id = self._resolve_category_id(name, vision_result, tags)
+        resolved_cat = self.db.get(Category, category_id) if category_id is not None else None
+        item.category_id = category_id
+        if resolved_cat is not None and resolved_cat.name == settings.OTHER_CATEGORY_NAME:
+            item.category_name = settings.OTHER_CATEGORY_NAME
+        item.tags = tags
+        owner_id = item.publisher_id if item_type == "lost" else item.finder_id
+        self._record_correction_sample(
+            item_type, item.id, owner_id, vision_result, item.category_name
+        )
+        if item_type == "lost":
+            self._reverse_match_lost(item)
+        else:
+            self._reverse_match_found(item)
+
     # ---------------- 失物发布 ----------------
     def publish_lost(
         self,
@@ -196,27 +241,22 @@ class PublishService:
         validate_images(dto.images)
         image_urls = storage_util.save_images(dto.images)
         first_bytes = dto.images[0][1] if dto.images else b""
-        vision_result = get_vision_service().predict(first_bytes)
-        # v4：真实识别 label 才注入；名词优先于视觉 label
+        # v17④ 识别异步化：发布不再同步跑 YOLO（秒级阻塞 → 毫秒级返回）。
+        # 发布时视觉结果未知，按「视觉不可用」降级解析类目（与权重缺失行为一致）；
+        # category_name 保留用户原始输入，worker 识别完成后由 apply_vision_result
+        # 按「名词 → 视觉」优先级重解析并统一归一化，最终口径与同步时代一致。
+        vision_result = None
         tags = TaggingService.extract(
             title=dto.title,
             description=dto.description,
-            vision_label=self._vision_label(vision_result),
+            vision_label=None,
             category_name=dto.category_name.strip(),
         )
         category_id = self._resolve_category_id(dto.category_name.strip(), vision_result, tags)
-        # v8：若解析到「其他」类，category_name 同步归一化为「其他」，
-        # 保证 score 的「其他」路径（按 category_name 判定）与召回（按 category_id 相等）一致。
-        resolved_cat = self.db.get(Category, category_id) if category_id is not None else None
-        category_name = (
-            settings.OTHER_CATEGORY_NAME
-            if (resolved_cat is not None and resolved_cat.name == settings.OTHER_CATEGORY_NAME)
-            else dto.category_name.strip()
-        )
         lost = LostItem(
             publisher_id=publisher.id,
             category_id=category_id,
-            category_name=category_name,
+            category_name=dto.category_name.strip(),
             title=dto.title,
             description=dto.description,
             images=image_urls,
@@ -227,9 +267,30 @@ class PublishService:
             location=dto.location,
             lost_time=dto.lost_time,
             status=int(LostItemStatus.PENDING_MATCH),
+            recognize_status=int(RecognitionStatus.PENDING),
         )
         self.db.add(lost)
         self.db.flush()
+        # 幂等入队（同哈希首图全库只推理一次；同事务，发布失败任务行一并回滚）
+        task = enqueue_yolo(
+            self.db,
+            "lost",
+            lost.id,
+            hashlib.sha256(first_bytes).hexdigest() if first_bytes else None,
+        )
+        if task.parent_id is not None and task.status == int(RecognitionStatus.DONE):
+            # 同图复用已完成主任务：结果同步应用（与 worker 回填同一段逻辑），
+            # 否则任务行 done 而物品永远停在「识别中」（压测 sqlite_async 实证修复）
+            self.apply_vision_result(
+                "lost",
+                lost,
+                {
+                    "category_id": task.result_category_id,
+                    "label": task.result_label,
+                    "confidence": task.result_confidence or 0.0,
+                },
+            )
+            lost.recognize_status = int(RecognitionStatus.DONE)
 
         audit_service.write_audit(
             self.db,
@@ -240,10 +301,6 @@ class PublishService:
             ip=ip,
             ua=ua,
             detail=f"title={dto.title};category_id={category_id};category_name={dto.category_name.strip()};tags={tags}",
-        )
-        # 数据飞轮：用户最终分类 ≠ 视觉预标 → 记录纠错样本
-        self._record_correction_sample(
-            "lost", lost.id, publisher.id, vision_result, category_name
         )
 
         # v15.2 修正（code-review 硬性问题）：主发布先提交落库，反向匹配失败只回滚
@@ -282,29 +339,22 @@ class PublishService:
         validate_images(dto.images)
         image_urls = storage_util.save_images(dto.images)
         first_bytes = dto.images[0][1] if dto.images else b""
-        vision_result = get_vision_service().predict(first_bytes)
-        # v4：真实识别 label 才注入；名词优先于视觉 label
+        # v17④ 识别异步化（同 publish_lost 注释）：发布不跑 YOLO，按「视觉不可用」降级
+        vision_result = None
         tags = TaggingService.extract(
             title=None,
             description=dto.description,
-            vision_label=self._vision_label(vision_result),
+            vision_label=None,
             category_name=dto.category_name.strip(),
         )
         category_id = self._resolve_category_id(dto.category_name.strip(), vision_result, tags)
-        # v8：若解析到「其他」类，category_name 同步归一化为「其他」（同 publish_lost 说明）。
-        resolved_cat = self.db.get(Category, category_id) if category_id is not None else None
-        category_name = (
-            settings.OTHER_CATEGORY_NAME
-            if (resolved_cat is not None and resolved_cat.name == settings.OTHER_CATEGORY_NAME)
-            else dto.category_name.strip()
-        )
         # 暂为保管（keep_status=0）强制 contact_allowed=1（后端二次兜底，不信任前端）
         contact_allowed = 1 if dto.keep_status == 0 else dto.contact_allowed
 
         found = FoundItem(
             finder_id=finder.id,
             category_id=category_id,
-            category_name=category_name,
+            category_name=dto.category_name.strip(),
             description=dto.description,
             images=image_urls,
             tags=tags,
@@ -315,9 +365,28 @@ class PublishService:
             keep_status=dto.keep_status,
             contact_allowed=contact_allowed,
             status=int(FoundItemStatus.PENDING),
+            recognize_status=int(RecognitionStatus.PENDING),
         )
         self.db.add(found)
         self.db.flush()
+        # 幂等入队（同 publish_lost）；同图复用已完成主任务时同步应用缓存结果
+        task = enqueue_yolo(
+            self.db,
+            "found",
+            found.id,
+            hashlib.sha256(first_bytes).hexdigest() if first_bytes else None,
+        )
+        if task.parent_id is not None and task.status == int(RecognitionStatus.DONE):
+            self.apply_vision_result(
+                "found",
+                found,
+                {
+                    "category_id": task.result_category_id,
+                    "label": task.result_label,
+                    "confidence": task.result_confidence or 0.0,
+                },
+            )
+            found.recognize_status = int(RecognitionStatus.DONE)
 
         # 暂为保管（keep_status=0）隐式信誉 +1（同事务）
         if dto.keep_status == 0:
@@ -342,10 +411,7 @@ class PublishService:
             ua=ua,
             detail=f"keep_status={dto.keep_status};category_id={category_id};category_name={dto.category_name.strip()};tags={tags}",
         )
-        # 数据飞轮：用户最终分类 ≠ 视觉预标 → 记录纠错样本
-        self._record_correction_sample(
-            "found", found.id, finder.id, vision_result, category_name
-        )
+        # v17④：纠错样本移至 worker 识别完成后的 apply_vision_result（发布时无视觉结果）
 
         # v15.2 修正：同上——主发布先落库，匹配失败只回滚匹配记录
         self.db.commit()

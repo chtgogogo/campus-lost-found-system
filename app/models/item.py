@@ -69,6 +69,13 @@ class LostItem(Base):
     # v7 新增：软删时间（用户侧删除置此字段，物理删除因 RESTRICT 外键被禁止）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # v17④：异步识别状态（RecognitionStatus；2=DONE 为存量行默认——历史上识别在发布内同步完成）
+    # server_default 与迁移 0010 保持一致（create_all 与 alembic 两条建表路径 schema 对齐，
+    # 裸 SQL 插入不缺列默认值）
+    recognize_status: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=2, server_default="2"
+    )
+
     __table_args__ = (
         Index("idx_lost_cat_status", "category_id", "status"),
         Index("idx_lost_expires", "expires_at"),
@@ -119,6 +126,11 @@ class FoundItem(Base):
     )
     # v7 新增：软删时间（用户侧删除置此字段，物理删除因 RESTRICT 外键被禁止）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # v17④：异步识别状态（RecognitionStatus；2=DONE 为存量行默认，server_default 与迁移 0010 对齐）
+    recognize_status: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=2, server_default="2"
+    )
 
     __table_args__ = (
         Index("idx_found_cat_status", "category_id", "status"),

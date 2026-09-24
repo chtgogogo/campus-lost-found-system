@@ -83,6 +83,7 @@ export interface LostItemOut {
   created_at: string
   expires_at?: string | null // v7：失效时间
   deleted_at?: string | null // v7：软删时间
+  recognize_status: number // v17④：0 待识别 1 识别中 2 完成 3 失败（RecognitionStatus）
 }
 
 export interface FoundItemOut {
@@ -107,6 +108,7 @@ export interface FoundItemOut {
   created_at: string
   expires_at?: string | null // v7：失效时间
   deleted_at?: string | null // v7：软删时间
+  recognize_status: number // v17④：0 待识别 1 识别中 2 完成 3 失败（RecognitionStatus）
 }
 
 // ---------------- 匹配 ----------------

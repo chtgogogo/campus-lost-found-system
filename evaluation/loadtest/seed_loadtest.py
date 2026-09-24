@@ -136,8 +136,8 @@ def seed_all() -> dict:
         db.flush()
         hand_match_ids: list[int] = []
         expire = datetime.utcnow() + timedelta(hours=1)
-        for i, lost in enumerate(hand_losts):
-            for j, found in enumerate(hand_founds):
+        for lost in hand_losts:
+            for _, found in enumerate(hand_founds):
                 m = MatchRecord(
                     lost_id=lost.id,
                     found_id=found.id,

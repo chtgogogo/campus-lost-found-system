@@ -17,6 +17,9 @@
       <div class="item-title-row">
         <el-tag size="small" effect="light" type="primary">{{ data.category_name || '未分类' }}</el-tag>
         <span class="item-status" :class="statusClass">{{ statusLabel }}</span>
+        <!-- v17④：异步识别状态（发布后 AI 后台识别，轮询刷新） -->
+        <span v-if="recognizing" class="item-status recognizing">AI 识别中…</span>
+        <span v-else-if="recognizeFailed" class="item-status recognize-failed">识别失败</span>
         <span v-if="isResolved" class="item-resolved-badge">{{ RESOLVED_BADGE_LABEL }}</span>
       </div>
 
@@ -192,6 +195,11 @@ const statusClass = computed(() => {
   return `s${s}`
 })
 
+// v17④：异步识别状态（0 待识别/1 识别中 → 展示「AI 识别中」；3 → 识别失败）
+const recognizeStatus = computed(() => (data.value as LostItemOut | FoundItemOut).recognize_status ?? 2)
+const recognizing = computed(() => recognizeStatus.value === 0 || recognizeStatus.value === 1)
+const recognizeFailed = computed(() => recognizeStatus.value === 3)
+
 const timeText = computed(() => {
   const t =
     kind.value === 'lost'
@@ -303,6 +311,12 @@ const expiresInDays = computed<number | null>(() => {
 }
 .item-status.s3 {
   color: #16a34a;
+}
+.item-status.recognizing {
+  color: #f59e0b;
+}
+.item-status.recognize-failed {
+  color: #ef4444;
 }
 .item-title {
   font-size: 15px;

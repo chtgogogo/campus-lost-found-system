@@ -34,6 +34,29 @@
 - **SQLite WAL vs MySQL 8（同脚本同机）**：MySQL 全场景落后（匹配列表 42.6 vs 61.3、交接码 65.9 vs 90.8、列表 84.9 vs 90.2、发布 6.0 vs 6.8、mixed 22.9 vs 27.6）。主因：单机部署下 MySQL 每查询一次回环 TCP 往返。
 - **迁移决策（已写入 `docs/known-tradeoffs.md` B3）**：单机校园规模**不迁 MySQL**——实测后不迁比没测过硬；MySQL 支持保留，部署形态变化时用同一脚本重裁决。
 - 数字入 `docs/numbers.md` #12/#13，复现命令齐备。
+
+### ④ 识别链路异步化
+
+**做了什么**
+1. **任务表 `recognition_task`**（Alembic 迁移 0010，HEAD 前移）：`task_type`(yolo/clip) + `status`(pending/running/done/failed) + `retry_count` + `file_hash`（唯一索引幂等键）+ `parent_id`（子任务引用主任务）+ `error`（死信可查）+ `item_type/item_id` 关联物品 + `payload`（clip 的 match_ids）+ 推理结果缓存列；`lost_item/found_item` 补 `recognize_status` 列（存量行默认 DONE，老数据不显示识别中）。
+2. **发布接口毫秒级返回**：`publish_lost/publish_found` 不再同步跑 YOLO——落库物品 → 幂等入队（同事务）→ 立即返回（响应含 `recognize_status=识别中`）；发布时类目按「视觉不可用」降级（与权重缺失同路径），worker 识别完成后 `apply_vision_result` 按「名词 → 视觉」优先级重解析类目/补标签/记纠错样本/增量补匹配，最终口径与同步时代一致。
+3. **单线程 worker**（`app/services/recognition_worker.py`，lifespan 启动）：条件 UPDATE 原子领取（并发不重复执行）→ FIFO 消费；失败重试上限 3（`RECOGNITION_MAX_RETRIES`）→ failed 死信；启动时把遗留 running 任务复位重跑（崩溃恢复）。**单线程是有意选择**：SQLite 单写者，校园单机诚实规模，不装分布式。
+4. **幂等语义**：首图 SHA-256 唯一索引——同一张图全库只推理一次；同哈希重复发布各拿一条子任务（parent_id 指向主任务），完成后复制结果，**同图两次发布 predict 恰好 1 次**。
+5. **CLIP 精排迁入任务表**：`BackgroundTasks`（进程重启即丢）→ clip 任务入队由 worker 消费——这是「为什么不用 BackgroundTasks」的实证对比；附带收益：torch 模型加载从此只在 worker 单线程发生，**消除 v17② 实录的主线程 YOLO × 后台 CLIP 并发 load 段错误竞态**。
+6. **前端**：物品卡片「AI 识别中…/识别失败」徽标（ItemCard）+ 公示栏/我的发布页有识别中物品时**每 4s 静默轮询**（新组合式函数 `useRecognitionPolling`，上限 15 次自停）；发布成功提示注明「AI 识别中」。
+7. 测试环境 worker 线程关闭（conftest），单测直接驱动 claim/process；新增 `drain_recognition()` 助手供存量用例同步等识别完成。
+
+**解决了什么问题**
+发布接口被同步 YOLO 阻塞（压测 5.4 QPS / p95 1800ms）；CLIP 后台任务进程重启即丢；同图重复上传重复推理；torch 多线程并发 load 偶发段错误。
+
+**怎么验证的**
+- 新增 `tests/test_recognition_async.py` 8 用例：识别中→完成流转、**同哈希幂等（predict 恰 1 次）**、**主任务完成后同图发布即时回填（回归用例）**、**重试上限死信（error 可查 + 物品置失败）**、**并发领取恰好一次成功**、**崩溃恢复（running 复位后跑完）**、CLIP 任务表迁移（按 payload 调精排）、类目/标签/纠错样本回填。全绿。
+- **压测实证揪出并修复一个真 bug**：首轮 60s 发布压测（5078 任务全 done）发现 4744 个物品仍停在「识别中」——时间线实查定位为「主任务完成后同图发布的缓存复用路径只复制任务结果、未应用物品」（任务 finished_at=入队时刻、started_at=NULL 铁证）；修复为发布路径同步应用缓存结果，复验 **任务与物品状态 100% 一致（仍 pending=0）**。这正是"压测不是跑个数字"的价值。
+- 存量适配：纠错样本断言用例加 drain（语义随异步化迁移，CHANGELOG 声明）；迁移 HEAD 断言 0009→0010；元数据表数口径 12→13（测试纪律 A 类订正）。
+- 前端：`vue-tsc` 零错 + vitest 8 passed。
+- **发布接口延迟前后实测（回任务②同一压测，10 用户/60s）**：**5.4 → 74.4 QPS（13.8 倍），p95 1800ms → 68ms（-96%），中位 1600ms → 25ms**；0 错误 0 锁错误。证据 `evaluation/loadtest/_results/sqlite_baseline_publish.summary.txt`（改前）vs `sqlite_async_publish.summary.txt`（改后），复现命令见 numbers.md #14。
+- 全量回归：`pytest tests/ -q` **426 passed, 2 skipped, 0 failed**（428 收集，139.47s）；附带收益：发布类测试不再各自跑同步 YOLO，**套件时长 325s → 115~140s**；`ruff check app tests evaluation` 0 错误。
+
 - 全量回归：`pytest tests/ -q` **418 passed, 2 skipped, 0 failed**（420 收集，325.16s，`审查证据/pytest_v17_task2_retry.txt`）；`ruff check app tests` 0 错误。**如实记录一次偶发段错误**（首跑 139 退出码，`审查证据/pytest_v17_task2.txt`）：torch 2.7.1 在 Windows 上主线程 YOLO 与后台线程 CLIP JIT load 并发的既有竞态（与本次改动无关，venv 环境未变），重跑即绿；v17④ 把 CLIP 迁入单线程 worker 后该竞态面自然消除。
 
 ## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档

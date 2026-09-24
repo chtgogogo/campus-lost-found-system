@@ -103,3 +103,6 @@ aoci.code.txt
 aoci.meta.txt
 .aoci/
 AGENTS.md
+
+# 压测运行时残留（播种库/上传图/服务日志——数据不入库，数字指标已归档 _results/）
+evaluation/loadtest/_env/
