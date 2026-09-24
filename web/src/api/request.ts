@@ -1,13 +1,18 @@
-// axios 实例：统一挂载 JWT、解包 {code,message,data} 信封、处理 401 跳转，
-// 并根据“演示模式”在请求拦截器中切换为本地 mock 适配器（不影响真实后端请求）。
+// axios 实例：统一挂载 JWT、解包 {code,message,data} 信封、处理 401 跳转。
+// 演示态 mock 层已于 2026-09-24 整体拆除（getDemo 恒 false 的死代码，约占 src 30%）。
 
-import axios, { type AxiosAdapter } from 'axios'
+import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { ApiEnvelope } from '@/types'
 import { ApiError } from '@/types'
 import { API_BASE } from '@/api/constants'
-import { API_ORIGIN, getDemo } from '@/utils/demo'
-import { mockAdapter } from '@/api/mockAdapter'
+
+/** 由 API_BASE 推导后端源站（去掉 /api/v1），供图片 URL 拼接。
+ *  原 utils/demo.ts:74-77 的定义随演示层拆除迁移至此（2026-09-24）。 */
+export const API_ORIGIN: string = (() => {
+  const base = import.meta.env.VITE_API_BASE || '/api/v1'
+  return base.replace(/\/api\/v1\/?$/i, '')
+})()
 
 const TOKEN_KEY = 'lf_token'
 const USER_KEY = 'lf_user'
@@ -35,7 +40,7 @@ export function clearToken(): void {
   }
 }
 
-/** 将相对/绝对图片路径补全为可访问 URL（演示模式 data URI 原样返回） */
+/** 将相对/绝对图片路径补全为可访问 URL（data URI / blob 原样返回） */
 export function fullImageUrl(url?: string | null): string {
   if (!url) return ''
   if (
@@ -55,7 +60,7 @@ export const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 请求拦截：附加 Bearer 令牌；演示模式使用本地 mock 适配器
+// 请求拦截：附加 Bearer 令牌
 http.interceptors.request.use((config) => {
   const t = getToken()
   if (t) {
@@ -66,9 +71,6 @@ http.interceptors.request.use((config) => {
   // multipart/form-data; boundary=...，否则后端 multipart 解析收不到字段导致 422。
   if (config.data instanceof FormData) {
     delete (config.headers as Record<string, string>)['Content-Type']
-  }
-  if (getDemo()) {
-    config.adapter = mockAdapter as AxiosAdapter
   }
   return config
 })
@@ -108,16 +110,11 @@ http.interceptors.response.use(
         ? '请求超时：图片较大或网络较慢，请稍后重试'
         : rawMsg || '请求失败，请检查网络后重试',
     )
-    // 2026-08-20：演示模式已永久关闭，网络级错误（超时/断连）只提示，
-    // **不再自动切换演示模式**（否则公网下偶发超时会整站"变演示"，造成假故障）。
+    // 2026-08-20：演示模式已永久关闭（2026-09-24 mock 层整体拆除），网络级错误
+    // （超时/断连）只提示，**不再自动切换演示模式**。
     return Promise.reject(error)
   },
 )
-
-/** 应用演示模式（已在请求拦截器中按请求粒度处理，这里保留以便启动时显式调用） */
-export function applyDemoMode(): void {
-  /* 适配器按请求在拦截器中切换，无需在此修改实例默认值 */
-}
 
 // ---------------- 工具：清理空参数 ----------------
 function cleanParams(params?: Record<string, unknown>): Record<string, unknown> | undefined {

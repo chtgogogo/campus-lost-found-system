@@ -1,10 +1,11 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 // Vite 配置：开发服务器默认 5173 端口；
 // 配置 /api 与 /uploads 代理到后端 (http://localhost:8000)，
-// 这样真实后端联调时无需处理 CORS。演示（mock）模式下请求被 axios 适配器拦截，不会真正发网络请求。
+// 这样真实后端联调时无需处理 CORS。
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -26,15 +27,15 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
-      // 后端健康探测端点（FastAPI 根路径 /health），用于自动判断是否开启演示模式
-      '/health': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
     },
   },
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,
+  },
+  // 审查 P1（2026-09-24）：前端最小测试门禁——vitest 单测（jsdom 环境，令牌存取/信封解包等纯逻辑）
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
   },
 })

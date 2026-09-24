@@ -92,7 +92,6 @@
 import { nextTick, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { imApi } from '@/api/im'
-import { MOCK_ME } from '@/api/mockAdapter'
 import { useImSession } from '@/composables/useImSession'
 import { useAuthStore } from '@/stores/auth'
 import type { IMSessionListItem } from '@/types'
@@ -114,9 +113,7 @@ const im = useImSession()
 const readSet = new Set<number>()
 
 function currentUserId(): number {
-  const id = auth.userId
-  if (id != null) return id
-  return MOCK_ME
+  return auth.userId ?? 0
 }
 
 async function loadSessions(): Promise<void> {

@@ -135,15 +135,12 @@ import {
 } from '@element-plus/icons-vue'
 import { authApi } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
-import { useDemoStore } from '@/stores/demo'
-import { MOCK_ME } from '@/api/mockAdapter'
 import { decodeJwt } from '@/utils/jwt'
 import type { UserOut } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const demo = useDemoStore()
 
 const tab = ref<'login' | 'register'>('login')
 const loading = ref(false)
@@ -189,19 +186,6 @@ function buildUserFromToken(token: string, studentNo: string): UserOut | null {
     return {
       id: payload.sub,
       role: payload.role,
-      student_no: studentNo,
-      phone: '',
-      real_name: null,
-      credit_score: 100,
-      status: 0,
-      created_at: '',
-    }
-  }
-  // 演示模式：mock token 非 JWT，使用内置演示用户 id
-  if (demo.enabled) {
-    return {
-      id: MOCK_ME,
-      role: 0,
       student_no: studentNo,
       phone: '',
       real_name: null,

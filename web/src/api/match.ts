@@ -1,7 +1,6 @@
 // 匹配 / 认领 / 交接相关接口（对齐 app/routers/match.py）
 import { apiDelete, apiGet, apiPost } from './request'
 import type {
-  AuditLog,
   ClaimRequest,
   HandoverGenerate,
   HandoverVerifyRequest,
@@ -107,9 +106,5 @@ export const matchApi = {
   // v2（2026-08-05）：keep1 完成记录撤回（后端 P0-4，仅 flow_type=1 && status=2）
   revoke(matchId: number): Promise<MatchOut> {
     return apiPost<MatchOut>(`/matches/${matchId}/revoke`, {})
-  },
-  // 管理后台审计日志（后端暂未暴露该接口，演示模式由 mock 适配器提供）
-  auditLogs(params: MatchListParams = {}): Promise<Page<AuditLog>> {
-    return apiGet<Page<AuditLog>>('/audit-logs', params as Record<string, unknown>)
   },
 }

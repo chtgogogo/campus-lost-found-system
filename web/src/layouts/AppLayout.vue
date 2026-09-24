@@ -8,20 +8,6 @@
       </div>
 
       <div class="lf-header-right">
-
-        <!-- v7：演示态身份切换（仅演示模式可见），用于进入管理后台 -->
-        <div v-if="demo.enabled" class="lf-demo-role">
-          <span class="lf-muted" style="font-size: 13px">身份</span>
-          <el-radio-group
-            :model-value="demo.demoRole"
-            size="small"
-            @change="(v: any) => onRoleChange(Number(v))"
-          >
-            <el-radio-button :value="0">普通</el-radio-button>
-            <el-radio-button :value="1">管理员</el-radio-button>
-          </el-radio-group>
-        </div>
-
         <el-dropdown trigger="click" @command="onCommand">
           <span class="lf-user">
             <el-avatar :size="28" class="lf-avatar">
@@ -41,16 +27,6 @@
       </div>
     </header>
 
-    <!-- 自动开启演示模式的提示 -->
-    <el-alert
-      v-if="demo.autoDetected"
-      type="warning"
-      :closable="true"
-      show-icon
-      title="未检测到后端服务，已自动开启演示数据（本地静态数据）。开启右上角“演示数据”开关可随时切换。"
-      style="border-radius: 0"
-    />
-
     <div class="lf-body">
       <!-- 桌面端侧边菜单 -->
       <aside class="lf-side">
@@ -64,7 +40,7 @@
 
       <!-- 主内容区 -->
       <main class="lf-main lf-main-with-tabbar">
-        <RouterView :key="demo.dataVersion" />
+        <RouterView />
       </main>
     </div>
 
@@ -90,12 +66,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { NAV_ITEMS } from '@/router'
 import { useAuthStore } from '@/stores/auth'
-import { useDemoStore } from '@/stores/demo'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const demo = useDemoStore()
 
 // v7：按角色过滤导航项（/admin 仅管理员 role===1 可见）
 const navItems = computed(() =>
@@ -111,12 +85,6 @@ const userInitial = computed(() => {
 
 function go(path: string) {
   router.push(path)
-}
-
-// v7：演示态身份切换——同步更新当前登录用户的 role，使管理后台导航即时可见
-function onRoleChange(role: number) {
-  demo.setRole(role)
-  if (auth.user) auth.user.role = role
 }
 
 async function onCommand(command: string) {
@@ -146,16 +114,6 @@ async function onCommand(command: string) {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-.lf-demo-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.lf-demo-role {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 .lf-user {
   display: flex;

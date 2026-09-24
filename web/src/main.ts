@@ -6,7 +6,6 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 import { createPinia } from 'pinia'
-import { applyDemoMode } from './api/request'
 import './style.css'
 
 const app = createApp(App)
@@ -19,8 +18,5 @@ for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
-
-// 根据当前演示（mock）开关设置 axios 适配器：开启演示则使用本地 mock 适配器。
-applyDemoMode()
 
 app.mount('#app')
