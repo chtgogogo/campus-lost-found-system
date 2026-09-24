@@ -26,6 +26,14 @@ export const SEED_CATEGORIES: Category[] = [
   { id: 12, name: '其他', recognition_mode: 0 },
 ]
 
+/** AI 目前可识别的类目名（种子类目去掉「其他」——它只是降级回退目标，不是识别类）。 */
+export const RECOGNIZABLE_CATEGORY_NAMES: string[] = SEED_CATEGORIES.map((c) => c.name).filter(
+  (name) => name !== '其他',
+)
+
+/** 上传区提示文案：只识别的类目清单 + 其余类型自行填写（v17：照片与用户类别配对存档，用于训练扩类）。 */
+export const RECOGNIZABLE_HINT_TEXT = `本系统 AI 目前只识别：${RECOGNIZABLE_CATEGORY_NAMES.join(' / ')}。其余类型物品请在下方「分类」框自行填写（如耳机、充电宝）——照片与您填写的类别会一并存档，攒够数据后将用于训练识别更多种类。`
+
 // ---------------- 枚举中文标签（对齐 app/schemas/common.py） ----------------
 export const LOST_STATUS_LABEL: Record<number, string> = {
   0: '待匹配',

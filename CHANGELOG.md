@@ -133,6 +133,22 @@
 - 前端：`vue-tsc` 零错 + vitest 8 passed。
 - 全量回归：`pytest tests/ -q` **438 passed, 2 skipped, 0 failed**（440 收集，见提交说明审查证据）；`ruff check app tests` 0 错误。
 
+### ⑦ 上传类目提示 + 训练数据积累（用户需求，2026-09-25）
+
+**做了什么**
+1. **上传区「只识别类目」提示**（拾物/失物两个发布表单）：列出 AI 目前可识别的 11 类（手机/钱包/钥匙/书包/行李箱/笔记本电脑/校园卡/眼镜/笔记本/雨伞/水杯），其余类型请用户在下方「分类」框自行填写；文案常量 `RECOGNIZABLE_HINT_TEXT` 从 `SEED_CATEGORIES` 派生（过滤「其他」——它是降级回退目标不是识别类），单一事实源不复制名字。
+2. **训练数据积累路径**（回答"照片与输入的名字配对储存"）：**该配对数据从第一天就在积累**——每次发布照片落盘 `uploads/`、用户填写的 `category_name` 存物品表；v11 数据飞轮（CorrectionSample）额外记录"AI 预标 ≠ 用户最终分类"的纠错对。本次补上最后一环：**导出工具**。
+3. **`scripts/export_training_data.py`**：把存量配对一键导出为 YOLOv8 分类训练要求的 ImageFolder 结构（`dataset/<类名>/<lost|found>_<物品id>.<ext>`，文件名可追溯回发布记录）+ `corrections.csv`（纠错样本）+ 每类样本数统计（升序提示先补稀缺类）+ 训练命令与采集建议（每类 ≥100 张）。`--include-other` 控制是否导出「其他」类（默认跳过）。输出目录 `training_dataset/` 已入 .gitignore（数据不进 git）。
+
+**解决了什么问题**
+用户不知道 AI 能识别什么、遇到不支持的物品无从下手；配对数据"存了但拿不出来"，训练扩类缺少从积累到训练就绪的通道。
+
+**怎么验证的**
+- 新增 `tests/test_export_training_data.py` 3 用例：类目名目录清洗、完整导出流程（统计口径/ImageFolder 结构/来源可追溯文件名/纠错 CSV 逐字段）、`--include-other` 行为。全绿。
+- 真实环境端到端：对 dev.db 实跑导出（5 件演示物品无真实首图 → 如实跳过 5，不崩溃），产出目录结构与统计输出符合设计。
+- **顺带修复**：dev.db 重建时用的 create_all，缺 v17④ 的 `recognize_status` 列导致 ORM 查询报 `no such column`——补跑 `alembic upgrade head`（→ `0010_recognition_task`），迁移 inspector 幂等判断在真实库上验证通过。**流程要点：重建 dev 库后必须跑 Alembic 迁移到 head，create_all 只保证旧表结构。**
+- 前端 `vue-tsc` 零错 + vitest 8 passed；全量回归见提交说明。
+
 ### ③ 依赖扫描 + 锁文件
 
 **做了什么**

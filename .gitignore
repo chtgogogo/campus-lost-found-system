@@ -106,3 +106,6 @@ AGENTS.md
 
 # 压测运行时残留（播种库/上传图/服务日志——数据不入库，数字指标已归档 _results/）
 evaluation/loadtest/_env/
+
+# 训练数据集导出输出（scripts/export_training_data.py，数据不进 git）
+training_dataset/

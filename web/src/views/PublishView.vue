@@ -55,6 +55,8 @@
               <span v-if="foundFiles.length === 0" class="lf-muted upload-hint">
                 请上传照片，系统将自动识别类别
               </span>
+              <!-- v17：可识别类目提示 + 其余类型自行填写（照片↔类别配对存档用于训练扩类） -->
+              <div class="recognizable-hint lf-muted">{{ RECOGNIZABLE_HINT_TEXT }}</div>
             </el-form-item>
 
             <!-- AI 识别结果卡片：上传后自动预识别，结果预填到分类文本框（可改） -->
@@ -269,6 +271,8 @@
               >
                 <el-icon><Plus /></el-icon>
               </el-upload>
+              <!-- v17：可识别类目提示 + 其余类型自行填写（照片↔类别配对存档用于训练扩类） -->
+              <div class="recognizable-hint lf-muted">{{ RECOGNIZABLE_HINT_TEXT }}</div>
             </el-form-item>
 
             <el-button
@@ -297,6 +301,7 @@ import { ElMessage, type UploadUserFile } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { itemsApi } from '@/api/items'
 import { visionApi } from '@/api/vision'
+import { RECOGNIZABLE_HINT_TEXT } from '@/api/constants'
 import { compressImages } from '@/utils/image'
 import type { VisionPredictResult } from '@/types'
 
@@ -557,6 +562,18 @@ async function onSubmitLost() {
 .upload-hint {
   margin-left: 12px;
   font-size: 13px;
+}
+/* v17：可识别类目提示（上传区下方，两处共用） */
+.recognizable-hint {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7785;
+  background: #f6f8fb;
+  border: 1px dashed #d7dde8;
+  border-radius: 6px;
+  padding: 6px 10px;
 }
 .publish-tabs :deep(.el-upload--picture-card) {
   width: 96px;
