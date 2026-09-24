@@ -12,7 +12,8 @@ redis>=5.0,<6.0
 pydantic>=2.6,<3.0
 pydantic-settings>=2.1,<3.0
 httpx>=0.27,<1.0
-Pillow>=10.0,<11.0
+Pillow>=12.2,<13.0
+# （v17③ CI 实测：旧范围 <11.0 让 lock 钉在 10.4.0，带 33 个已知漏洞 → 放宽到 12.x 修复线）
 # v10：管理后台 xlsx 取证导出（惰性导入，缺失时接口返回 400 而非 500）。不引 pandas —— 体积大且其
 # Excel 后端本身就是 openpyxl。
 openpyxl>=3.1,<4.0

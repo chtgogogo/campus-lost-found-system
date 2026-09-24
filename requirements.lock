@@ -4,8 +4,9 @@
 #
 #    pip-compile --allow-unsafe --output-file=requirements.lock requirements.txt
 #
-# （pip-compile 曾写入本机镜像源行；CI 用官方 PyPI——镜像源是本机加速配置，不属于构建事实源。
-#   再生成命令见 CHANGELOG v17③：pip-compile requirements.txt -o requirements.lock --allow-unsafe）
+# （pip-compile 会写入本机镜像源行；CI 用官方 PyPI——镜像源是本机加速配置，不属于构建
+#   事实源，每次再生成后需删除下面这行 --index-url。再生成命令：
+#   pip-compile requirements.txt -o requirements.lock --allow-unsafe --upgrade-package Pillow）
 
 alembic==1.20.0
     # via -r requirements.txt
@@ -122,7 +123,7 @@ packaging==26.3
     #   clip
     #   matplotlib
     #   pytest
-pillow==10.4.0
+pillow==12.3.0
     # via
     #   -r requirements.txt
     #   matplotlib
