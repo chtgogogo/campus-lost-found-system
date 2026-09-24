@@ -4,11 +4,17 @@
 """
 from __future__ import annotations
 
+import random
+import secrets
+
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.category import Category
 from app.models.user import User
+
+# v18 演示随机账号标记（real_name 固定值，随机登录端点据此从库中挑选）
+DEMO_RANDOM_ACCOUNT_MARK = "演示随机账号"
 
 # (name, yolo_class_id, recognition_mode, yolo_prompt)
 # yolo_class_id 直接使用 best.pt 的类别索引（0-10）；recognition_mode 全 0（真模型检测）。
@@ -72,3 +78,61 @@ def seed_admin(db: Session, student_no: str, phone: str, password: str, real_nam
     db.commit()
     db.refresh(admin)
     return admin
+
+
+# ---------------- v18 演示随机账号（随机登录按钮的账号池） ----------------
+
+_DEMO_RANDOM_SEED = 1234567       # 固定种子：账号清单可复现（CHANGELOG 可列出）
+_DEMO_RANDOM_CHARS = "1234567"    # 学号/密码均由这 7 个数字随机组合（7 位）
+
+
+def _demo_random_account_specs(count: int) -> list[tuple[str, str]]:
+    """生成 count 个不重复的 (学号, 密码)：均为「1234567」随机组合的 7 位数字。
+
+    固定随机种子 → 同一 count 生成结果永远一致（账号清单可写进文档、可复现）。
+    """
+    rng = random.Random(_DEMO_RANDOM_SEED)
+    seen: set[str] = set()
+    specs: list[tuple[str, str]] = []
+    while len(specs) < count:
+        student_no = "".join(rng.choices(_DEMO_RANDOM_CHARS, k=7))
+        if student_no in seen:
+            continue
+        seen.add(student_no)
+        password = "".join(rng.choices(_DEMO_RANDOM_CHARS, k=7))
+        specs.append((student_no, password))
+    return specs
+
+
+def seed_demo_random_accounts(db: Session, count: int = 10) -> list[User]:
+    """演示模式专用：确保库里存在 count 个「演示随机账号」（幂等，已够数即跳过）。
+
+    学号/密码均为 1234567 随机组合的 7 位数字（固定种子可复现）；
+    real_name 固定 DEMO_RANDOM_ACCOUNT_MARK，供随机登录端点挑选；
+    phone 用 v18 同款占位号（demo-<8位hex>，唯一约束查重重试）。
+    """
+    existing = (
+        db.query(User).filter(User.real_name == DEMO_RANDOM_ACCOUNT_MARK).count()
+    )
+    if existing >= count:
+        return []
+    created: list[User] = []
+    for student_no, password in _demo_random_account_specs(count):
+        if db.query(User).filter(User.student_no == student_no).first():
+            continue
+        phone = f"demo-{secrets.token_hex(4)}"
+        while db.query(User).filter(User.phone == phone).first():
+            phone = f"demo-{secrets.token_hex(4)}"
+        user = User(
+            student_no=student_no,
+            phone=phone,
+            real_name=DEMO_RANDOM_ACCOUNT_MARK,
+            password_hash=hash_password(password),
+            role=0,
+            credit_score=100,
+            status=0,
+        )
+        db.add(user)
+        created.append(user)
+    db.commit()
+    return created

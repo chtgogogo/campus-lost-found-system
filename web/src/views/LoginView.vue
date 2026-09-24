@@ -58,9 +58,25 @@
             :closable="false"
             show-icon
             title="当前为演示状态"
-            description="无需手机号和验证码，填一个喜欢的 ID 和密码即可注册体验。"
+            description="无需手机号和验证码，填一个喜欢的 ID 和密码即可注册体验；或点下方按钮随机登录。"
             class="demo-tip"
-          />
+          >
+            <template #default>
+              <div class="demo-tip-text">
+                无需手机号和验证码，填一个喜欢的 ID 和密码即可注册体验。
+              </div>
+              <!-- v18：随机登录——从预置演示账号池随机取一个直接进入，免去注册步骤 -->
+              <el-button
+                type="primary"
+                size="small"
+                :loading="demoLoading"
+                class="demo-random-btn"
+                @click="onDemoRandomLogin"
+              >
+                🎲 随机登录（免注册）
+              </el-button>
+            </template>
+          </el-alert>
           <el-form
             ref="regFormRef"
             :model="regForm"
@@ -162,6 +178,7 @@ const devCode = ref('')
 const smsCountdown = ref(0)
 // v18 演示模式：启动时向后端拉取公开配置（DEMO_MODE 只在 .env/代码层切换，前端只读跟随）
 const demoMode = ref(false)
+const demoLoading = ref(false)
 onMounted(async () => {
   try {
     demoMode.value = (await authApi.getPublicConfig()).demo_mode
@@ -247,6 +264,22 @@ async function onLogin() {
       loading.value = false
     }
   })
+}
+
+// v18：演示随机登录——从预置演示账号池随机取一个直接进入（后端 DEMO_MODE=true 时可用）
+async function onDemoRandomLogin() {
+  demoLoading.value = true
+  try {
+    const res = await authApi.demoRandomLogin()
+    auth.login(res.token, res.user)
+    ElMessage.success(`已随机登录演示账号：${res.user.student_no}`)
+    const redirect = (route.query.redirect as string) || '/board'
+    router.push(redirect)
+  } catch {
+    /* 错误已由拦截器提示 */
+  } finally {
+    demoLoading.value = false
+  }
 }
 
 async function onSendSms() {
@@ -351,5 +384,14 @@ async function onRegister() {
 }
 .demo-tip {
   margin-bottom: 12px;
+}
+/* v18：演示提示卡内的随机登录按钮 */
+.demo-tip-text {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.demo-random-btn {
+  width: 100%;
 }
 </style>

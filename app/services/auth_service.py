@@ -163,6 +163,31 @@ class AuthService:
         refresh = create_refresh_token(user.id, user.role)
         return user, access, refresh
 
+    # ---------------- v18 演示随机登录 ----------------
+    def demo_random_login(self) -> tuple[User, str, str]:
+        """演示模式专用：从「演示随机账号」池随机取一个直接签发令牌（无凭据）。
+
+        安全边界：仅 settings.DEMO_MODE=true 可达（路由层裁决，否则 404）；
+        账号池由 seed_demo_random_accounts 幂等确保（启动时/调用时双保险）；
+        每次发放写审计（无凭据发令牌必须留痕，安检口径）。
+        """
+        if not settings.DEMO_MODE:
+            raise BizError(9001, "演示登录未开启", http_status=404)
+        from app.core.seed import DEMO_RANDOM_ACCOUNT_MARK, seed_demo_random_accounts
+
+        seed_demo_random_accounts(self.db)
+        pool = (
+            self.db.query(User)
+            .filter(User.real_name == DEMO_RANDOM_ACCOUNT_MARK, User.status == 0)
+            .all()
+        )
+        if not pool:
+            raise BizError(9001, "演示账号池为空", http_status=503)
+        user = secrets.choice(pool)
+        access = create_access_token(user.id, user.role)
+        refresh = create_refresh_token(user.id, user.role)
+        return user, access, refresh
+
     # ---------------- 刷新 ----------------
     def refresh(self, refresh_token: str) -> tuple[User, str, str]:
         import jwt

@@ -20,6 +20,7 @@ from app.schemas.user import (
     UserCreate,
     UserOut,
 )
+from app.services import audit_service
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,6 +39,39 @@ def public_config():
     此接口是只读投影，不提供任何修改入口（安检口径：一个开关只管一件事）。
     """
     return success(data={"demo_mode": settings.DEMO_MODE})
+
+
+@router.post("/demo-login", response_model=StandardResponse)
+def demo_random_login(request: Request, db: Session = Depends(get_db)):
+    """v18 演示随机登录：从 10 个预置「演示随机账号」中随机取一个直接登录。
+
+    **仅 DEMO_MODE=true 可用**（false 时 404，生产不暴露该口子）；
+    无凭据发令牌 → 每次调用写审计（demo_random_login）留痕；
+    账号池幂等确保（首次调用时自动播种，学号/密码均为 1234567 随机组合）。
+    """
+    if not settings.DEMO_MODE:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Not Found")
+    check_rate_limit(f"auth:demo-login:ip:{_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    user, access, refresh = AuthService(db).demo_random_login()
+    audit_service.write_audit(
+        db,
+        user_id=user.id,
+        action="demo_random_login",
+        target_type="user",
+        target_id=user.id,
+        ip=_ip(request),
+        ua=request.headers.get("user-agent"),
+        detail=f"student_no={user.student_no}",
+    )
+    db.commit()  # write_audit 不自带提交（无凭据发令牌的留痕必须落库）
+    return success(
+        data={
+            "user": UserOut.from_model(user),
+            "token": Token(access_token=access, refresh_token=refresh),
+        }
+    )
 
 
 @router.post("/register", response_model=StandardResponse)

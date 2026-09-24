@@ -25,6 +25,10 @@ export const authApi = {
   login(body: LoginRequest): Promise<Token> {
     return apiPost<Token>('/auth/login', body)
   },
+  /** v18 演示随机登录：从预置演示账号池随机取一个直接登录（仅后端 DEMO_MODE=true 可用）。 */
+  demoRandomLogin(): Promise<RegisterResult> {
+    return apiPost<RegisterResult>('/auth/demo-login')
+  },
   refresh(refreshToken: string): Promise<Token> {
     return apiPost<Token>('/auth/refresh', { refresh_token: refreshToken })
   },

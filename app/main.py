@@ -27,7 +27,7 @@ from app.core.observability import (
     register_slow_sql_listener,
     setup_logging,
 )
-from app.core.seed import seed_categories
+from app.core.seed import seed_categories, seed_demo_random_accounts
 from app.routers import admin, auth, im, items, match, vision
 from app.services import recognition_worker
 from app.services.vision_service import get_vision_service
@@ -40,6 +40,9 @@ async def lifespan(app: FastAPI):
     # 分类为空时自动 seed（保证开箱即用）
     with SessionLocal() as db:
         seed_categories(db)
+        # v18：演示模式启动时确保「演示随机账号」池就绪（幂等；随机登录按钮的账号来源）
+        if settings.DEMO_MODE:
+            seed_demo_random_accounts(db)
     # 进程内视觉服务：唯一加载点 get_vision_service() 预热（仅此一处实例化）
     app.state.vision = get_vision_service()
     # v17④：异步识别 worker（单线程消费 recognition_task；测试套件经 conftest 显式关闭）
