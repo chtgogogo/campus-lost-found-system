@@ -34,10 +34,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
+        # v17③：用 pip-compile 冻结的 requirements.lock 安装（可复现构建）；
+        # requirements.txt 保留范围约束作上游源，依赖升级改 requirements.txt 后
+        # 用 `pip-compile requirements.txt -o requirements.lock --allow-unsafe` 再生成 lock。
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff
+          pip install -r requirements.lock
+          pip install ruff pip-audit
+
+      - name: Dependency audit (pip-audit)
+        # v17③ 依赖扫描门禁：已知漏洞即失败。豁免登记（修复发布后移除）：
+        # - PYSEC-2026-3740（nltk）：上游 nltk 3.10.3 为最新版、该漏洞暂无修复版本；
+        #   本项目仅用 WordNet 同义词表（本地数据文件，不解析不可信文本），修复发布后移除豁免。
+        run: pip-audit --ignore-vuln PYSEC-2026-3740
 
       - name: Lint (ruff)
         # 仅对后端运行时与测试代码做 lint（tools/ 含不可改动的文档脚本，不纳入 CI lint 面）
@@ -89,6 +98,10 @@ jobs:
 
       - name: Type check (vue-tsc)
         run: npm run type-check
+
+      - name: Dependency audit (npm audit)
+        # v17③ 依赖扫描门禁：high 及以上漏洞阻断（vite 8.3.1 / vitest 5.0.1 升级后 0 漏洞）
+        run: npm audit --audit-level=high
 
       - name: Unit tests (vitest)
         run: npm test

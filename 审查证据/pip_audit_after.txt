@@ -1,0 +1,12 @@
+WARNING: Ignoring invalid distribution ~orch (E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\.venv\Lib\site-packages)
+Found 1 known vulnerability in 1 package
+Name Version ID              Fix Versions
+---- ------- --------------- ------------
+nltk 3.10.3  PYSEC-2026-3740
+
+Name        Skip Reason
+----------- ---------------------------------------------------------------------------------
+clip        Dependency not found on PyPI and could not be audited: clip (1.0)
+torch       Dependency not found on PyPI and could not be audited: torch (2.7.1+cu118)
+torchaudio  Dependency not found on PyPI and could not be audited: torchaudio (2.7.1+cu118)
+torchvision Dependency not found on PyPI and could not be audited: torchvision (0.22.1+cu118)

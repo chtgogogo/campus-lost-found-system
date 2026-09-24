@@ -76,6 +76,24 @@
 - 简历口径（基础句）：「请求 ID 全链路贯穿结构化日志 + /metrics 暴露 QPS/p95/错误率 + 慢 SQL 日志，零外部依赖」；含演示追加「故障可通过 request_id 分钟级定位（附演示）」。入 `docs/numbers.md` #15。
 - 全量回归：`pytest tests/ -q` **435 passed, 2 skipped, 0 failed**（437 收集，129.56s，`审查证据/pytest_v17_task5.txt`）；`ruff check app tests` 0 错误。
 
+### ③ 依赖扫描 + 锁文件
+
+**做了什么**
+1. **CI 依赖扫描双门禁**（`ci.yml`）：后端 `pip-audit`（环境审计，已知漏洞即失败）+ 前端 `npm audit --audit-level=high`（high 及以上阻断）。
+2. **requirements.lock**（pip-compile 冻结，243 行）：CI 安装从范围约束改为 lock 精确版本（可复现构建）；`requirements.txt` 保留范围约束作上游源，升级流程＝改 requirements.txt → `pip-compile requirements.txt -o requirements.lock --allow-unsafe` 再生成。生成时曾自动写入本机镜像源行，已剔除并注明理由（镜像源是本机加速配置，不属于构建事实源；CI 用官方 PyPI）。
+3. **漏洞清零动作**：
+   - 前端：`npm audit fix --force` 跨大版本升级 **vite 5.4→8.3.1、vitest 2.1.9→5.0.1**（vitest 自带 CRITICAL、vite 自带 HIGH）+ brace-expansion/nanoid/postcss 非破坏修复，**8 漏洞（1C/3H/4M）→ 0**；
+   - 后端：**nltk 3.10.0→3.10.3**（35 个 PYSEC → 剩 1）。
+4. **显式豁免登记**：`pip-audit --ignore-vuln PYSEC-2026-3740`——nltk 3.10.3 已是最新、该漏洞上游暂无修复版本；本项目仅用 WordNet 同义词表（本地数据文件），修复发布后移除豁免（CI 注释写明）。torch/CLIP 为本地索引/git 包，pip-audit 自动跳过（不影响退出码，如实记录）。
+
+**解决了什么问题**
+依赖带 1 个 critical + 6 个 high 漏洞无人知晓；构建不可复现（范围约束漂移）；漏洞修复后再发版无守门机制。
+
+**怎么验证的**
+- 前端：升级后 `vue-tsc` 零错 + vitest **8 passed** + `vite build` 成功 + `npm audit --audit-level=high` **0 vulnerabilities**（退出码 0）。
+- 后端：`pip_audit --ignore-vuln PYSEC-2026-3740` 退出码 **0**（`审查证据/pip_audit_gate_local.txt`）；nltk 升级后全量 pytest 无回归（数字见下）。
+- lock 可复现性：lock 与实测环境同源生成（含 CLIP 锚定 commit、torch CPU 版本），CI 首次以 lock 安装跑绿即为最终验证（见 GitHub Actions）。
+
 - 全量回归：`pytest tests/ -q` **418 passed, 2 skipped, 0 failed**（420 收集，325.16s，`审查证据/pytest_v17_task2_retry.txt`）；`ruff check app tests` 0 错误。**如实记录一次偶发段错误**（首跑 139 退出码，`审查证据/pytest_v17_task2.txt`）：torch 2.7.1 在 Windows 上主线程 YOLO 与后台线程 CLIP JIT load 并发的既有竞态（与本次改动无关，venv 环境未变），重跑即绿；v17④ 把 CLIP 迁入单线程 worker 后该竞态面自然消除。
 
 ## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档
