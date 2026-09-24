@@ -1,0 +1,8 @@
+场景=matches 配置=sqlite_wal 数据库=sqlite 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /matches
+  请求总数=3679  QPS=61.3  p95=130ms  中位=51ms  平均=60.03288793150127ms  错误率=0.0% (0/3679)
+接口: Aggregated
+  请求总数=3689  QPS=61.5  p95=130ms  中位=51ms  平均=60.52790412035827ms  错误率=0.0% (0/3689)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_sqlite_wal.log

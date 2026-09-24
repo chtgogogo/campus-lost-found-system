@@ -1,0 +1,8 @@
+场景=list 配置=sqlite_wal 数据库=sqlite 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /lost-items
+  请求总数=5414  QPS=90.2  p95=13ms  中位=5ms  平均=6.410018526055124ms  错误率=0.0% (0/5414)
+接口: Aggregated
+  请求总数=5424  QPS=90.4  p95=14ms  中位=5ms  平均=6.836893104730984ms  错误率=0.0% (0/5424)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_sqlite_wal.log

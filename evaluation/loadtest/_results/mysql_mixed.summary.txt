@@ -1,0 +1,14 @@
+场景=mixed 配置=mysql 数据库=mysql 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /lost-items
+  请求总数=534  QPS=8.9  p95=32ms  中位=16ms  平均=18.07429269604753ms  错误率=0.0% (0/534)
+接口: GET /matches
+  请求总数=280  QPS=4.7  p95=100ms  中位=67ms  平均=73.66083071246976ms  错误率=0.0% (0/280)
+接口: POST /found-items（含同步识别）
+  请求总数=277  QPS=4.6  p95=2100ms  中位=1800ms  平均=1815.9865415160207ms  错误率=0.0% (0/277)
+接口: POST /handover/verify（错码路径）
+  请求总数=270  QPS=4.5  p95=36ms  中位=19ms  平均=21.55241259207725ms  错误率=0.0% (0/270)
+接口: Aggregated
+  请求总数=1371  QPS=22.9  p95=1900ms  中位=23ms  平均=396.4407313632066ms  错误率=0.0% (0/1371)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_mysql.log

@@ -1,0 +1,8 @@
+场景=handover 配置=mysql 数据库=mysql 用户=10 生成速率=5.0/s 时长=60s
+接口: POST /handover/verify（错码路径）
+  请求总数=3955  QPS=65.9  p95=180ms  中位=29ms  平均=49.20233370412162ms  错误率=0.0% (0/3955)
+接口: Aggregated
+  请求总数=3965  QPS=66.1  p95=180ms  中位=29ms  平均=49.85910849932735ms  错误率=0.0% (0/3965)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_mysql.log

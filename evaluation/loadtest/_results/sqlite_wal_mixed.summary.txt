@@ -1,0 +1,14 @@
+场景=mixed 配置=sqlite_wal 数据库=sqlite 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /lost-items
+  请求总数=671  QPS=11.2  p95=13ms  中位=7ms  平均=8.065186587027684ms  错误率=0.0% (0/671)
+接口: GET /matches
+  请求总数=338  QPS=5.6  p95=40ms  中位=28ms  平均=31.492970119138832ms  错误率=0.0% (0/338)
+接口: POST /found-items（含同步识别）
+  请求总数=318  QPS=5.3  p95=1800ms  中位=1500ms  平均=1626.2204556593397ms  错误率=0.0% (0/318)
+接口: POST /handover/verify（错码路径）
+  请求总数=317  QPS=5.3  p95=16ms  中位=6ms  平均=7.899894005687297ms  错误率=0.0% (0/317)
+接口: Aggregated
+  请求总数=1654  QPS=27.6  p95=1600ms  中位=9ms  平均=325.56126856088076ms  错误率=0.0% (0/1654)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_sqlite_wal.log

@@ -1,0 +1,8 @@
+场景=list 配置=mysql 数据库=mysql 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /lost-items
+  请求总数=5095  QPS=84.9  p95=21ms  中位=11ms  平均=14.88593313063292ms  错误率=0.0% (0/5095)
+接口: Aggregated
+  请求总数=5105  QPS=85.1  p95=21ms  中位=11ms  平均=15.433540842420605ms  错误率=0.0% (0/5105)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_mysql.log

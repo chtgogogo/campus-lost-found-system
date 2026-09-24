@@ -34,9 +34,11 @@
 - **现状**：防重靠应用层 check-then-insert；并发发布同一对物品理论上可产生重复候选（`MatchExclusion` 表已有唯一索引，同题已解过一次）。
 - **修法**：Alembic 迁移加唯一索引 + 应用层 IntegrityError 兜底；半个迁移的量级。
 
-### B3. SQLite 开发 / MySQL 生产双方言
+### B3. SQLite 开发 / MySQL 生产双方言【已实测裁决：单机部署不迁 MySQL】
 - **现状**：`BigInteger().with_variant(Integer, "sqlite")` 处理主键；`with_for_update` 在 SQLite 为 no-op（交接码并发防重已在 MySQL 侧生效，CI 已加 MySQL service 实跑建表）。
-- **残余风险**：SQLite 语义下并发分支无法本地复现，依赖 MySQL 测试 + 代码走查。
+- **v17 实测裁决（2026-09-25，任务②）**：同脚本同机五场景压测（10 用户/60s，`evaluation/loadtest/`，数据见 `docs/numbers.md` #12/#13）——SQLite+WAL 在**全部场景优于本机 Docker MySQL 8**：匹配列表 61.3 vs 42.6 QPS、交接码验证 90.8 vs 65.9（p95 17 vs 180ms）、发布 6.8 vs 6.0、列表 90.2 vs 84.9、混合 27.6 vs 22.9。主因：单机部署下 MySQL 引入每查询一次回环 TCP 往返（匹配列表 5 条 SQL = 5 次 RTT），而 SQLite WAL 后读写不互斥、无网络开销；两库全场景 0 错误、0 database is locked。
+- **结论**：单机校园规模**不迁 MySQL**——迁了更慢且多一套运维负担；此为"实测后决定不迁"，非"没测过"。MySQL 支持保留（CI 实连、连接串一条环境变量可切），部署形态若变为多实例/独立数据库主机，重跑同一压测脚本再裁决。
+- **残余风险**：SQLite 语义下并发分支无法本地复现（`with_for_update` 为 no-op），依赖 MySQL CI 测试 + 代码走查；WAL 已配 busy_timeout=5000 兜底写冲突（压测未复现锁错误，属预防性配置）。
 
 ## C. 安全
 

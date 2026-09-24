@@ -1,0 +1,6 @@
+场景=list 配置=smoke 数据库=sqlite 用户=3 生成速率=3.0/s 时长=15s
+接口: GET /lost-items
+  请求总数=383  QPS=25.5  p95=9ms  中位=5ms  平均=5.888308094849071ms  错误率=0.0% (0/383)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_smoke.log

@@ -1,0 +1,8 @@
+场景=publish 配置=mysql 数据库=mysql 用户=10 生成速率=5.0/s 时长=60s
+接口: POST /found-items（含同步识别）
+  请求总数=363  QPS=6.0  p95=1500ms  中位=1400ms  平均=1476.8977570233637ms  错误率=0.0% (0/363)
+接口: Aggregated
+  请求总数=373  QPS=6.2  p95=1500ms  中位=1400ms  平均=1448.7172919555708ms  错误率=0.0% (0/373)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_mysql.log

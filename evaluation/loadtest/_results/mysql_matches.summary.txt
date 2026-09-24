@@ -1,0 +1,8 @@
+场景=matches 配置=mysql 数据库=mysql 用户=10 生成速率=5.0/s 时长=60s
+接口: GET /matches
+  请求总数=2557  QPS=42.6  p95=260ms  中位=110ms  平均=129.10647939013842ms  错误率=0.0% (0/2557)
+接口: Aggregated
+  请求总数=2567  QPS=42.8  p95=260ms  中位=110ms  平均=129.99029162470794ms  错误率=0.0% (0/2567)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_mysql.log

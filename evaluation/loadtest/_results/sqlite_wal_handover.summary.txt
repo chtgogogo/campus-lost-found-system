@@ -1,0 +1,8 @@
+场景=handover 配置=sqlite_wal 数据库=sqlite 用户=10 生成速率=5.0/s 时长=60s
+接口: POST /handover/verify（错码路径）
+  请求总数=5448  QPS=90.8  p95=17ms  中位=7ms  平均=8.709545668327427ms  错误率=0.0% (0/5448)
+接口: Aggregated
+  请求总数=5458  QPS=91.0  p95=17ms  中位=7ms  平均=9.128527006432318ms  错误率=0.0% (0/5458)
+SQLite 锁错误(database is locked)出现次数: 0
+服务端日志异常行(OperationalError/InternalError/Traceback): 0
+服务端日志: E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\evaluation\loadtest\_env\server_sqlite_wal.log

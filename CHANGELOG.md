@@ -18,7 +18,23 @@
 **怎么验证的**
 - 新增 `tests/test_eval_gate.py` 6 用例全绿（单元级判定 4 条 + 子进程真实退出码 2 条）。
 - 阈值 99 阻断实证（执行指令①验收项）：`python evaluation/run_eval.py --fail-under 99` → **退出码 1**，输出 `[门禁不通过] F1 = 78.0% < --fail-under 99`（证据 `审查证据/eval_gate_fail_under_99_block.txt`）；默认门禁 `--fail-under 76` → 退出码 0（`审查证据/eval_gate_default_76_pass.txt`）。
-- 全量回归：`pytest tests/ -q` **415 passed, 2 skipped, 0 failed**（417 收集，330.38s，退出码 0，`审查证据/pytest_v17_task1.txt`）；`ruff check app tests` 0 错误。
+### ② 压测基线 + 开 WAL + 两库对比
+
+**做了什么**
+1. **压测脚手架入库 `evaluation/loadtest/`**（locust，独立 `requirements.txt` 不进 CI）：`seed_loadtest.py`（独立压测库播种：2 用户 / 300 物品 / 2000 候选 / 10000 交接码匹配）、`locustfile.py`（五场景：物品列表 / 发布含同步识别 / 匹配列表 / 交接码验证错码路径 / mixed 读写混合）、`run_one.py`（一条命令复现一个数据点：重置→播种→起服务→压测→收数→统计锁错误）。口径红线见 `evaluation/loadtest/README.md`。
+2. **SQLite 开 WAL**（`app/core/database.py` connect 事件监听器，逐连接生效，MySQL 路径跳过）：`journal_mode=WAL` + `busy_timeout=5000` + `synchronous=NORMAL`；配套 `tests/test_sqlite_pragma.py` 3 用例。
+3. **两库对比（默认动作）**：同一压测脚本、同一台机器，本机 Docker MySQL 8（3307）跑同五场景。
+4. **压测护栏加固**（2026-09-25 事故复盘）：run_one 环境变量强制写入 os.environ + seed 硬护栏（DATABASE_URL 不含 loadtest 即拒绝 drop_all）。
+
+**解决了什么问题**
+「要不要迁 MySQL」从猜测变成实测裁决；SQLite 并发写从裸奔变为有 WAL+busy_timeout 兜底；压测可在任意时刻一键复现，数字有据可查。
+
+**怎么验证的**
+- **基线 vs WAL（SQLite，10 用户/60s/全场景 0 错误 0 锁错误）**：匹配列表 **52.1→61.3 QPS（p95 180→130ms，-28%）**；发布（含同步识别）**5.4→6.8 QPS（p95 1800→1400ms，-22%）**；交接码验证 **79.8→90.8 QPS（p95 37→17ms，-54%）**；物品列表 90.2 持平（p95 17→13ms）；mixed 持平（瓶颈在 YOLO CPU，非 DB——引出任务④）。
+- **SQLite WAL vs MySQL 8（同脚本同机）**：MySQL 全场景落后（匹配列表 42.6 vs 61.3、交接码 65.9 vs 90.8、列表 84.9 vs 90.2、发布 6.0 vs 6.8、mixed 22.9 vs 27.6）。主因：单机部署下 MySQL 每查询一次回环 TCP 往返。
+- **迁移决策（已写入 `docs/known-tradeoffs.md` B3）**：单机校园规模**不迁 MySQL**——实测后不迁比没测过硬；MySQL 支持保留，部署形态变化时用同一脚本重裁决。
+- 数字入 `docs/numbers.md` #12/#13，复现命令齐备。
+- 全量回归：`pytest tests/ -q` **418 passed, 2 skipped, 0 failed**（420 收集，325.16s，`审查证据/pytest_v17_task2_retry.txt`）；`ruff check app tests` 0 错误。**如实记录一次偶发段错误**（首跑 139 退出码，`审查证据/pytest_v17_task2.txt`）：torch 2.7.1 在 Windows 上主线程 YOLO 与后台线程 CLIP JIT load 并发的既有竞态（与本次改动无关，venv 环境未变），重跑即绿；v17④ 把 CLIP 迁入单线程 worker 后该竞态面自然消除。
 
 ## 审查 P2 长期项（2026-09-24）· 盲集实物 + 依赖治理 + 包体减半 + 面试防御文档
 
