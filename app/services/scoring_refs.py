@@ -131,18 +131,86 @@ def qty_score(lost_pairs, found_pairs) -> float:
 # 「磨损/划痕/掉漆/褪色」归入「破损」侧（用户点选录入后可被抽取，PRD-v12 §2）。
 STATE_WORD_PAIRS: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
     (
-        frozenset({"新", "全新", "崭新", "九成新", "八成新", "九五新"}),
+        # v18：新侧补齐量化档位（行业五档标准对齐：99新/95新/九成新/八成新 + 校园口语中低档）
+        frozenset(
+            {
+                "新", "全新", "崭新", "99新", "95新", "九五新",
+                "九成新", "八成新", "七成新", "六成新", "五成新",
+            }
+        ),
         frozenset({"旧", "陈旧", "老旧", "破旧"}),
     ),
     (
         frozenset({"完好", "完整", "没坏"}),
-        frozenset({"破损", "损坏", "开裂", "碎", "破裂", "摔坏", "磨损", "划痕", "掉漆", "褪色"}),
+        # v18：破损侧补「缺件/缺配件」（失物高频缺陷：耳机缺充电仓、水杯缺盖）
+        frozenset({"破损", "损坏", "开裂", "碎", "破裂", "摔坏", "磨损", "划痕", "掉漆", "褪色", "缺件", "缺配件"}),
     ),
     (frozenset({"干净", "整洁"}), frozenset({"脏", "污渍", "有污渍", "脏污"})),
     (frozenset({"大"}), frozenset({"小"})),
     (frozenset({"厚"}), frozenset({"薄"})),
     (frozenset({"满"}), frozenset({"空"})),
 )
+
+# ---------------------------------------------------------------------------
+# v18：新旧档位梯（CONDITION_LADDER）——量化距离打分。
+# 业界口径（二手交易行业五档：99新/95新/90新/85新/8成新以下）：「新旧程度」是
+# **连续谱**而非二元对——「全新 vs 八成新」差两档，与「全新 vs 全新」同给满分不合理。
+# 梯序从新到旧（序号 0 最新）；state_score 对两侧都给出档位词的配对按**距离**给分。
+# 与「破损族」（完好↔破损 反义对 + NEW/DAMAGED 强冲突）正交：九成新+有划痕 合理共存。
+# ---------------------------------------------------------------------------
+CONDITION_LADDER: tuple[tuple[str, ...], ...] = (
+    ("全新",),                       # 0
+    ("99新", "崭新"),                # 1
+    ("95新", "九五新", "新"),        # 2
+    ("九成新",),                     # 3
+    ("八成新",),                     # 4
+    ("七成新",),                     # 5
+    ("六成新",),                     # 6
+    ("五成新", "旧", "陈旧", "老旧", "破旧"),  # 7（五成新及以下 ≈ 明显旧）
+)
+
+# 词 → 档位序号（O(1) 查询；由 CONDITION_LADDER 生成）
+_CONDITION_INDEX: dict[str, int] = {}
+for _gi, _grades in enumerate(CONDITION_LADDER):
+    for _w in _grades:
+        _CONDITION_INDEX[_w] = _gi
+
+# 档位距离 → 得分系数（乘 STATE_SCORE_FULL）：同档满分，逐档衰减，≥3 档仅剩保底
+CONDITION_DISTANCE_FACTOR: dict[int, float] = {0: 1.0, 1: 0.85, 2: 0.6, 3: 0.35}
+CONDITION_DISTANCE_FAR: float = 0.1     # 距离 ≥3 档的保底系数（同源可能但描述差距大）
+
+
+def condition_grade(states) -> int | None:
+    """从状态词集合提取新旧档位序号（多个档位词取**最旧**——保守口径，按缺陷从低报）。
+
+    Returns:
+        档位序号；集合中无任何档位词时返回 None（调用方回退原 state 逻辑）。
+    """
+    grades = [_CONDITION_INDEX[w] for w in (states or ()) if w in _CONDITION_INDEX]
+    return max(grades) if grades else None
+
+
+def condition_distance_score(lost_states, found_states) -> float | None:
+    """新旧档位距离打分（v18）：两侧都有档位词时返回系数（0~1），否则 None。
+
+    - 同档 → 1.0；相邻档 → 0.85；差两档 → 0.6；差三档 → 0.35；≥4 档 → 0.1。
+    - 只有一侧给了档位 → None（回退原 state 逻辑的中性分，不惩罚未填）。
+    """
+    li = condition_grade(lost_states)
+    fi = condition_grade(found_states)
+    if li is None or fi is None:
+        return None
+    return CONDITION_DISTANCE_FACTOR.get(abs(li - fi), CONDITION_DISTANCE_FAR)
+
+
+def _all_condition_words(states) -> bool:
+    """状态词集合是否**全部**由新旧档位词组成（空集返回 False）。
+
+    供 state_score 决定是否短路进距离分：混合场景（档位词+其它状态词如"脏"）
+    必须回落原比例逻辑——否则 {"全新","脏"} vs {"全新"} 会因距离 0 给满分，"脏"被无视。
+    """
+    s = set(states or ())
+    return bool(s) and s <= _CONDITION_INDEX.keys()
 
 # 全部状态词（抽取用），长度降序保证长词优先（崭新 先于 新）
 STATE_WORDS: tuple[str, ...] = tuple(
@@ -310,6 +378,11 @@ def extract_states(text: str, tokens) -> tuple[set[str], str]:
 def state_score(lost_states, found_states) -> tuple[float, bool]:
     """状态/形容词打分（0–10）+ 冲突信号（PRD §A.3.5）。
 
+    v18：**新旧档位距离优先**——两侧都给出新旧档位词（全新/95新/九成新/五成新…）时，
+    按档位距离给分（同档满分 → 逐档衰减 → ≥3 档保底），替代原「新旧组同侧即满分 /
+    跨组即 0」的二元口径（「全新 vs 八成新」差两档不该满分）。其余反义组
+    （完好↔破损、干净↔脏…）与 NEW/DAMAGED 跨组强冲突逻辑完全不变。
+
     Args:
         lost_states: 失主侧状态词集合。
         found_states: 候选侧状态词集合。
@@ -322,7 +395,15 @@ def state_score(lost_states, found_states) -> tuple[float, bool]:
         return STATE_SCORE_MISSING, False
     found = set(found_states or ())
 
-    # 反义冲突优先判定（新 vs 旧）
+    # v18：新旧档位距离特判——**仅当两侧状态词全部是档位词**时短路返回；
+    # 混合场景（档位词+干净/脏/大小等其它状态词）回落原比例逻辑，
+    # 避免 {"全新","脏"} vs {"全新"} 因距离 0 给满分而无视"脏"。
+    if _all_condition_words(lost) and _all_condition_words(found):
+        cond = condition_distance_score(lost, found)
+        if cond is not None:
+            return round(STATE_SCORE_FULL * cond, 2), False
+
+    # 反义冲突优先判定（完好 vs 破损 / 干净 vs 脏 等）
     for lw in lost:
         lg = _STATE_GROUP.get(lw)
         if lg is None:

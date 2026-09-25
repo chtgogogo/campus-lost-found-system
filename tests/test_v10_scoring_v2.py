@@ -310,11 +310,21 @@ def test_qty_chinese_number_parsing():
 
 
 def test_state_conflict_and_partial_hit():
-    """状态：反义冲突优先置 0 并给信号；同侧近义算命中；部分命中按比例。"""
-    assert scoring_refs.state_score({"新"}, {"旧"}) == (scoring_refs.STATE_SCORE_CONFLICT, True)
-    assert scoring_refs.state_score({"新"}, {"全新"}) == (scoring_refs.STATE_SCORE_FULL, False)
+    """状态：反义冲突优先置 0 并给信号；同侧近义算命中；部分命中按比例。
+
+    v18 行为变更：「新旧档位族」（新/全新/九成新/旧…）改为**档位距离分**并短路返回，
+    不再走反义冲突（新 vs 旧 = 距离 5 档 → 1.0 分无信号）；「冲突优先置 0」的意图
+    由仍然存在的完好↔破损组断言继续守护。
+    """
+    # v18：新旧档位距离（新=2 档、旧=7 档 → 距离 5 → 保底 0.1×10）
+    assert scoring_refs.state_score({"新"}, {"旧"}) == (1.0, False)
+    # 冲突优先语义保留在完好↔破损组
+    assert scoring_refs.state_score({"完好"}, {"破损"}) == (scoring_refs.STATE_SCORE_CONFLICT, True)
+    # v18：新(2 档) vs 全新(0 档) 差两档 → 0.6（旧行为同侧满分，量化后区分"很新"与"全新"）
+    assert scoring_refs.state_score({"新"}, {"全新"}) == (6.0, False)
     score, conflict = scoring_refs.state_score({"新", "干净"}, {"崭新"})
     assert conflict is False
+    # v18：混合场景（档位词+其它状态词）回落原比例逻辑——新 命中 崭新（1/2），干净未对上
     assert score == pytest.approx(scoring_refs.STATE_SCORE_FULL / 2)
     assert scoring_refs.state_score(set(), {"新"}) == (scoring_refs.STATE_SCORE_MISSING, False)
 

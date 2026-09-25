@@ -104,14 +104,28 @@
                 </span>
               </div>
             </el-form-item>
-            <el-form-item label="成色 / 状态（点选，可多选）">
+            <!-- v18：成色拆两区——新旧程度单选（量化档位）+ 外观缺陷多选（互斥"完好"） -->
+            <el-form-item label="新旧程度（单选）">
               <div class="chip-row">
                 <span
-                  v-for="g in GRADE_OPTIONS"
+                  v-for="g in CONDITION_OPTIONS"
+                  :key="g"
+                  class="chip chip-grade"
+                  :class="{ on: found.conditionChip === g }"
+                  @click="toggleCondition(found, g)"
+                >
+                  {{ g }}
+                </span>
+              </div>
+            </el-form-item>
+            <el-form-item label="外观状态（可多选，完好与缺陷互斥）">
+              <div class="chip-row">
+                <span
+                  v-for="g in DEFECT_OPTIONS"
                   :key="g"
                   class="chip chip-grade"
                   :class="{ on: found.gradeChips.includes(g) }"
-                  @click="toggleChip(found.gradeChips, g)"
+                  @click="toggleDefect(found, g)"
                 >
                   {{ g }}
                 </span>
@@ -222,14 +236,28 @@
                 </span>
               </div>
             </el-form-item>
-            <el-form-item label="成色 / 状态（点选，可多选）">
+            <!-- v18：成色拆两区（同拾物区）——新旧程度单选 + 外观缺陷多选 -->
+            <el-form-item label="新旧程度（单选）">
               <div class="chip-row">
                 <span
-                  v-for="g in GRADE_OPTIONS"
+                  v-for="g in CONDITION_OPTIONS"
+                  :key="g"
+                  class="chip chip-grade"
+                  :class="{ on: lost.conditionChip === g }"
+                  @click="toggleCondition(lost, g)"
+                >
+                  {{ g }}
+                </span>
+              </div>
+            </el-form-item>
+            <el-form-item label="外观状态（可多选，完好与缺陷互斥）">
+              <div class="chip-row">
+                <span
+                  v-for="g in DEFECT_OPTIONS"
                   :key="g"
                   class="chip chip-grade"
                   :class="{ on: lost.gradeChips.includes(g) }"
-                  @click="toggleChip(lost.gradeChips, g)"
+                  @click="toggleDefect(lost, g)"
                 >
                   {{ g }}
                 </span>
@@ -319,15 +347,37 @@ const COLOR_OPTIONS = [
   '黑色', '白色', '灰色', '红色', '蓝色', '绿色', '黄色',
   '粉色', '紫色', '橙色', '棕色', '金色', '银色', '彩色', '透明',
 ]
-const GRADE_OPTIONS = [
-  '全新', '崭新', '完好', '九成新', '八成新',
-  '划痕', '磨损', '破损', '老旧', '破旧',
+// v18：成色拆两区——「新旧程度」单选（行业量化档位：全新→五成新，与后端 CONDITION_LADDER 对齐）
+// 「外观缺陷」多选（划痕/缺件等具体缺陷，可与任意新旧档位共存，如"九成新+有划痕"）
+const CONDITION_OPTIONS = [
+  '全新', '99新', '95新', '九成新', '八成新', '七成新', '六成新', '五成新及以下',
+]
+const DEFECT_OPTIONS = [
+  '完好', '划痕', '磨损', '掉漆', '褪色', '破损', '开裂', '缺件', '有污渍',
 ]
 
 function toggleChip(list: string[], word: string) {
   const i = list.indexOf(word)
   if (i >= 0) list.splice(i, 1)
   else list.push(word)
+}
+
+// v18：新旧程度单选切换（再点一次取消；点新档位自动替换旧档位，杜绝"全新+老旧"自相矛盾录入）
+function toggleCondition(obj: { conditionChip: string }, word: string) {
+  obj.conditionChip = obj.conditionChip === word ? '' : word
+}
+
+// v18：外观缺陷多选，但「完好」与其他缺陷互斥（"完好+划痕"是自相矛盾录入）
+function toggleDefect(obj: { gradeChips: string[] }, word: string) {
+  if (word === '完好') {
+    obj.gradeChips = obj.gradeChips.includes(word) ? [] : [word]
+    return
+  }
+  const rest = obj.gradeChips.filter((w) => w !== '完好')
+  const i = rest.indexOf(word)
+  if (i >= 0) rest.splice(i, 1)
+  else rest.push(word)
+  obj.gradeChips = rest
 }
 
 // 点选词 + 用户描述 → 合成提交文本（点选词放前面，颜色/状态抽取都会命中）
@@ -343,7 +393,8 @@ const found = reactive({
   contact_allowed: true,
   location: '' as string,
   colorChips: [] as string[],
-  gradeChips: [] as string[],
+  conditionChip: '' as string, // v18：新旧程度单选（CONDITION_OPTIONS 档位）
+  gradeChips: [] as string[], // v18：语义收窄为「外观缺陷」多选（DEFECT_OPTIONS）
 })
 
 // AI 预识别结果（发布前上传首图触发）
@@ -394,7 +445,8 @@ const lost = reactive({
   description: '',
   location: '' as string,
   colorChips: [] as string[],
-  gradeChips: [] as string[],
+  conditionChip: '' as string, // v18：新旧程度单选（CONDITION_OPTIONS 档位）
+  gradeChips: [] as string[], // v18：语义收窄为「外观缺陷」多选（DEFECT_OPTIONS）
 })
 
 const previewVisible = ref(false)
@@ -442,9 +494,11 @@ watch(
     () => lost.description,
     () => lost.title,
     () => lost.colorChips.length,
+    () => lost.conditionChip,
     () => lost.gradeChips.length,
     () => found.description,
     () => found.colorChips.length,
+    () => found.conditionChip,
     () => found.gradeChips.length,
   ],
   () => {
@@ -479,7 +533,7 @@ async function onSubmitFound() {
   fd.append('keep_status', String(found.keep_status))
   fd.append('category_name', found.category_name.trim())
   const desc = composeDescription(
-    [...found.colorChips, ...found.gradeChips],
+    [...found.colorChips, found.conditionChip, ...found.gradeChips].filter(Boolean),
     found.description,
   )
   if (desc) fd.append('description', desc)
@@ -497,6 +551,7 @@ async function onSubmitFound() {
     found.category_name = ''
     found.location = ''
     found.colorChips = []
+    found.conditionChip = ''
     found.gradeChips = []
     foundPreviewTags.value = []
     visionResult.value = null
@@ -517,7 +572,7 @@ async function onSubmitLost() {
     return
   }
   const desc = composeDescription(
-    [...lost.colorChips, ...lost.gradeChips],
+    [...lost.colorChips, lost.conditionChip, ...lost.gradeChips].filter(Boolean),
     lost.description,
   )
   if (!desc.trim()) {
@@ -543,6 +598,7 @@ async function onSubmitLost() {
     lost.description = ''
     lost.location = ''
     lost.colorChips = []
+    lost.conditionChip = ''
     lost.gradeChips = []
     lostPreviewTags.value = []
     lost.category_name = ''

@@ -103,9 +103,15 @@ class TestStateLevelsV12:
         assert score == 0.0 and conflict
 
     def test_grade_conflicts_with_old(self):
-        """九成新 vs 破旧：新旧组反义 → 冲突。"""
+        """九成新 vs 破旧：v18 档位距离化——差 4 档 → 保底 1.0 分、无冲突信号。
+
+        行为变更声明（v18）：旧口径「新旧组跨侧即 0 分 + state_conflict 一票否决」
+        已被档位距离分取代（连续谱：丢时九成新、被捡到时显旧，可能是同一把的合理
+        折旧）；真正的硬矛盾由完好↔破损反义对与 NEW/DAMAGED 强冲突继续守护
+        （见上方 test_wear_conflicts_with_intact）。
+        """
         score, conflict = state_score({"九成新"}, {"破旧"})
-        assert score == 0.0 and conflict
+        assert score == 1.0 and not conflict
 
     def test_grade_coexists_with_wear(self):
         """九成新 vs 磨损：跨组不判冲突（八成新本就带磨损，判冲突会误伤）。"""
@@ -113,9 +119,13 @@ class TestStateLevelsV12:
         assert not conflict
 
     def test_same_grade_hits(self):
-        """九成新 vs 八成新：同组同侧 → 满分命中。"""
+        """九成新 vs 八成新：v18 档位距离化——相邻档 0.85，不再同侧满分。
+
+        行为变更声明（v18）：相邻档给 0.85 是有意的量化口径（八成新与九成新主观
+        折旧差异常在误差内，但不应与完全同档等权）；同档仍是满分（全新 vs 全新）。
+        """
         score, conflict = state_score({"九成新"}, {"八成新"})
-        assert score == 10.0 and not conflict
+        assert score == 8.5 and not conflict
 
     def test_extract_states_new_words(self):
         """新词可从描述文本抽取（「有划痕」含子串「划痕」）。"""
