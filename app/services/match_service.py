@@ -48,7 +48,9 @@
 from __future__ import annotations
 
 import difflib
+import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -60,6 +62,7 @@ from app.services.color_family import (
     color_score,
     extract_color_words,
 )
+from app.services.synonym_dict import expand_slang, synonym_lookup
 from app.services.scoring_refs import (
     BRAND_CONFLICT_PENALTY,
     MUTUAL_EXCLUSIVE_PENALTY,
@@ -130,42 +133,63 @@ except Exception:  # nltk 未安装 / 离线 / 导入失败 → 关闭语义扩�
 _wordnet_ready = False   # 运行期语料是否就绪（懒加载成功后置 True，作为语义路径缓存）
 _wordnet_failed = False  # 本进程内已尝试激活且失败（负缓存，见 _ensure_wordnet 说明）
 _wn = None                # 懒加载成功后由 _ensure_wordnet() 写入 wordnet 模块对象
+_download_started = False  # v18：后台下载线程只起一次（无论成败，本进程不再重试）
 
 
 def _ensure_wordnet() -> bool:
-    """首次使用时静默下载并激活 wordnet 语料（仅当 USE_WORDNET 开启）。
+    """激活 wordnet 语料（仅当 USE_WORDNET 开启）。
 
-    兼容性铁律：nltk 包本身不可导入时 USE_WORDNET=False，本函数直接返回 False，
-    绝不触碰任何语料/网络；语料缺失时静默尝试下载，失败（离线/无网络）也返回 False，
-    由调用方回退为纯精确 containment。下载成功后再导入 corpus 模块并写入模块级 ``_wn``，
-    置 ``_wordnet_ready=True``，后续调用直接命中缓存，不再重复下载/导入。
+    v18 两级策略（修复评测/打分被语料下载阻塞数分钟的线上隐患）：
+    1. **本地直查（零网络）**：先 ``nltk.data.find`` 探测本地语料——语料在则直接激活。
+       原实现无条件 ``nltk.download``，其内部 ``_update_index`` 每进程联网校验包索引，
+       网络抖动时评测/打分被阻塞数分钟（2026-09-25 实测 run_eval 372s，修复后本地路径零请求）。
+    2. **本地缺失 → 后台线程下载**：打分/评测**立即回退纯精确匹配**（绝不等待网络），
+       daemon 线程下载成功后置 ``_wordnet_ready``，后续请求自动升级语义路径；失败静默。
 
-    ⚠️ **负缓存 ``_wordnet_failed``（v10 修复）**：原实现失败后不记忆，导致每个 token 的
-    每次语义命中判定都会重新发起两次 ``nltk.download`` 网络请求 —— 离线环境下打一次分
-    可产生上百次网络超时，是严重的线上延迟隐患（离线 CI 里整套用例慢数倍）。
-    失败一次后本进程不再重试；行为（返回 False → 回退纯精确匹配）完全不变。
+    兼容性铁律不变：nltk 包不可导入 → USE_WORDNET=False 直接 False；激活失败返回 False
+    由调用方回退精确 containment；负缓存 ``_wordnet_failed``：激活异常本进程不再重试。
 
     Returns:
-        True 表示 wordnet 已就绪可用；False 表示不可用（已静默失败）。
+        True 表示 wordnet 已就绪可用；False 表示当前不可用（已静默回退）。
     """
-    global _wordnet_ready, _wordnet_failed
+    global _wordnet_ready, _wordnet_failed, _download_started
     if not USE_WORDNET or _nltk is None:
         return False
     if _wordnet_ready:
         return True
     if _wordnet_failed:
         return False
-    try:  # pragma: no cover - 依赖网络/语料，CI/离线环境静默失败
-        _nltk.download("wordnet", quiet=True)
-        _nltk.download("omw-1.4", quiet=True)
+    try:  # ① 本地直查：语料已存在则零网络激活（find 对 zip/解压目录均可）
+        _nltk.data.find("corpora/wordnet.zip")
+        _nltk.data.find("corpora/omw-1.4.zip")
         import nltk.corpus.wordnet as _wn_mod  # noqa: F401
 
         globals()["_wn"] = _wn_mod
         _wordnet_ready = True
         return True
-    except Exception:
+    except LookupError:
+        pass  # 本地无语料 → 转后台下载（不打断打分主流程）
+    except Exception:  # pragma: no cover - stub/异常环境：记忆失败，回退精确匹配
         _wordnet_failed = True
         return False
+    if not _download_started:  # ② 后台下载：绝不阻塞当前进程的打分/评测
+        _download_started = True
+
+        def _bg_download() -> None:  # pragma: no cover - 依赖网络
+            global _wordnet_ready, _wn
+            try:
+                _nltk.download("wordnet", quiet=True)
+                _nltk.download("omw-1.4", quiet=True)
+                import nltk.corpus.wordnet as _wn_mod
+
+                globals()["_wn"] = _wn_mod
+                _wordnet_ready = True
+                logging.getLogger(__name__).info("[wordnet] 语料后台下载完成，语义路径已激活")
+            except Exception:
+                pass  # 静默：本进程保持精确匹配
+
+        threading.Thread(target=_bg_download, name="wordnet-download", daemon=True).start()
+    return False
 
 
 def _wordnet_synonyms(token: str) -> set[str]:
@@ -192,63 +216,31 @@ def _wordnet_synonyms(token: str) -> set[str]:
 # 中文轻量同义/近义词表（校园失物常见物品）。仅作为语义增强的互补，解决 WordNet
 # 仅覆盖英文、无法处理中文词形的问题（如"钥匙"↔"钥匙扣"、"水杯"↔"水壶"）。
 # 仅在 USE_WORDNET 开启（语义模式）时生效，保证 nltk 缺失的回退路径与历史精确行为完全一致。
-_ZH_SYNONYMS: dict[str, list[str]] = {
-    "钥匙": ["钥匙扣", "钥匙串", "钥匙链"],
-    "钥匙扣": ["钥匙", "钥匙串", "钥匙链"],
-    "钥匙串": ["钥匙", "钥匙扣", "钥匙链"],
-    "钥匙链": ["钥匙", "钥匙扣", "钥匙串"],
-    "水杯": ["水壶", "水瓶", "杯子", "保温杯"],
-    "水壶": ["水杯", "水瓶", "杯子", "保温杯"],
-    "水瓶": ["水杯", "水壶", "杯子", "保温杯"],
-    "杯子": ["水杯", "水壶", "水瓶", "保温杯"],
-    "保温杯": ["水杯", "水壶", "水瓶", "杯子"],
-    "雨伞": ["伞", "雨具"],
-    "伞": ["雨伞", "雨具"],
-    "书包": ["背包", "双肩包"],
-    "背包": ["书包", "双肩包"],
-    "双肩包": ["书包", "背包"],
-    "手机": ["电话", "移动电话"],
-    "钱包": ["皮夹", "钱夹"],
-    "眼镜": ["墨镜", "镜"],
-    "笔记本": ["本子", "记事本", "作业本"],
-    "本子": ["笔记本", "记事本", "作业本"],
-    "记事本": ["笔记本", "本子", "作业本"],
-    "作业本": ["笔记本", "本子", "记事本"],
-    "校园卡": ["饭卡", "学生卡", "一卡通"],
-    "饭卡": ["校园卡", "学生卡", "一卡通"],
-    "学生卡": ["校园卡", "饭卡", "一卡通"],
-    "一卡通": ["校园卡", "饭卡", "学生卡"],
-    "行李箱": ["箱子", "拉杆箱", "旅行箱"],
-    "箱子": ["行李箱", "拉杆箱", "旅行箱"],
-    "拉杆箱": ["行李箱", "箱子", "旅行箱"],
-    "旅行箱": ["行李箱", "箱子", "拉杆箱"],
-    "笔记本电脑": ["电脑", "笔记本电", "笔电"],
-    "电脑": ["笔记本电脑", "笔电"],
-    "笔电": ["笔记本电脑", "电脑"],
-}
-
-
 def _zh_synonyms(token: str) -> set[str]:
-    """中文近义词集合（仅在语义模式 USE_WORDNET 下由调用方使用）。"""
-    if not USE_WORDNET or not token:
-        return set()
-    return set(_ZH_SYNONYMS.get(token, []))
+    """中文近义词集合（v18 起数据源迁移至 synonym_dict，**无条件生效**）。
+
+    历史行为：本表曾挂在 USE_WORDNET 开关下（nltk 缺失即整表失效）；
+    v18 校园同义词词典是本地知识库、零外部依赖，改为无条件参与命中
+    （USE_WORDNET 仅继续管辖 WordNet 英文同义路径）。
+    """
+    return synonym_lookup(token)
 
 
 def _token_hit(token: str, candidate_tokens: set[str]) -> bool:
     """失物侧某 token 是否命中候选 token 集合（精确 + 语义同义）。
 
     - 精确：token 直接出现在候选集合。
-    - 语义（仅 USE_WORDNET 开启）：token 的任意 WordNet 同义词或中文近义词出现在候选集合。
-    nltk 缺失（USE_WORDNET=False）时仅做精确命中，与历史 containment 行为完全一致。
+    - 中文近义（v18 起无条件生效）：本地校园同义词词典（synonym_dict），
+      零外部依赖——离线/未装 nltk 的环境同样享受同义命中。
+    - 英文 WordNet 同义（仅 USE_WORDNET 开启）：nltk 缺失时跳过。
     """
     if token in candidate_tokens:
         return True
+    for syn in synonym_lookup(token):
+        if syn in candidate_tokens:
+            return True
     if USE_WORDNET:
         for syn in _wordnet_synonyms(token):
-            if syn in candidate_tokens:
-                return True
-        for syn in _zh_synonyms(token):
             if syn in candidate_tokens:
                 return True
     return False
@@ -739,10 +731,17 @@ class MatchService:
     # ---------------- 文本工具 ----------------
     @staticmethod
     def _split_attrs(text: str | None) -> set[str]:
-        """把自由文本（逗号/空白/标点分词）切成属性 token 集合（去空）。"""
+        """把自由文本（逗号/空白/标点分词）切成属性 token 集合（去空）。
+
+        v18：出口统一过**俚语探测层**（synonym_dict.expand_slang）——整句无标点的
+        长 token（"像枪一样的短收缩伞"）内含俚语子串时，把标准词（枪型/折叠伞）注入
+        词集，保证文字/特征/语义标签各维度都能命中词典同义。
+        """
         if not text:
             return set()
-        return {p.strip() for p in _ATTR_SPLIT_RE.split(str(text)) if p.strip()}
+        return expand_slang(
+            {p.strip() for p in _ATTR_SPLIT_RE.split(str(text)) if p.strip()}
+        )
 
     @staticmethod
     def _color_set(item) -> set[str]:
