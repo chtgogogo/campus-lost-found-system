@@ -91,14 +91,24 @@
                 :prefix-icon="User"
               />
             </el-form-item>
-            <el-form-item v-if="!demoMode" label="手机号" prop="phone">
-              <el-input v-model="regForm.phone" placeholder="请输入手机号" :prefix-icon="Iphone" />
+            <el-form-item label="手机号" prop="phone">
+              <el-input
+                v-model="regForm.phone"
+                :disabled="demoMode"
+                :placeholder="demoMode ? '当前模式为演示模式，不需要填此项' : '请输入手机号'"
+                :prefix-icon="Iphone"
+              />
             </el-form-item>
-            <el-form-item v-if="!demoMode" label="短信验证码" prop="sms_code">
+            <el-form-item label="短信验证码" prop="sms_code">
               <div class="sms-row">
-                <el-input v-model="regForm.sms_code" placeholder="6 位验证码" :prefix-icon="Message" />
-                <el-button :disabled="smsCountdown > 0" @click="onSendSms">
-                  {{ smsCountdown > 0 ? `${smsCountdown}s 后重发` : '获取验证码' }}
+                <el-input
+                  v-model="regForm.sms_code"
+                  :disabled="demoMode"
+                  :placeholder="demoMode ? '演示模式不需要填此项' : '6 位验证码'"
+                  :prefix-icon="Message"
+                />
+                <el-button :disabled="demoMode || smsCountdown > 0" @click="onSendSms">
+                  {{ demoMode ? '演示模式无需验证码' : (smsCountdown > 0 ? `${smsCountdown}s 后重发` : '获取验证码') }}
                 </el-button>
               </div>
             </el-form-item>
