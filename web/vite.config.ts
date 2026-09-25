@@ -27,7 +27,10 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 5173,
+    // v19（2026-09-25）：5173 → 5175 固定端口——RAG 助手占 5174，两项目并行开发互不冲突；
+    // strictPort 防占用漂移（端口被占直接报错退出，绝不静默换端口造成"地址变了"的困惑）
+    port: 5175,
+    strictPort: true,
     // 允许任意 host（含 ngrok/cpolar 等内网穿透域名，每次地址会变，不能写死）
     allowedHosts: true,
     proxy: {
