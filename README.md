@@ -1,10 +1,61 @@
-# 失物招领 · 智能匹配系统
+<h1 align="center">
+  <span style="color:#4f7cff;">失物招领</span>
+  <span> · 智能匹配系统</span>
+</h1>
+
+<p align="center">
+  🎒 让机器看懂物品长什么样，让每一条匹配都解释得清
+</p>
+
+<p align="center">
+  <strong>校园失物招领 Web 应用</strong> · YOLOv8 物品识别 · 七维可解释匹配 · 双码防冒领 · 盲测集校准
+</p>
+
+<p align="center">
+
+![CI](https://github.com/chtgogogo/campus-lost-found-system/actions/workflows/ci.yml/badge.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![YOLOv8](https://img.shields.io/badge/YOLOv8-%20-FFDE00?logo=ultralytics&logoColor=black)
+![tests](https://img.shields.io/badge/pytest-411%20cases-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+</p>
+
+<p align="center">
+  <a href="#-功能亮点">功能亮点</a> ·
+  <a href="#-截图">截图</a> ·
+  <a href="#-匹配是怎么算的">匹配原理</a> ·
+  <a href="#-评测">评测</a> ·
+  <a href="#-已知取舍与局限">已知取舍</a> ·
+  <a href="#-路线图">路线图</a>
+</p>
+
+---
 
 丢东西的人和捡到东西的人，以前只能靠人工翻帖子，一张张比对。这个项目让机器先看懂物品长什么样，再用一套能解释的规则把两边撮合起来。
 
 面向校园失物拾物场景的 Web 应用。后端 FastAPI，前端 Vue 3 + TypeScript，视觉层用 YOLOv8 做物品识别、CLIP 在发布后台对候选做图像相似度精排，核心是一套七维加权打分引擎完成自动撮合。
 
----
+## ✨ 功能亮点
+
+| 亮点 | 说明 |
+|---|---|
+| 🎯 **可解释匹配引擎** | 七维加权 + 动态归一化 + 四类强冲突否决，匹配 F1 **62.9% → 78.0%** |
+| 🧪 **评测纪律** | **411 个 pytest 用例**（CI 门禁）+ 40 对主集 / 30 条控制变量集 / 12 对盲测集，三套评测集全部开源在仓库 |
+| 🕵️ **乐观偏差自曝** | 盲测集标注后即冻结、从未参与调参，首跑 F1 **57.1%**——与主集的差距就是偏差的量化，不藏数字 |
+| 🖼️ **视觉理解** | YOLOv8 物品分类识别 + CLIP 图像相似度精排（仅作同分打破平局，不改匹配分） |
+| ⚡ **性能优化** | 匹配列表每请求 SQL **630 → 5 条**、响应 **165ms → 18ms（-89%）**；前端主包 **-52%** |
+| 🔐 **防冒领交接** | 动态交接码 + 二维码，双码交叉验证后才允许交接 |
+| 📈 **零依赖可观测** | request_id 全链路贯穿结构化日志 + `/metrics` 暴露 QPS/p95/错误率 + 慢 SQL 日志，纯标准库实现 |
+| 🔁 **反馈闭环** | 候选「不是我的」一键排除、批量「重新匹配」补位刷新、误判一键重返 |
+
+## 📸 截图
+
+| 公示栏（失物/拾物一览） | 我的匹配（可解释匹配分 + 强冲突否决） | 交接确认（双码交叉验证防冒领） |
+|---|---|---|
+| ![公示栏](docs/screenshots/公示栏界面.png) | ![我的匹配](docs/screenshots/我的匹配界面.png) | ![交接确认](docs/screenshots/交接界面.png) |
 
 ## 它解决什么
 
@@ -12,7 +63,7 @@
 
 这个项目把发布、识别、匹配、沟通、交接这条链路搬到了线上：上传的图片自动识别出物品类别和属性，匹配引擎综合照片一致性、颜色、数量、地点、状态、关键词和时间衰减给出一个可解释的匹配分，交接环节用动态交接码加二维码做防冒领。
 
-## 核心能力
+## 🧩 核心能力
 
 | 模块 | 说明 |
 |------|------|
@@ -37,7 +88,7 @@
 | 部署 | Docker / docker-compose |
 | 测试 | pytest（认证 / 发布 / 匹配 / 视觉 / 审计 / 管理端） |
 
-## 架构
+## 🏗 架构
 
 ```
 Vue3 前端
@@ -55,7 +106,7 @@ FastAPI 后端
         └─ Redis / 内存缓存
 ```
 
-## 本地运行
+## 🚀 本地运行
 
 ```bash
 # 后端
@@ -75,7 +126,7 @@ pytest
 
 也可以用 Docker 一键起：`docker compose up -d`。
 
-## 匹配是怎么算的
+## 🧮 匹配是怎么算的
 
 七个维度，权重合计 100 分：
 
@@ -100,7 +151,7 @@ pytest
 3. 超过阈值的进入候选；发布后台再用 CLIP 算候选图相似度做精排（只作同分打破平局的次排序，不改匹配分）
 4. 双方站内信沟通，动态交接码完成交接
 
-## 评测
+## 📊 评测
 
 `evaluation/dataset.json` 是一份人工标注的标注集，40 对样本，正例和负例各 20 对。调参时拿它跑回归，匹配 F1 从 62.9% 提到 **78.0%**（v13 安全加固与词边界修复 → v14 三类强冲突信号 → v15.1 状态缺失中性分与地点数字别名归一化；召回 55%→80%）。每轮改动前后都留了结果文件，见 `evaluation/results-v*.md`（更早的 58.8% 起点基线未单独留结果文件，指标见 `docs/prd/v13-安全加固与评测集.md`）。
 
@@ -108,7 +159,7 @@ pytest
 
 **评测口径的诚实声明**：主集参与权重/阈值标定（阈值 78 即在主集上重标定），三套集合同为作者自建、单一标注者——主集/控制集分数存在**乐观偏差**。为此建立了 12 对**盲测集**（`dataset_blind.json`，2026-09-24 标注后即冻结、从未参与任何调参决策，协议见文件内 `_meta`）：首跑 **F1 57.1%**（P 50.0 / R 66.7，`results-blind-20260924.md`）。n=12 单对权重 8.3pp、置信区间宽；与主集 20.9pp 的差距即乐观偏差的量化。盲集暴露的 4 类误配（同款细节区分不足 / 「米色」不在颜色族表 / 长间隔时间衰减被归一化稀释 / 单只数量罚不足）已登记为后续版本议题——按盲集协议，不得据此对盲集回调参。
 
-## 可观测性（零外部依赖）
+## 📈 可观测性（零外部依赖）
 
 请求 ID 全链路贯穿结构化日志 + `/metrics` 暴露 QPS/p95/错误率 + 慢 SQL 日志（阈值 100ms），全部标准库实现，不引第三方观测组件（详见 `app/core/observability.py`）：
 
@@ -129,13 +180,28 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 
 分钟级定位链路：拿到用户报障的 request_id（或响应头里的值）→ grep 日志 → 该请求的访问日志、慢 SQL 告警、报错堆栈一次捞全。
 
-## 已知取舍与局限
+## 🙋 常见问题
+
+| 问题 | 答案 |
+|------|------|
+| 前端端口为什么是 5175？ | v19 固化并开启 strictPort：避开 RAG 助手项目的 5174，两个项目可以同机并行开发 |
+| 评测数字可以复现吗？ | 可以。每轮评测都留了结果文件（`evaluation/results-v*.md`），tag v13~v16 已推送、可 checkout 逐版复现；盲测集按协议每大版本只跑一次，跑过即失效 |
+| 用什么数据库？ | 开发用 SQLite（零配置即跑），生产用 MySQL 8.0（CI 挂 mysql:8.0 service 实跑建表迁移），schema 变更走 Alembic |
+
+## 📋 已知取舍与局限
 
 不藏着：完整清单见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)（15 条，每条含现状 / 为什么接受 / 修法），最要紧的三条：
 
 - **评测数字带乐观偏差**：主集 40 对参与了权重/阈值调参（盲测集首跑 F1 57.1% vs 主集 78.0%，差距即偏差量化）；三套集合同为作者自建、单一标注者。修法：扩盲集至 50 对并引入第二标注者；
 - **无真实用户、零外部锚点**：所有数字均为自测自评，没有真实部署实例。正在寻找第一个真实用户跑 4 周，记录发布数 / 找回数 / 平均找回时间；
 - **部分列表接口仍有优化空间**：用户侧最重的匹配列表已 SQL 化（每请求 630→5 条 SQL、165ms→18ms，基准脚本 `scripts/bench_match_list.py` 可复跑），管理端与站内信列表数据量级小，尚未做同样处理。
+
+## 🗺 路线图
+
+- [ ] 盲测集扩至 50 对并引入第二标注者（已知取舍第 1 条的修法）
+- [ ] 寻找第一个真实用户跑 4 周试点（记录发布数 / 找回数 / 平均找回时间）
+- [ ] 上传文件访问加固 + 数据库自动备份 + 定时清理任务
+- [ ] 管理端与站内信列表接口 SQL 化（对齐匹配列表已验证的优化方式）
 
 ## 项目结构
 
@@ -153,7 +219,12 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 
 本项目为个人独立项目：选题、需求拆解、接口设计、数据结构、评测标准到实现与验收均由本人独立完成，代码由 AI Coding Agent 协作产出。历史提交中的 `Agent` 标识即 AI Agent 的提交身份，本人提交署名 `CaoHT`。
 
-项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v16。
+项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v19。
+
+## 🙏 致谢
+
+- [FastAPI](https://fastapi.tiangolo.com/) · [Vue.js](https://vuejs.org/) · [Element Plus](https://element-plus.org/)
+- [Ultralytics YOLOv8](https://docs.ultralytics.com/) · [CLIP](https://github.com/openai/CLIP) · [SQLAlchemy](https://www.sqlalchemy.org/)
 
 ## 许可证
 
