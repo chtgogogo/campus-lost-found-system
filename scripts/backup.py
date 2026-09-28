@@ -54,6 +54,7 @@ def backup_mysql(url: str, dest: Path) -> Path:
         "--user", str(u.username),
         "--single-transaction",
         "--routines",
+        "--no-tablespaces",  # MySQL 8.0.21+ 导 tablespaces 需 PROCESS 权限，业务账号无此权限（恢复用不到）
         str(u.database),
     ]
     env = {**os.environ, "MYSQL_PWD": str(u.password)}  # 密码不进命令行
