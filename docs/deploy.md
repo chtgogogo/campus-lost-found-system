@@ -108,3 +108,14 @@ npm run build     # 产物 dist/；按需引入后主 chunk gzip ≈195KB（2026
 4. 管理员 `GET /api/v1/admin/users` 确认审计已落库；
 5. `docker compose logs backend` 无启动安检告警（弱密钥/占位符会直接拒启）；
 6. （可选）跑通一遍交接：生成动态交接码 → 双端验证 → 状态流转至已完成。
+7. 图片签名校验（v20① 生效标志）：`curl -i https://<host>/uploads/<真实文件名>` → **403**；登录后列表接口返回的图片 URL 带 `?e=&s=` 且直接 GET 200。
+
+## 8. 定时备份（v20② 落地口径，2026-09-28 服务器实装）
+
+```bash
+# 每日 04:00 备份数据库 + uploads，保留最近 14 份（ubuntu 用户 crontab）：
+0 4 * * * cd /opt/lostfound && .venv/bin/python scripts/backup.py --keep 14 >> backups/backup_cron.log 2>&1
+```
+
+- MySQL 路径自动走 `mysqldump`（已加 `--no-tablespaces`：MySQL 8.0.21+ 业务账号无 PROCESS 权限）；密码经 `MYSQL_PWD` 环境变量取自 `DATABASE_URL`，不进命令行；
+- 维护 worker（v20③）随应用启动自动运行（首跑延迟 2 分钟、此后每 24h），无需 cron；确认方式：`journalctl -u lf-backend | grep maintenance`。
