@@ -2,6 +2,84 @@
 
 所有对系统的显著迭代都会记录在本文件。格式：版本 → 改了什么 / 为什么 / 怎么验证的。
 
+## v20 · 上线三件套：图片签名 URL + 备份 + 定时维护（2026-09-28）
+
+背景：企业视角差距分析（联网对照 2026 企业 JD / 面试官信号 / 个保法合规）+ 既有上线瓶颈推演
+（六大死点中的速修三件套）——三件都是"真实运营第一天就会出事"的硬伤，本轮一次清账。
+
+### ① /uploads 签名 URL（原 known-tradeoffs C1 清账）
+
+**做了什么**
+1. 新增 `app/core/signed_url.py`：出口对 `/uploads/*` 路径附加过期时间 `e` 与 HMAC 签名 `s`
+   （24h 有效；**按小时取整**——同一小时内 URL 稳定，浏览器缓存不被每次刷新击穿）；
+   密钥复用 JWT_SECRET 但消息加 `uploads-sign:` 域前缀，与 JWT 跨用途隔离。
+2. `app/main.py`：无条件 `StaticFiles` 挂载替换为验签路由——路径穿越拦截（resolve 后
+   必须仍在 UPLOAD_DIR 内，不存在/越界一律 404 不泄露存在性）、验签失败 403、
+   通过才 `FileResponse`（带 `Cache-Control: max-age=1800`，远小于最坏剩余有效期）。
+3. 出口收敛在 `schemas/item.py` 两个 `from_model`（LostItemOut/FoundItemOut），
+   DB 存储仍是裸路径，签名只在序列化层附加——存量数据零迁移。
+4. 明确不做登录态强校验：`<img>` 标签无法携带 Authorization 头，签名 URL 即本场景的
+   访问凭证（S3 预签名同思路）；泄露链接 24h 自动失效。
+
+**解决了什么问题**：任何拿到图片路径的人（含演示站零门槛注册者）此前可无鉴权批量拉取
+用户照片——失物照片常含人脸/证件，属个保法第 51 条访问控制义务范围。
+
+**怎么验证的**：新增 `tests/test_uploads_security.py` 8 例全绿——未签名/篡改/过期 403、
+合法签名 200 字节一致、路径穿越（`%2e%2e` 绕客户端规范化）404、发布接口出口 URL
+自动带签名且全链路 roundtrip、签名小时级稳定、非 uploads 路径原样透传。
+
+### ② 备份脚本（此前全项目零备份）
+
+**做了什么**：新增 `scripts/backup.py`——SQLite 走标准库 backup API（在线逐页拷贝，
+不直接 copy 活库防 WAL 中间态）；MySQL（compose 生产路径）调 mysqldump（密码经
+MYSQL_PWD 环境变量传递，不进命令行防 `ps` 泄露）+ gzip；uploads 打 tar.gz；
+`--keep N` 轮转（下限保护 1，防误传 0 清空备份）；`/backups/` 入 .gitignore。
+
+**解决了什么问题**："RPO 无穷大"——磁盘一坏所有用户数据永久消失；服务器侧补一条
+cron 即可每日备份（部署清单已有示例命令）。
+
+**怎么验证的**：新增 `tests/test_backup_script.py` 5 例全绿——备份库行数一致、tar 含
+文件、keep=1 轮转删旧留新、keep=0 下限保护、**WAL 活库备份一致性**（写入未
+checkpoint 的行在备份中完整）。
+
+### ③ 定时维护 worker（此前零定时任务，清理全靠管理员手动）
+
+**做了什么**：新增 `app/services/maintenance_worker.py`（与 recognition_worker 同款
+常驻线程模式，零新增依赖；启动延迟 2 分钟避开启动高峰，此后每 24h 一轮）：
+1. 激活既有死代码 `purge_expired_im`——过期 IM 会话/消息物理删除（审计日志保留）；
+2. 终态（完成/失败）且 finished_at 超 30 天的 RecognitionTask 删除（pending 永不删，防丢任务）；
+3. 孤儿图片回收——uploads 里不被任何物品引用（含软删，保守）且 mtime 超 7 天宽限的
+   文件移入 `uploads_trash/<日期>/`（可人工恢复，不直接删）；`/uploads_trash/` 入 .gitignore。
+4. 明确不动 audit_log：审计是取证链，不进定时清理（写明理由，防后人好心办坏事）。
+配置：`MAINTENANCE_ENABLED/MAINTENANCE_INTERVAL_HOURS/RECOGNITION_TASK_RETENTION_DAYS/
+ORPHAN_FILE_GRACE_DAYS`（.env.example 已补）；conftest 置 false 与识别 worker 同口径。
+
+**怎么验证的**：新增 `tests/test_maintenance.py` 4 例全绿——过期 IM 会话+消息清理且
+未过期保留、终态旧任务删/新任务/pending 保留、孤儿移回收目录（被引用与宽限期内不动）、
+连跑两轮幂等。
+
+### 文档同步
+
+- README：路线图第三条勾销（本三件套）；pytest 徽章/亮点/结构 411→486（实测
+  484 通过/2 跳过，证据 `审查证据/pytest_v20_full.txt`）。
+- `docs/numbers.md`：#1 更新为 486（484/2）+ 新证据文件；旧口径 411/447 入禁用表。
+- `docs/known-tradeoffs.md`：原 C1 移入「已清账（v20 三件套）」表，C 区重编号；
+  顶部最后更新日期同步。
+
+**全量回归**：484 passed / 2 skipped / 0 failed（151.7s，证据 `审查证据/pytest_v20_full.txt`）；
+ruff 全绿。
+
+## 文档 · README 在线体验 + 仓库门面（2026-09-28）
+
+**做了什么**：README 新增「🚀 在线体验」节（演示站 lost.caohaotian.top + 🎲 随机登录
+免注册入口 + 自助注册说明 + DEMO_MODE 隐私安全口径）并加入锚点导航；GitHub 仓库
+Homepage 字段填演示站；补打 tag v18/v19 并配 Release 摘要（此前 tag 停在 v17，
+Release 页空缺）。
+**为什么**：v18 专门为面试官做的 DEMO_MODE 演示站在 README 中零曝光（grep 实锤），
+"点开就能玩"的第三信号断链；面试官 30 秒动线里最先要看到的就是在线入口。
+**怎么验证的**：演示站 HTTPS 实测 200 + 301 强跳；homepage 字段 gh api 回读一致；
+Release 两页可访问。
+
 ## 文档 · README 呈现升级（2026-09-26）
 
 **做了什么**：仿产品级排版重构 README——新增居中标题区（口号 + 徽章墙 + 锚点导航）、「✨ 功能亮点」速览表（8 条硬数字）、「🙋 常见问题」、「🗺 路线图」、「🙏 致谢」四个新节。

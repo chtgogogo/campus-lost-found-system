@@ -49,6 +49,11 @@ training_artifacts/
 /uploads/
 /qa_fake_out/
 
+# 备份产物（scripts/backup.py，v20②）
+/backups/
+# 孤儿图片回收目录（maintenance_worker，v20③）
+/uploads_trash/
+
 # 前端构建产物 / 依赖
 web/node_modules/
 web/dist/

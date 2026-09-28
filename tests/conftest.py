@@ -34,6 +34,8 @@ os.environ["SEED_DEMO"] = "false"
 # v17④：测试套件关闭后台识别 worker（避免线程与测试并发抢库）；
 # 需要识别结果的用例显式调 drain_recognition() 同步驱动（单测直接测 worker 函数）
 os.environ["RECOGNITION_WORKER_ENABLED"] = "false"
+# v20③：测试套件关闭定时维护 worker（单测直接调 run_maintenance，不走线程）
+os.environ["MAINTENANCE_ENABLED"] = "false"
 # 密钥/邀请码随机注入（零字面量凭据），同时满足 create_app 的 fail fast 安全校验
 os.environ["JWT_SECRET"] = uuid.uuid4().hex + uuid.uuid4().hex
 os.environ["ADMIN_APPLY_CODE"] = "test-admin-" + uuid.uuid4().hex[:16]

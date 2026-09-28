@@ -174,6 +174,13 @@ class Settings(BaseSettings):
     # 管理员留存窗（天）：物品 expires_at + 本值之后才进入 CleanupService 物理清理范围。
     ADMIN_RETENTION_DAYS: int = 270
 
+    # v20③ 定时维护 worker（maintenance_worker）：过期 IM purge / 终态识别任务瘦身 / 孤儿图片回收。
+    # 测试套件经 conftest 置 MAINTENANCE_ENABLED=false 关闭。
+    MAINTENANCE_ENABLED: bool = True
+    MAINTENANCE_INTERVAL_HOURS: int = 24
+    RECOGNITION_TASK_RETENTION_DAYS: int = 30   # 终态识别任务保留期
+    ORPHAN_FILE_GRACE_DAYS: int = 7             # 孤儿图片宽限期（防误杀刚上传、事务未落库的文件）
+
     # v4/v2 旧权重（MATCH_W_TAG、MATCH_W1..W4）已于卡#6（2026-09-23）下线：
     # 业务代码零引用，仅 tests/test_match.py 的存续断言随字段一并删除；git 历史可查旧值。
 

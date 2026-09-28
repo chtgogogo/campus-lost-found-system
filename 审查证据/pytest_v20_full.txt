@@ -1,0 +1,55 @@
+..............s......................................................... [ 14%]
+........................................................................ [ 29%]
+............................................................s........... [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 74%]
+........................................................................ [ 88%]
+......................................................                   [100%]
+============================== warnings summary ===============================
+tests/admin_tests/test_funnel.py::test_funnel_numbers_match_raw_sql
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\admin_tests\test_funnel.py:73: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    lost1.expires_at = datetime.utcnow() + timedelta(days=90)
+
+tests/admin_tests/test_funnel.py::test_funnel_numbers_match_raw_sql
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\admin_tests\test_funnel.py:78: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    lost2.expires_at = datetime.utcnow() + timedelta(days=90)
+
+tests/admin_tests/test_funnel.py::test_funnel_numbers_match_raw_sql
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\admin_tests\test_funnel.py:85: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    f1.expires_at = datetime.utcnow() + timedelta(days=90)
+
+tests/admin_tests/test_funnel.py::test_funnel_numbers_match_raw_sql
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\admin_tests\test_funnel.py:90: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    f2.expires_at = datetime.utcnow() + timedelta(days=90)
+
+tests/test_export_training_data.py::test_export_training_data_full_flow
+tests/test_export_training_data.py::test_export_include_other
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\test_export_training_data.py:25: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow() + timedelta(days=90)
+
+tests/test_v7_cleanup_fk_order.py::test_cleanup_purges_old_match_in_dependency_order
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\test_v7_cleanup_fk_order.py:25: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return datetime.utcnow()
+
+tests/test_v7_expiry_filter.py::test_user_side_expired_item_hidden
+tests/test_v7_expiry_filter.py::test_user_side_deleted_item_hidden
+tests/test_v7_expiry_filter.py::test_admin_side_retention_window
+tests/test_v7_expiry_filter.py::test_admin_side_retention_window
+tests/test_v7_expiry_filter.py::test_admin_side_retention_window
+tests/test_v7_expiry_filter.py::test_completion_resets_expires_at
+tests/test_v7_expiry_filter.py::test_completion_resets_expires_at
+tests/test_v7_expiry_filter.py::test_completion_resets_expires_at
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\tests\test_v7_expiry_filter.py:56: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return datetime.utcnow()
+
+tests/test_v7_migration.py::test_upgrade_head_creates_0004_columns_and_indexes
+tests/test_v7_migration.py::test_upgrade_idempotent_rerun
+tests/test_v7_migration.py::test_upgrade_idempotent_rerun
+tests/test_v7_migration.py::test_backfill_sets_expires_at_from_created_at
+tests/test_v7_migration.py::test_downgrade_removes_0004_columns_and_indexes
+tests/test_v7_migration.py::test_downgrade_removes_0004_columns_and_indexes
+  E:\xuexixiangguan\pythonProject\gongcheng\失物招领系统\.venv\Lib\site-packages\alembic\config.py:612: DeprecationWarning: No path_separator found in configuration; falling back to legacy splitting on spaces, commas, and colons for prepend_sys_path.  Consider adding path_separator=os to Alembic config.
+    util.warn_deprecated(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+484 passed, 2 skipped, 21 warnings in 151.74s (0:02:31)

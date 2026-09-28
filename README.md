@@ -18,12 +18,13 @@
 ![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![YOLOv8](https://img.shields.io/badge/YOLOv8-%20-FFDE00?logo=ultralytics&logoColor=black)
-![tests](https://img.shields.io/badge/pytest-411%20cases-brightgreen)
+![tests](https://img.shields.io/badge/pytest-486%20cases-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 </p>
 
 <p align="center">
+  <a href="#-在线体验">在线体验</a> ·
   <a href="#-功能亮点">功能亮点</a> ·
   <a href="#-截图">截图</a> ·
   <a href="#-匹配是怎么算的">匹配原理</a> ·
@@ -34,6 +35,17 @@
 
 ---
 
+## 🚀 在线体验
+
+**演示站：[lost.caohaotian.top](https://lost.caohaotian.top)**（演示模式运行，数据随时可能重置）
+
+| 进入方式 | 说明 |
+|---|---|
+| 🎲 随机登录（免注册） | 登录页一键进入——预置 10 个可复现的演示账号随机分配，10 秒上手 |
+| 自助注册 | 演示模式下免手机号/验证码（切回真实模式即恢复短信 OTP 流程） |
+
+演示模式（`DEMO_MODE=true`）的隐私与安全口径：管理员侧手机号自动脱敏（`138****8000`）；随机登录每次发放写审计留痕；开关无任何前端入口，仅运维可经服务器 `.env` 切换。
+
 丢东西的人和捡到东西的人，以前只能靠人工翻帖子，一张张比对。这个项目让机器先看懂物品长什么样，再用一套能解释的规则把两边撮合起来。
 
 面向校园失物拾物场景的 Web 应用。后端 FastAPI，前端 Vue 3 + TypeScript，视觉层用 YOLOv8 做物品识别、CLIP 在发布后台对候选做图像相似度精排，核心是一套七维加权打分引擎完成自动撮合。
@@ -43,7 +55,7 @@
 | 亮点 | 说明 |
 |---|---|
 | 🎯 **可解释匹配引擎** | 七维加权 + 动态归一化 + 四类强冲突否决，匹配 F1 **62.9% → 78.0%** |
-| 🧪 **评测纪律** | **411 个 pytest 用例**（CI 门禁）+ 40 对主集 / 30 条控制变量集 / 12 对盲测集，三套评测集全部开源在仓库 |
+| 🧪 **评测纪律** | **486 个 pytest 用例**（CI 门禁）+ 40 对主集 / 30 条控制变量集 / 12 对盲测集，三套评测集全部开源在仓库 |
 | 🕵️ **乐观偏差自曝** | 盲测集标注后即冻结、从未参与调参，首跑 F1 **57.1%**——与主集的差距就是偏差的量化，不藏数字 |
 | 🖼️ **视觉理解** | YOLOv8 物品分类识别 + CLIP 图像相似度精排（仅作同分打破平局，不改匹配分） |
 | ⚡ **性能优化** | 匹配列表每请求 SQL **630 → 5 条**、响应 **165ms → 18ms（-89%）**；前端主包 **-52%** |
@@ -185,12 +197,12 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 | 问题 | 答案 |
 |------|------|
 | 前端端口为什么是 5175？ | v19 固化并开启 strictPort：避开 RAG 助手项目的 5174，两个项目可以同机并行开发 |
-| 评测数字可以复现吗？ | 可以。每轮评测都留了结果文件（`evaluation/results-v*.md`），tag v13~v16 已推送、可 checkout 逐版复现；盲测集按协议每大版本只跑一次，跑过即失效 |
+| 评测数字可以复现吗？ | 可以。每轮评测都留了结果文件（`evaluation/results-v*.md`），tag v13~v20 已推送、可 checkout 逐版复现；盲测集按协议每大版本只跑一次，跑过即失效 |
 | 用什么数据库？ | 开发用 SQLite（零配置即跑），生产用 MySQL 8.0（CI 挂 mysql:8.0 service 实跑建表迁移），schema 变更走 Alembic |
 
 ## 📋 已知取舍与局限
 
-不藏着：完整清单见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)（15 条，每条含现状 / 为什么接受 / 修法），最要紧的三条：
+不藏着：完整清单见 [docs/known-tradeoffs.md](docs/known-tradeoffs.md)（12 条，每条含现状 / 为什么接受 / 修法，另有两批已清账），最要紧的三条：
 
 - **评测数字带乐观偏差**：主集 40 对参与了权重/阈值调参（盲测集首跑 F1 57.1% vs 主集 78.0%，差距即偏差量化）；三套集合同为作者自建、单一标注者。修法：扩盲集至 50 对并引入第二标注者；
 - **无真实用户、零外部锚点**：所有数字均为自测自评，没有真实部署实例。正在寻找第一个真实用户跑 4 周，记录发布数 / 找回数 / 平均找回时间；
@@ -200,7 +212,7 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 
 - [ ] 盲测集扩至 50 对并引入第二标注者（已知取舍第 1 条的修法）
 - [ ] 寻找第一个真实用户跑 4 周试点（记录发布数 / 找回数 / 平均找回时间）
-- [ ] 上传文件访问加固 + 数据库自动备份 + 定时清理任务
+- [x] 上传文件访问加固（签名 URL，v20①）+ 数据库自动备份（`scripts/backup.py`，v20②）+ 定时清理任务（maintenance worker，v20③）
 - [ ] 管理端与站内信列表接口 SQL 化（对齐匹配列表已验证的优化方式）
 
 ## 项目结构
@@ -209,7 +221,7 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 ├── app/           # FastAPI 后端（core/models/schemas/routers/services/utils）
 ├── web/           # Vue3 前端（views/components/api/stores）
 ├── migrations/    # 数据库迁移
-├── tests/         # pytest 测试，411 个用例（409 通过 / 2 跳过，CI 门禁）
+├── tests/         # pytest 测试，486 个用例（484 通过 / 2 跳过，CI 门禁）
 ├── docs/          # 系统设计、流程图、迭代 PRD；对外数字口径见 docs/numbers.md，已知取舍见 docs/known-tradeoffs.md
 ├── deploy/        # 部署相关
 └── docker-compose.yml
@@ -219,7 +231,7 @@ INFO    [5b85684b1c4f] GET /__demo/slow -> 200 319.2ms
 
 本项目为个人独立项目：选题、需求拆解、接口设计、数据结构、评测标准到实现与验收均由本人独立完成，代码由 AI Coding Agent 协作产出。历史提交中的 `Agent` 标识即 AI Agent 的提交身份，本人提交署名 `CaoHT`。
 
-项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v19。
+项目按真实工程标准组织：数据库走 Alembic 迁移、测试覆盖六个核心模块、CHANGELOG 记录到 v20。
 
 ## 🙏 致谢
 

@@ -13,6 +13,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.signed_url import sign_image_url
 from app.schemas.common import FoundItemStatus, LostItemStatus
 
 
@@ -90,7 +91,7 @@ class LostItemOut(BaseModel):
             category_name=item.category_name,
             title=item.title,
             description=item.description,
-            images=list(images),
+            images=[sign_image_url(u) for u in images],
             color=item.color,
             tags=list(item.tags) if item.tags else [],
             appearance=getattr(item, "appearance", None),
@@ -137,7 +138,7 @@ class FoundItemOut(BaseModel):
             category_id=item.category_id,
             category_name=item.category_name,
             description=item.description,
-            images=list(images),
+            images=[sign_image_url(u) for u in images],
             tags=list(item.tags) if item.tags else [],
             appearance=getattr(item, "appearance", None),
             features=getattr(item, "features", None),
